@@ -1,0 +1,14 @@
+{
+  "files_scanned": 66,
+  "findings": [],
+  "scope": "Bounded GitHub/AWS/API/private-key patterns; no guarantee of exhaustive secret detection.",
+  "source_equal_to_original": true,
+  "modified_original_files": [
+    ".github/workflows/ci.yml",
+    "README.md",
+    "docs/PRODUCTION_REVIEW.md",
+    "docs/PUBLISHING.md",
+    "docs/VALIDATION.md",
+    "package.json"
+  ]
+}

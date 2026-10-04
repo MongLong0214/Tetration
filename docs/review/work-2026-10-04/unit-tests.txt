@@ -1,0 +1,70 @@
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
+
+> tetra-atlas@0.2.0 test
+> node --test tests/*.test.cjs
+
+✔ decimal camera preserves differences invisible to Number (1.586809ms)
+✔ decimal notation, round trips, truncation and signed zero (0.273604ms)
+✔ invalid decimal and excessive exponents are rejected (0.312532ms)
+✔ Machin pi agrees with mpmath reference to 90 decimal places (0.303679ms)
+✔ log(2) agrees with mpmath (0.339103ms)
+✔ log(0.00000000000000000000000000000000000000000000000000000000000000000000000000000001) agrees with mpmath (0.137078ms)
+✔ log(0.01) agrees with mpmath (0.134343ms)
+✔ log(0.5) agrees with mpmath (0.110367ms)
+✔ log(10000000000) agrees with mpmath (0.314785ms)
+✔ exp(0) agrees with mpmath (0.976116ms)
+✔ exp(1) agrees with mpmath (0.17884ms)
+✔ exp(20) agrees with mpmath (0.099049ms)
+✔ exp(-20) agrees with mpmath (0.13191ms)
+✔ exp(-1) agrees with mpmath (0.133382ms)
+✔ sincos(0) agrees with mpmath (0.18481ms)
+✔ sincos(123456789) agrees with mpmath (0.219131ms)
+✔ sincos(-123456789) agrees with mpmath (0.114483ms)
+✔ sincos(-3.14159) agrees with mpmath (0.062394ms)
+✔ sincos(-1) agrees with mpmath (0.096386ms)
+✔ sincos(0.37) agrees with mpmath (0.109105ms)
+✔ sincos(1.57) agrees with mpmath (0.116436ms)
+✔ sincos(3.5) agrees with mpmath (0.091839ms)
+✔ sqrt(2) agrees with mpmath (0.161884ms)
+✔ sqrt(5) agrees with mpmath (0.05325ms)
+✔ sqrt(100000) agrees with mpmath (0.076055ms)
+✔ sqrt(0.00001) agrees with mpmath (0.074293ms)
+✔ atan2(1,1) agrees with mpmath (0.189436ms)
+✔ atan2(1,-1) agrees with mpmath (0.113732ms)
+✔ atan2(-1,-1) agrees with mpmath (0.198009ms)
+✔ atan2(-1,1) agrees with mpmath (0.131659ms)
+✔ atan2(1,0) agrees with mpmath (0.05248ms)
+✔ atan2(0,-2) agrees with mpmath (0.054122ms)
+✔ atan2(50,0.00001) agrees with mpmath (0.098139ms)
+✔ arithmetic domain errors are explicit (0.419975ms)
+✔ known real orbits: fixed point, period two, threshold, undefined origin (0.420365ms)
+✔ FP64 respects conjugation away from branch cut (2.372797ms)
+✔ BigInt orbit matches known stable and threshold classifications (6.513348ms)
+✔ complex BigInt orbit agrees with FP64 on selected non-boundary inputs (85.756114ms)
+✔ all palettes return finite RGB bytes (0.44365ms)
+✔ finite classification can differ with convergence tolerance (12.954064ms)
+✔ numeric failures identify the actual failing step (2.982129ms)
+✔ build is deterministic and CSP authorizes exact script and CSS bytes (130.319069ms)
+✔ production headers block framing and revalidate unversioned bundles (0.368117ms)
+✔ local server handles methods, HEAD, malformed paths, symlinks and missing files (28.770845ms)
+✔ 240-digit orbit vs independent 300-digit reference: positive-real (2.143231ms)
+✔ 240-digit orbit vs independent 300-digit reference: tiny-complex (1.910358ms)
+✔ 240-digit orbit vs independent 300-digit reference: upper-half (1.674582ms)
+✔ 240-digit orbit vs independent 300-digit reference: lower-half (2.415571ms)
+✔ 240-digit orbit vs independent 300-digit reference: negative-axis (1.208136ms)
+✔ 240-digit orbit vs independent 300-digit reference: upper-cut (1.265253ms)
+✔ 240-digit orbit vs independent 300-digit reference: lower-cut (1.1509ms)
+✔ 240-digit orbit vs independent 300-digit reference: stable-complex (1.598567ms)
+✔ 240-digit orbit vs independent 300-digit reference: near-one (0.495639ms)
+✔ 240-digit orbit vs independent 300-digit reference: deep-center (0.614809ms)
+✔ 240-digit orbit vs independent 300-digit reference: deep-displaced (0.59563ms)
+✔ 240-digit orbit vs independent 300-digit reference: tiny-positive (0.532625ms)
+✔ 240-digit orbits distinguish coordinates separated below Number precision (1.021043ms)
+ℹ tests 57
+ℹ suites 0
+ℹ pass 57
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 254.868534

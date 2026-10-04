@@ -1,0 +1,18 @@
+{
+  "name": "tetra-atlas",
+  "version": "0.3.0",
+  "private": true,
+  "description": "A browser-native, multi-precision complex power-tower explorer.",
+  "scripts": {
+    "build": "node build.cjs",
+    "dev": "node serve.cjs",
+    "start": "node serve.cjs dist",
+    "test": "node --test tests/*.test.cjs",
+    "test:browser": "python3 tests/browser_review.py",
+    "test:release": "python3 tests/browser_release.py",
+    "test:modern": "python3 tests/browser_modern.py"
+  },
+  "engines": {
+    "node": "22.x || 24.x"
+  }
+}

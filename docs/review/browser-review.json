@@ -1,0 +1,178 @@
+{
+  "checks": [
+    {
+      "name": "Initial production-CSP render",
+      "passed": true,
+      "detail": {
+        "view": {
+          "x": "-0.2",
+          "y": "0",
+          "span": "7"
+        },
+        "mode": "cpu",
+        "iterations": 256,
+        "palette": 0,
+        "width": 662,
+        "height": 482,
+        "counts": [
+          226778,
+          47012,
+          634,
+          31478,
+          13182
+        ],
+        "elapsed": 7095.300000000047
+      }
+    },
+    {
+      "name": "CSP blocks unapproved inline JavaScript",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "CSP blocks outbound fetch",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "Wheel zoom preserves cursor anchor",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "Drag pans without changing scale",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "Keyboard zoom and reset",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "Preset, iterations, palette complete a render",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "Coordinate grid",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "Named explanation dialog and Escape",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "Share fallback contains complete state URL",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "PNG download is a PNG file",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "Invalid coordinates do not replace view",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "BigInt deep view completes",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "Deep pan retains sub-Number coordinate change",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "Cancellation prevents stale BigInt tiles replacing CPU result",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "Minimum span renders using 240 decimal places",
+      "passed": true,
+      "detail": 23775
+    },
+    {
+      "name": "Minimum zoom boundary does not drift off-anchor",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "Maximum zoom boundary does not drift off-anchor",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "Exact shared URL rehydration and render",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "Unsupported share schema does not replace current view",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "Mobile layout: no horizontal overflow",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "Closed mobile drawer cannot receive focus",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "Open mobile drawer moves focus and inerts background",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "Mobile drawer traps forward and reverse Tab",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "Escape closes drawer and restores focus",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "Mobile explanation is reachable",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "Real browser touch dispatch: pinch zoom",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "Real browser touch dispatch: single finger pan",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "No uncaught browser exceptions",
+      "passed": true,
+      "detail": null
+    }
+  ],
+  "count": 29,
+  "browser_version": "144.0.7559.96",
+  "playwright": "1.57.0",
+  "bundle_mode": "set_content: not a deployed URL",
+  "gpu_in_browser": false,
+  "limitations": [
+    "Touch testing uses Chromium emulation, not physical iPhone/Safari.",
+    "No public HTTPS deployment was tested.",
+    "Untrusted script and network probes intentionally create CSP console messages."
+  ]
+}

@@ -1,0 +1,30 @@
+PASS Initial production-CSP render {'view': {'x': '-0.2', 'y': '0', 'span': '7'}, 'mode': 'cpu', 'iterations': 256, 'palette': 0, 'width': 662, 'height': 482, 'counts': [226778, 47012, 634, 31478, 13182], 'elapsed': 7095.300000000047}
+PASS CSP blocks unapproved inline JavaScript 
+PASS CSP blocks outbound fetch 
+PASS Wheel zoom preserves cursor anchor 
+PASS Drag pans without changing scale 
+PASS Keyboard zoom and reset 
+PASS Preset, iterations, palette complete a render 
+PASS Coordinate grid 
+PASS Named explanation dialog and Escape 
+PASS Share fallback contains complete state URL 
+PASS PNG download is a PNG file 
+PASS Invalid coordinates do not replace view 
+PASS BigInt deep view completes 
+PASS Deep pan retains sub-Number coordinate change 
+PASS Cancellation prevents stale BigInt tiles replacing CPU result 
+PASS Minimum span renders using 240 decimal places 23775
+PASS Minimum zoom boundary does not drift off-anchor 
+PASS Maximum zoom boundary does not drift off-anchor 
+PASS Exact shared URL rehydration and render 
+PASS Unsupported share schema does not replace current view 
+PASS Mobile layout: no horizontal overflow 
+PASS Closed mobile drawer cannot receive focus 
+PASS Open mobile drawer moves focus and inerts background 
+PASS Mobile drawer traps forward and reverse Tab 
+PASS Escape closes drawer and restores focus 
+PASS Mobile explanation is reachable 
+PASS Real browser touch dispatch: pinch zoom 
+PASS Real browser touch dispatch: single finger pan 
+PASS No uncaught browser exceptions 
+ALL 29 PASSED

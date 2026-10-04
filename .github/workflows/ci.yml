@@ -1,0 +1,44 @@
+name: Validate
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: tetra-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - run: npm test
+      - run: npm run build
+      - name: Install browser QA dependencies
+        run: |
+          python3 -m pip install -r tests/requirements.txt
+          python3 -m playwright install --with-deps chromium
+      - name: Browser regression on a served origin
+        run: |
+          node serve.cjs >/tmp/tetra-server.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID"' EXIT
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:4173/ >/dev/null; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:4173/ >/dev/null
+          python3 tests/browser_review.py
+          python3 tests/browser_release.py
+          python3 tests/browser_modern.py
+        env:
+          TETRA_BASE_URL: http://127.0.0.1:4173
