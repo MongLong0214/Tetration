@@ -1,0 +1,23 @@
+# Dependencies and deployment account state
+node_modules/
+.vercel/
+
+# Credentials and local overrides
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Reproducible build output
+dist/
+
+# Local artifacts
+*.log
+*.zip
+.DS_Store
+__pycache__/
+.venv/
+
+# Browser output (review evidence is stored in docs/review/)
+tests/review-output/
