@@ -312,12 +312,12 @@
   function rateKey(scene, samples) { return scene.mode + '|' + scene.iterations + '|' + samples; }
   function tileEdge(iterations, samples) { return Math.max(16, Math.min(256, Math.round(Math.sqrt(4096 * 256 * 16 / (iterations * samples)) / 16) * 16)); }
   // Resolution that should finish within the interactive frame budget.
-  function interactiveSize(scene, target = TetraRender.size(dims.w, dims.h, dims.dpr)) {
+  function interactiveSize(renderer, scene, target = TetraRender.size(dims.w, dims.h, dims.dpr)) {
     const rate = rates.get(rateKey(scene, 1)) ?? 60;
     // Slow GPUs (deep views on weak hardware) drop to coarser frames rather than stall the compositor.
     const floor = rate * FRAME_MS * 4 >= 8192 ? 8192 : 2048;
     // Cap one draw's orbit work so a sudden jump in cost cannot stall the GPU (driver watchdogs).
-    const pixels = Math.max(floor, Math.min(target.width * target.height, rate * FRAME_MS, 8e7 / scene.iterations));
+    const pixels = Math.max(floor, Math.min(target.width * target.height, rate * FRAME_MS, 8e7 / renderer.effectiveIterations(scene, target.width, target.height)));
     // Quantised so consecutive frames reuse pooled textures instead of reallocating.
     const scale = Math.min(1, Math.round(Math.sqrt(pixels / (target.width * target.height)) * 24) / 24 || 1 / 24);
     return {width: Math.max(32, Math.round(target.width * scale)), height: Math.max(20, Math.round(target.height * scale))};
@@ -339,7 +339,7 @@
     }
     const renderer = gpu, scene = buildScene(v, mode, ref), key = sceneKey(scene, v);
     if (display.frame && display.key === key) return;
-    const size = interactiveSize(scene);
+    const size = interactiveSize(renderer, scene);
     setGPUBusy(true);
     const t0 = performance.now();
     let frame = null;
@@ -365,7 +365,7 @@
     if (interactivePending || !same(visual, v)) { interactivePending = false; requestInteractive(); }
   }
   async function runStage(id, renderer, frame, scene, samples, onBatch) {
-    const edge = tileEdge(scene.iterations, samples), tiles = TetraRender.tiles(frame.width, frame.height, edge), key = rateKey(scene, samples);
+    const edge = tileEdge(renderer.effectiveIterations(scene, frame.width, frame.height), samples), tiles = TetraRender.tiles(frame.width, frame.height, edge), key = rateKey(scene, samples);
     const area = frame.width * frame.height;
     let budget = Math.max(edge * edge, (rates.get(key) ?? (rates.get(rateKey(scene, 1)) ?? 60) / samples) * BATCH_MS);
     let index = 0;
@@ -408,7 +408,7 @@
         previous = hold(display.frame);
       } else {
         renderStage = 'preview';
-        const size = interactiveSize(scene, target);
+        const size = interactiveSize(renderer, scene, target);
         previous = hold(renderer.beginFrame(size.width, size.height));
         $('loadingText').textContent = 'Finding the view';
         if (!(await runStage(id, renderer, previous, scene, 1, fraction => setProgress(fraction / total * 100)))) return;
@@ -552,6 +552,18 @@
     lastCompletedInfo = {view: serialize(), mode, iterations, palette, width: w, height: h, counts, elapsed, samples};
     document.body.dataset.ready = 'true'; document.body.dataset.mode = mode; document.body.dataset.complete = 'true';
     updateURL();
+    scheduleWarm();
+  }
+  // Compile the deep-zoom (BLA) program while idle, so the first deep view does not wait for it.
+  let warmTimer = 0;
+  function scheduleWarm() {
+    if (!gpu || gpu.programs.perturbBla || warmTimer) return;
+    warmTimer = setTimeout(() => {
+      warmTimer = 0;
+      if (!gpu || document.hidden) return;
+      if (gpuBusy || !lastRenderComplete) { scheduleWarm(); return; }
+      try { gpu.warm(); } catch { /* the plain program keeps working */ }
+    }, 1500);
   }
   function invalidate() {
     serial++; stopCPU(); lastRenderComplete = false;

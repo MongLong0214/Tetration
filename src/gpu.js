@@ -63,9 +63,10 @@
    * Offsets d = w - V are stored as a mantissa vec2 and an integer exponent, so
    * spans far below the FP32 range keep full relative precision. Small arguments
    * use series instead of GPU builtins; the full value always comes from exp(eps). */
-  const perturb = header + `
- uniform highp sampler2D uRef;
- uniform int uRefLength,uRefValues,uScale,uInvExp;
+  const perturbHead = header + `
+ uniform highp sampler2D uRef,uBla;
+ uniform int uRefLength,uRefValues,uScale,uInvExp,uBlaLevels;
+ uniform int uBlaBase[16];
  uniform vec2 uL0,uInv,uDelta,uDeltaMirror;
  uniform float uImCenter,uSpanMant;
  float pow2(int e){if(e<-126)return 0.;return intBitsToFloat((min(e,127)+127)<<23);}
@@ -74,6 +75,8 @@
  void normalizeExp(inout vec2 m,inout int e){int k=expOf(m);if(k==-1000){m=vec2(0.);e=-1000;return;}m=scaled(m,-k);e+=k;}
  vec2 cmul(vec2 a,vec2 b){return vec2(a.x*b.x-a.y*b.y,a.x*b.y+a.y*b.x);}
  vec4 refAt(int k){return texelFetch(uRef,ivec2(k&1023,k>>10),0);}
+ // BLA entry e: texel 0 = (A, B) mantissas, texel 1 = (A exponent, B exponent, log2 radius).
+ vec4 blaAt(int e,int t){return texelFetch(uBla,ivec2(((e&511)<<1)+t,e>>9),0);}
  float expm1s(float x){if(abs(x)<.5)return x*(1.+x*(.5+x*(1./6.+x*(1./24.+x*(1./120.+x*(1./720.+x*(1./5040.+x*(1./40320.)))))))) ;return exp(x)-1.;}
  void sincosh(float x,out float s,out float c,out float h){
   if(abs(x)<.5){float x2=x*x,y=.5*x,y2=y*y;
@@ -102,8 +105,9 @@
   }
   vec2 L=uL0+scaled(dLm,max(dLe,-200));
   int k=1,de=-1000,kind=0,fixedCount=0,periodCount=0;vec2 dm=vec2(0.),w=vec2(1.,0.),old=vec2(0.);float steps=float(uIterations);
-  vec4 cur=refAt(1);
-  for(int i=1;i<=uIterations;i++){
+  vec4 cur=refAt(1);`;
+  // One perturbation step as iteration i; every `break` ends the orbit with its class.
+  const perturbStep = `
    if(k>=uRefLength){dm=w;de=0;normalizeExp(dm,de);k=0;cur=vec4(0.,0.,LOG_R,0.);}
    vec2 V=cur.xy,t1=cmul(V,dLm),t2=cmul(dm,L);
    int E=max(expOf(t1)+dLe,expOf(t2)+de);
@@ -135,11 +139,45 @@
    old=w;w=next;
    if(fixedCount>=8){kind=1;steps=float(i);break;}
    if(periodCount>=12){kind=2;steps=float(i);break;}
-   if(k>0&&de>-126&&de<120){vec2 ws=scaled(w,-de);if(dot(ws,ws)<dot(dm,dm)){dm=w;de=0;normalizeExp(dm,de);k=0;cur=vec4(0.,0.,LOG_R,0.);}}
-  }
+   if(k>0&&de>-126&&de<120){vec2 ws=scaled(w,-de);if(dot(ws,ws)<dot(dm,dm)){dm=w;de=0;normalizeExp(dm,de);k=0;cur=vec4(0.,0.,LOG_R,0.);}}`;
+  const perturbTail = `
   if(mirrored)w.y=-w.y;
   return palette(kind,steps,w);
  }` + footer;
+  const perturb = perturbHead + `
+  for(int i=1;i<=uIterations;i++){${perturbStep}
+  }` + perturbTail;
+  /* The same orbit with bilinear approximation (TetraCore.blaTable): while d is tiny
+   * the pixel follows the reference, so aligned runs of 2^j linear steps are applied
+   * at once as d = A d + B dL. The approach loop ends when |d| outgrows the shortest
+   * run, at the first rebase, or with the orbit; the plain loop does the rest. A
+   * separate program, because extra loop code slows the plain loop on some drivers. */
+  const perturbBla = perturbHead + `
+  int i=1;bool done=false,linear=true;
+  while(linear&&i<=uIterations){
+   if(k>1&&(k&1)==0&&fixedCount==0&&periodCount==0){
+    float ld=expOf(dm)==-1000?-1e30:float(de)+log2(length(dm));
+    int j=1,skip=0;
+    while(j<uBlaLevels&&(k&((2<<j)-1))==0)j++;
+    for(;j>=1;j--){
+     int len=1<<j;
+     if(i+len-1>uIterations)continue;
+     int e=uBlaBase[j]+(k>>j);vec4 s=blaAt(e,1);
+     if(s.z>-1e29&&ld<s.z){
+      vec4 c=blaAt(e,0);int ae=int(s.x)+de,be=int(s.y)+dLe,E=max(ae,be);
+      dm=scaled(cmul(c.xy,dm),max(ae-E,-200))+scaled(cmul(c.zw,dLm),max(be-E,-200));de=E;normalizeExp(dm,de);
+      skip=len;break;
+     }
+     if(j==1&&s.z>-1e29)linear=false;
+    }
+    // Inside a run |d| <= 2^-24 |V|, so V + d is exact enough for the next tests.
+    if(skip>0){k+=skip;i+=skip;cur=refAt(k);old=refAt(k-1).xy;w=cur.xy+scaled(dm,clamp(de,-200,120));continue;}
+   }${perturbStep.replace(/break;/g, 'done=true;break;')}
+   i++;
+   if(k==0)break;
+  }
+  if(!done)for(;i<=uIterations;i++){${perturbStep}
+  }` + perturbTail;
 
   // Macrotask hop without timer clamping, so short GPU work is noticed promptly.
   // Created on first use: an idle open port would keep Node test processes alive.
@@ -159,6 +197,8 @@
     direct: [...COMMON, 'Center', 'Span'],
     perturb: [...COMMON, 'Ref', 'RefLength', 'RefValues', 'Scale', 'InvExp', 'L0', 'Inv', 'Delta', 'DeltaMirror', 'ImCenter', 'SpanMant'],
   };
+  UNIFORMS.perturbBla = [...UNIFORMS.perturb, 'Bla', 'BlaLevels', 'BlaBase'];
+  const SOURCES = {direct, perturb, perturbBla};
 
   class TetraGPU {
     constructor(canvas) {
@@ -169,12 +209,15 @@
       this.bits = gl.getShaderPrecisionFormat(gl.FRAGMENT_SHADER, gl.HIGH_FLOAT)?.precision || 0;
       if (this.bits < 23) throw Error('Insufficient fragment precision');
       this.maxTexture = gl.getParameter(gl.MAX_TEXTURE_SIZE);
+      // The BLA program links on first use (deep views only).
       this.programs = {direct: this.link(direct, UNIFORMS.direct), perturb: this.link(perturb, UNIFORMS.perturb)};
       this.empty = gl.createTexture();
       gl.bindTexture(gl.TEXTURE_2D, this.empty);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 0, 255]));
       this.setNearest();
       this.pool = []; this.reference = null; this.referenceTexture = null; this.live = 0;
+      // blaMode: 'auto' uses BLA where it saves enough steps, 'on' wherever a table exists, 'off' never.
+      this.bla = null; this.blaTexture = null; this.blaMode = 'auto';
     }
     link(fragmentSource, names) {
       const gl = this.gl;
@@ -216,6 +259,82 @@
       this.setNearest(); gl.activeTexture(gl.TEXTURE0);
       this.reference = ref;
     }
+    program(name) {
+      return this.programs[name] || (this.programs[name] = this.link(SOURCES[name], UNIFORMS[name]));
+    }
+    // The BLA program, linked on demand; a driver that rejects it keeps the plain program.
+    blaProgram() {
+      if (this.blaMode === 'off') return null;
+      try { return this.program('perturbBla'); } catch { this.blaMode = 'off'; return null; }
+    }
+    // Compile the BLA program while idle (one 1x1 draw also triggers lazy driver compilation),
+    // so the first deep view does not wait for it.
+    warm() {
+      if (this.programs.perturbBla || this.lost()) return;
+      const bla = this.blaProgram();
+      if (!bla) return;
+      const gl = this.gl, frame = this.beginFrame(1, 1), u = bla.uniforms;
+      gl.bindFramebuffer(gl.FRAMEBUFFER, frame.buffer); gl.viewport(0, 0, 1, 1); gl.useProgram(bla.program);
+      gl.uniform2f(u.Size, 1, 1); gl.uniform1i(u.Iterations, 0); gl.uniform1i(u.Samples, 1); gl.uniform1i(u.Adaptive, 0);
+      for (const [unit, name] of [[0, 'Source'], [1, 'Ref'], [2, 'Bla']]) { gl.activeTexture(gl.TEXTURE0 + unit); gl.bindTexture(gl.TEXTURE_2D, this.empty); gl.uniform1i(u[name], unit); }
+      gl.activeTexture(gl.TEXTURE0);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      this.releaseFrame(frame);
+    }
+    /* BLA table for a reference and the view's largest |dL| (TetraCore.blaTable),
+     * as RGBA32F floatexp texels. A table built for a larger |dL| stays valid, so it
+     * is rebuilt only when the view grows past it or shrinks 64-fold. */
+    useBla(ref, rules, dL) {
+      const cached = this.bla;
+      if (cached && cached.ref === ref && cached.rules === rules && dL <= cached.dL && dL * 64 >= cached.dL) return cached;
+      const bound = 2 ** Math.ceil(Math.log2(Math.max(dL, 1e-300)));
+      const table = TetraCore.blaTable(ref, bound, rules, TetraCore.BLA_EPS.gpu);
+      this.bla = {ref, rules, dL: bound, levels: 0, reach: 0, base: null};
+      if (!table) return this.bla;
+      // Lookups can reach one entry past the table; every unused slot reads as radius 0.
+      const gl = this.gl, source = table.data, entries = source.length / 5, rows = Math.ceil((entries + 1) / 512), data = new Float32Array(rows * 1024 * 4);
+      for (let o = 6; o < data.length; o += 8) data[o] = -1e30;
+      // Mantissa with its largest component in [1, 2) and a power-of-two exponent.
+      const split = (re, im, at) => {
+        const m = Math.max(Math.abs(re), Math.abs(im));
+        if (!(m > 0)) return 0;
+        const e = Math.floor(Math.log2(m)), half = Math.trunc(-e / 2), f = 2 ** half * 2 ** (-e - half);
+        data[at] = re * f; data[at + 1] = im * f;
+        return e;
+      };
+      for (let e = 0; e < entries; e++) {
+        const s = 5 * e, o = 8 * e, R = source[s + 4];
+        if (!(R > 0)) continue;
+        data[o + 4] = split(source[s], source[s + 1], o);
+        data[o + 5] = split(source[s + 2], source[s + 3], o + 2);
+        data[o + 6] = Math.log2(R);
+      }
+      if (!this.blaTexture) this.blaTexture = gl.createTexture();
+      gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, this.blaTexture);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, 1024, rows, 0, gl.RGBA, gl.FLOAT, data);
+      this.setNearest(); gl.activeTexture(gl.TEXTURE0);
+      Object.assign(this.bla, {levels: table.levels, reach: TetraCore.blaReach(table, ref), base: Int32Array.from({length: 16}, (_, j) => table.base[j] || 0)});
+      return this.bla;
+    }
+    // Expected plain steps per pixel, for sizing draws: BLA skips most of a deep approach.
+    effectiveIterations(scene, width, height) {
+      if (scene.mode !== 'perturb' || !this.blaLevels({width, height}, scene)) return scene.iterations;
+      return Math.max(64, Math.round(scene.iterations - 0.75 * Math.min(this.bla.reach, scene.iterations)));
+    }
+    // BLA levels to use for a perturbation draw into this frame (0 = plain program).
+    blaLevels(frame, scene) {
+      if (this.blaMode === 'off') return 0;
+      // Largest |dL| over the frame, half a pixel beyond its edges for subpixel samples.
+      const pad = 1 / frame.width, offset = TetraCore.offsetBound(scene.delta[0], scene.delta[1], scene.deltaMirror[1], scene.imCenter,
+        scene.spanMant * (0.5 + pad), scene.spanMant * (0.5 * frame.height / frame.width + pad));
+      const dL = TetraCore.logOffsetBound(offset * Math.hypot(scene.inv[0], scene.inv[1]) * 2 ** (scene.scale + scene.invExp));
+      if (!(dL < Infinity)) return 0;
+      const bla = this.useBla(scene.ref, scene.rules, dL);
+      // Worth the larger program only when the edge pixel alone skips a quarter of a typical orbit.
+      if (!bla.levels || (this.blaMode === 'auto' && bla.reach < Math.max(32, 0.25 * Math.min(scene.ref.length, scene.iterations)))) return 0;
+      return this.blaProgram() ? bla.levels : 0;
+    }
     beginFrame(width, height, seed = null, adaptive = false) {
       const gl = this.gl;
       if (width > this.maxTexture || height > this.maxTexture) throw Error('GPU image limit');
@@ -251,7 +370,8 @@
     prepare(frame, scene, samples, threshold = 0.035) {
       const gl = this.gl;
       if (gl.isContextLost()) throw Error('GPU context lost');
-      const {program, uniforms: u} = this.programs[scene.mode];
+      const levels = scene.mode === 'perturb' ? this.blaLevels(frame, scene) : 0;
+      const {program, uniforms: u} = this.program(levels ? 'perturbBla' : scene.mode);
       gl.bindFramebuffer(gl.FRAMEBUFFER, frame.buffer); gl.viewport(0, 0, frame.width, frame.height); gl.useProgram(program);
       gl.uniform2f(u.Size, frame.width, frame.height); gl.uniform2f(u.Offset, 0, 0);
       gl.uniform1i(u.Iterations, scene.iterations); gl.uniform1i(u.Palette, scene.palette);
@@ -268,6 +388,10 @@
         gl.uniform2f(u.L0, scene.ref.L0[0], scene.ref.L0[1]); gl.uniform2f(u.Inv, scene.inv[0], scene.inv[1]);
         gl.uniform2f(u.Delta, scene.delta[0], scene.delta[1]); gl.uniform2f(u.DeltaMirror, scene.deltaMirror[0], scene.deltaMirror[1]);
         gl.uniform1f(u.ImCenter, scene.imCenter); gl.uniform1f(u.SpanMant, scene.spanMant);
+        if (levels) {
+          gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, this.blaTexture); gl.uniform1i(u.Bla, 2); gl.activeTexture(gl.TEXTURE0);
+          gl.uniform1i(u.BlaLevels, levels); gl.uniform1iv(u.BlaBase, this.bla.base);
+        }
       }
     }
     drawTile(frame, tile) {
@@ -331,9 +455,9 @@
       for (const frame of this.pool) { gl.deleteFramebuffer(frame.buffer); gl.deleteTexture(frame.texture); }
       this.pool = [];
       for (const {program} of Object.values(this.programs)) gl.deleteProgram(program);
-      gl.deleteTexture(this.empty); if (this.referenceTexture) gl.deleteTexture(this.referenceTexture);
+      gl.deleteTexture(this.empty); if (this.referenceTexture) gl.deleteTexture(this.referenceTexture); if (this.blaTexture) gl.deleteTexture(this.blaTexture);
     }
   }
-  TetraGPU.sources = {vertex, direct, perturb};
+  TetraGPU.sources = {vertex, ...SOURCES};
   root.TetraGPU = TetraGPU;
 })(globalThis);

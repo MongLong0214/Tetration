@@ -63,9 +63,13 @@ test('production headers add transport, isolation and resource policies',()=>{
 });
 test('shader sources compile-time constants match the shared classification rules',()=>{
  require('../src/core.js');require('../src/gpu.js');
- const {direct,perturb}=globalThis.TetraGPU.sources;
- for(const source of [direct,perturb]){assert.match(source,/const float LOG_R=23\.0258509299404/);assert.match(source,/uniform float uLowA,uMaxB,uTol,uThreshold;/);}
- assert.match(perturb,/intBitsToFloat/);assert.match(perturb,/uniform highp sampler2D uRef;/);
+ const {direct,perturb,perturbBla}=globalThis.TetraGPU.sources;
+ for(const source of [direct,perturb,perturbBla]){assert.match(source,/const float LOG_R=23\.0258509299404/);assert.match(source,/uniform float uLowA,uMaxB,uTol,uThreshold;/);}
+ assert.match(perturb,/intBitsToFloat/);assert.match(perturb,/uniform highp sampler2D uRef,uBla;/);
+ // The BLA program ends in exactly the plain program's loop, so both classify alike after the approach.
+ const plainLoop=perturb.slice(perturb.indexOf('for(int i=1;i<=uIterations;i++){')+'for(int i=1;i<=uIterations;i++){'.length,perturb.indexOf('\n  if(mirrored)w.y=-w.y;'));
+ assert.ok(perturbBla.includes('if(!done)for(;i<=uIterations;i++){'+plainLoop),'plain loop reused verbatim');
+ assert.match(perturbBla,/uniform int uBlaBase\[16\];/);assert.match(perturbBla,/blaAt\(e,1\)/);assert.doesNotMatch(perturb,/while\(linear/);
  assert.ok(Math.abs(Math.log(1e10)-23.025850929940457)<1e-14);
 });
 test('offline shell: service worker, manifest and icons are emitted and versioned',()=>{

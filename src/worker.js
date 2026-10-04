@@ -25,10 +25,13 @@ async function tileJob(job, token) {
   // Pixel centres; the exact mode keeps every coordinate as a decimal string.
   const xr = Array.from({length: w}, (_, x) => exact ? camera.text(cx + span * BigInt(2 * x + 1 - w) / BigInt(2 * w)) : (x + 0.5 - w / 2) * ns / w);
   const yr = Array.from({length: h}, (_, y) => exact ? camera.text(cy + span * BigInt(h - 2 * y - 1) / BigInt(2 * w)) : (h / 2 - y - 0.5) * ns / w);
+  // Deep views skip linear runs of steps (BLA); the bound covers every pixel centre.
+  const bla = ref && TetraCore.blaTable(ref, TetraCore.logOffsetBound(TetraCore.offsetBound(job.deltaRe, job.deltaIm, job.deltaMirror, job.imCenter, ns / 2, ns * h / w / 2) /
+    Math.hypot(ref.c0[0], ref.c0[1])), rules, TetraCore.BLA_EPS.cpu);
   const sample = ref ? (x, y) => {
     // Lower-half pixels use the conjugate orbit of their mirror image.
     const mirrored = job.imCenter + yr[y] < 0;
-    const r = TetraCore.perturb64(ref, job.deltaRe + xr[x], mirrored ? job.deltaMirror - yr[y] : job.deltaIm + yr[y], job.iterations, rules);
+    const r = TetraCore.perturb64(ref, job.deltaRe + xr[x], mirrored ? job.deltaMirror - yr[y] : job.deltaIm + yr[y], job.iterations, rules, bla);
     if (mirrored && r.im !== undefined) r.im = -r.im;
     return r;
   } : exact ? (x, y) => exact(xr[x], yr[y], job.iterations) : (x, y) => TetraCore.orbit64(nx + xr[x], ny + yr[y], job.iterations);

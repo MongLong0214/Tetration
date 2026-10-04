@@ -44,6 +44,7 @@ def build(fragment_name):
   log=C.create_string_buffer(8192);program_log(program,8192,None,log);raise RuntimeError(log.value.decode())
  checks.append({'name':fragment_name+' program links','passed':True});return program
 build('perturb')
+build('perturbBla')
 program=build('direct');use(program);viewport(0,0,1,1)
 u={name:location(program,('u'+name).encode()) for name in ['Size','Center','Span','Iterations','Palette','Samples','Adaptive','LowA','MaxB','Tol','Threshold']}
 twof(u['Size'],1,1);onef(u['Span'],1);onei(u['Iterations'],512);onei(u['Palette'],0);onei(u['Samples'],1);onei(u['Adaptive'],0);onef(u['LowA'],-80);onef(u['MaxB'],1e6);onef(u['Tol'],2e-6);onef(u['Threshold'],.035)

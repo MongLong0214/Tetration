@@ -57,6 +57,8 @@
   }
 
   window.__tetraPixels = {
+    // BLA mode of the harness renderer ('auto', 'on' or 'off'); returns the previous mode.
+    setBla(mode) { const r = gpu(), previous = r.blaMode; r.blaMode = mode; return previous; },
     // GPU (direct or perturbation) against FP64 perturbation / FP64 direct with GPU rules.
     compare(cx, cy, span, W, H, iterations, palette, mode, shortSteps) {
       const started = performance.now(), built = scene(cx, cy, span, iterations, palette, mode);
@@ -107,6 +109,29 @@
         results.push({i, j, kind: e.kind, steps: e.steps, diff: Math.max(...[0, 1, 2].map(c => Math.abs(out[k * 4 + c] - color[c])))});
       }
       return results;
+    },
+    // The same perturbation frame with BLA off, automatic and forced on: timing and agreement.
+    bla(cx, cy, span, W, H, iterations, repeats = 2) {
+      const built = scene(cx, cy, span, iterations, 0, 'perturb'), r = gpu(), timed = mode => {
+        r.blaMode = mode;
+        let out = draw(built.scene, W, H), best = Infinity;
+        for (let n = 0; n < repeats; n++) { const t = performance.now(); out = draw(built.scene, W, H); best = Math.min(best, performance.now() - t); }
+        return {out, ms: best};
+      };
+      const plain = timed('off'), auto = timed('auto'), forced = timed('on'), levels = r.bla?.levels ?? 0, reach = r.bla?.reach ?? 0;
+      r.blaMode = 'auto';
+      let differing = 0, blockDiff = 0, blocks = 0;
+      for (let k = 0; k < W * H; k++) if (Math.max(...[0, 1, 2].map(c => Math.abs(plain.out[k * 4 + c] - forced.out[k * 4 + c]))) > 3) differing++;
+      for (let by = 0; by + 4 <= H; by += 4) for (let bx = 0; bx + 4 <= W; bx += 4) {
+        for (let c = 0; c < 3; c++) {
+          let a = 0, b = 0;
+          for (let y = by; y < by + 4; y++) for (let x = bx; x < bx + 4; x++) { a += plain.out[(y * W + x) * 4 + c]; b += forced.out[(y * W + x) * 4 + c]; }
+          blockDiff += Math.abs(a - b) / 16;
+        }
+        blocks++;
+      }
+      return {span, levels, reach, plainMs: Math.round(plain.ms), autoMs: Math.round(auto.ms), onMs: Math.round(forced.ms), speedup: +(plain.ms / auto.ms).toFixed(2),
+        differing, total: W * H, blockDiff: +(blockDiff / (blocks * 3)).toFixed(2)};
     },
     // Rows j and H-1-j sample conjugate points when the view is centred on the real axis.
     symmetry(cx, span, W, H, iterations, mode) {

@@ -58,6 +58,34 @@ def body():
             suite.record('Chaotic view keeps FP64 structure and class statistics: ' + name,
                          {'fp64_kinds': r['kinds'], 'gpu_numeric': gpu_kinds['numeric'], 'gpu_unresolved': gpu_kinds['unresolved'], 'block_diff': round(r['blockDiff'], 2)})
 
+        # 2b. Bilinear approximation (BLA): forced on, structured views stay pixel-identical to FP64.
+        page.evaluate('() => __tetraPixels.setBla("on")')
+        for name, x, y, s, n in exact_views:
+            r = page.evaluate('([x,y,s,n]) => __tetraPixels.compare(x,y,s,64,40,n,0,"perturb",1e9)', [x, y, s, n])
+            assert r['shortMismatch'] == 0 and r['blockDiff'] == 0, ('BLA', name, r)
+        suite.record('With BLA forced on, structured views still equal FP64 pixel for pixel', {'views': len(exact_views)})
+        # In chaotic views BLA is at least as faithful to FP64 as plain FP32 perturbation.
+        fidelity = {}
+        for name, (x, y, s), n in [('Abyss 10^25', ABYSS, 2048), ('Horizon 10^100', HORIZON, 4096)]:
+            counts = {}
+            for mode in ['off', 'on']:
+                page.evaluate('m => __tetraPixels.setBla(m)', mode)
+                r = page.evaluate('([x,y,s,n]) => __tetraPixels.compare(x,y,s,64,40,n,0,"perturb",1e9)', [x, y, s, n])
+                counts[mode] = {'mismatch': r['shortMismatch'] + r['longMismatch'], 'block_diff': round(r['blockDiff'], 2)}
+            assert counts['on']['mismatch'] <= counts['off']['mismatch'] * 1.1 + 40, (name, counts)
+            assert counts['on']['block_diff'] <= counts['off']['block_diff'] + 2, (name, counts)
+            fidelity[name] = counts
+        suite.record('BLA is as faithful to FP64 as plain FP32 perturbation in chaotic views', fidelity)
+        # Automatic BLA renders deep views several times faster and keeps shallow ones on the plain program.
+        page.evaluate('() => __tetraPixels.setBla("auto")')
+        speed = {}
+        for name, (x, y, s), n in [('Horizon 10^100', HORIZON, 4096), ('threshold 1e-55', ('1.3594182965158676173336178455', '2.2496614865153754494134386028', '1e-55'), 512), ('Plume 10^11', PLUME, 768)]:
+            speed[name] = page.evaluate('([x,y,s,n]) => __tetraPixels.bla(x,y,s,160,96,n)', [x, y, s, n])
+        assert speed['Horizon 10^100']['levels'] > 0 and speed['Horizon 10^100']['speedup'] >= 2.5, speed
+        assert speed['threshold 1e-55']['speedup'] >= 5 and speed['threshold 1e-55']['differing'] == 0, speed
+        assert speed['Plume 10^11']['autoMs'] <= speed['Plume 10^11']['plainMs'] * 1.3 + 20, speed
+        suite.record('Automatic BLA renders deep views several times faster', speed)
+
         # 3. Exact decimal orbits at sampled pixels of a structured deep view.
         picks = [[3, 3], [10, 20], [24, 16], [40, 5], [44, 28], [30, 10], [8, 28], [20, 2], [55, 33], [60, 1]]
         results = page.evaluate('([p]) => __tetraPixels.exact("1.3594182965158676173336178455","2.2496614865153754494134386028","1e-55",64,40,512,p)', [picks])
