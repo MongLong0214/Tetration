@@ -6,7 +6,7 @@ const root = __dirname;
 const read = name => fs.readFileSync(path.join(root, 'src', name), 'utf8').replace(/\r\n/g, '\n');
 const worker = ['precision.js', 'core.js', 'worker.js'].map(read).join('\n');
 const main = read('main.js').replace('__WORKER_SOURCE__', () => JSON.stringify(worker));
-const script = [read('precision.js'), read('core.js'), read('gpu.js'), read('webgpu.js'), main].join('\n').replace(/<\/script/gi, '<\\/script');
+const script = [read('precision.js'), read('core.js'), read('gpu.js'), read('webgpu.js'), read('saved.js'), main].join('\n').replace(/<\/script/gi, '<\\/script');
 const styles = read('style.css');
 const hash = text => "'sha256-" + createHash('sha256').update(text).digest('base64') + "'";
 const csp = ["default-src 'none'", 'script-src ' + hash(script), 'style-src ' + hash(styles),

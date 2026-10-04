@@ -5,30 +5,15 @@
  const shader = `
  struct Params { size: vec2f, center: vec2f, span: f32, iterations: u32, palette: u32, pad: u32 }
  @group(0) @binding(0) var<uniform> u: Params;
- const dusk = array<vec3f, 7>(vec3f(9,24,31),vec3f(39,79,89),vec3f(81,130,132),vec3f(213,204,167),vec3f(234,142,82),vec3f(110,60,59),vec3f(30,32,46));
- const blue = array<vec3f, 7>(vec3f(13,16,44),vec3f(34,63,147),vec3f(69,151,199),vec3f(191,223,226),vec3f(192,122,205),vec3f(89,48,139),vec3f(16,20,58));
  fn color(kind: u32, steps: f32) -> vec3f {
-  if (u.palette == 2u) {
-   if (kind == 3u) { return vec3f(232,235,226)/255.; }
-   if (kind == 4u) { return vec3f(95,90,98)/255.; }
-   return vec3f(9,14,17)/255.;
+  var value: f32;
+  if(u.palette == 2u) { value=select(select(8.,96.,kind==4u),238.,kind==3u); }
+  else {
+   value=select(select(select(6.,18.,kind==1u),32.,kind==2u),86.,kind==4u);
+   if(kind==3u) { value=48.+184.*(.5-.5*cos(log2(max(steps,1.)+1.)*1.76)); }
+   if(u.palette==1u) { value=255.-value; }
   }
-  if (kind != 3u) {
-   if (u.palette == 0u) {
-    if (kind == 1u) { return vec3f(21,44,43)/255.; }
-    if (kind == 2u) { return vec3f(27,36,49)/255.; }
-    if (kind == 4u) { return vec3f(78,52,68)/255.; }
-    return vec3f(8,15,18)/255.;
-   }
-   if (kind == 1u) { return vec3f(19,33,64)/255.; }
-   if (kind == 2u) { return vec3f(39,24,57)/255.; }
-   if (kind == 4u) { return vec3f(92,56,96)/255.; }
-   return vec3f(9,12,23)/255.;
-  }
-  let pos = fract(log2(max(steps,1.)+1.)*.28)*6.;
-  let i = min(u32(floor(pos)), 5u);
-  if (u.palette == 0u) { return mix(dusk[i],dusk[i+1u],fract(pos))/255.; }
-  return mix(blue[i],blue[i+1u],fract(pos))/255.;
+  return vec3f(value/255.);
  }
  @vertex fn vertex(@builtin(vertex_index) i: u32) -> @builtin(position) vec4f {
   let p = vec2f(f32((i << 1u) & 2u),f32(i & 2u));
@@ -85,7 +70,6 @@
    this.format=navigator.gpu.getPreferredCanvasFormat();this.context=canvas.getContext('webgpu');
    if (!this.context) {device.destroy();throw Error('WebGPU canvas unavailable');}
    this.context.configure({device,format:this.format,alphaMode:'opaque'});
-   this.frame=document.createElement('canvas');this.frameContext=this.frame.getContext('2d',{alpha:false});
    this.data=new ArrayBuffer(32);this.floats=new Float32Array(this.data);this.ints=new Uint32Array(this.data);
    const lost=info=>{if(this.lost)return;this.failure=info?.error?.message||info?.message||'WebGPU device lost';console.warn('WebGPU fallback:',this.failure);this.lost=true;this.onlost?.(this);};
    device.lost.then(lost);
@@ -100,16 +84,24 @@
    const pass=encoder.beginRenderPass({colorAttachments:[{view:texture.createView(),loadOp:'clear',storeOp:'store',clearValue:[0,0,0,1]}]});
    pass.setPipeline(this.pipeline);pass.setBindGroup(0,this.bindGroup);pass.draw(3);pass.end();return encoder;
   }
-  render(view,width,height,iterations,palette) {
+  render(view,width,height,iterations,palette,capture=true) {
    if(width>this.device.limits.maxTextureDimension2D||height>this.device.limits.maxTextureDimension2D)throw Error('WebGPU texture limit');
    if(this.canvas.width!==width||this.canvas.height!==height){this.canvas.width=width;this.canvas.height=height;}
    const encoder=this.encode(view,width,height,iterations,palette,this.context.getCurrentTexture());
    this.device.queue.submit([encoder.finish()]);
-   // The presentation texture expires at the next frame. Preserve an explicit
-   // snapshot in this task for PNG export and navigation previews.
-   if(this.frame.width!==width||this.frame.height!==height){this.frame.width=width;this.frame.height=height;}
-   this.frameContext.drawImage(this.canvas,0,0);
+   if(!capture)return;
+   const preserve=source=>{
+    const frame=document.createElement('canvas');frame.width=width;frame.height=height;
+    frame.getContext('2d',{alpha:false}).drawImage(source,0,0);return frame;
+   };
+   // Request the snapshot before presentation expires, then let the main thread
+   // keep handling input while the browser completes the GPU work.
+   if(typeof createImageBitmap==='function')return createImageBitmap(this.canvas).then(bitmap=>{
+    try{return preserve(bitmap);}finally{bitmap.close();}
+   });
+   return preserve(this.canvas);
   }
+
   async pixel(x,y,palette=0) {
    const texture=this.device.createTexture({size:[1,1],format:this.format,usage:GPUTextureUsage.RENDER_ATTACHMENT|GPUTextureUsage.COPY_SRC});
    const buffer=this.device.createBuffer({size:256,usage:GPUBufferUsage.COPY_DST|GPUBufferUsage.MAP_READ});

@@ -1,5 +1,0 @@
-{
-  "patterns": "private key blocks and bounded GitHub/API token prefixes",
-  "findings": [],
-  "limitation": "Pattern scan is not a complete secrets audit."
-}

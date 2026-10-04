@@ -60,13 +60,15 @@
     };
   }
   function color(kind, steps, palette = 0) {
-    if (palette === 2) return kind === 3 ? [232, 235, 226] : kind === 4 ? [95, 90, 98] : [9, 14, 17];
-    const interiors = palette === 0 ? [[8, 15, 18], [21, 44, 43], [27, 36, 49], [0,0,0], [78, 52, 68]] : [[9, 12, 23], [19, 33, 64], [39, 24, 57], [0,0,0], [92, 56, 96]];
-    if (kind !== 3) return interiors[kind];
-    const t = Math.log2(Math.max(steps, 1) + 1) * 0.28;
-    const stops = palette === 0 ? [[9,24,31], [39,79,89], [81,130,132], [213,204,167], [234,142,82], [110,60,59], [30,32,46]] : [[13,16,44], [34,63,147], [69,151,199], [191,223,226], [192,122,205], [89,48,139], [16,20,58]];
-    const pos = (t % 1) * (stops.length - 1), i = Math.floor(pos), k = pos - i;
-    return stops[i].map((v, ch) => Math.round(v + (stops[i + 1][ch] - v) * k));
+    // A neutral luminance ramp; classification and orbit arithmetic are unchanged.
+    let value;
+    if (palette === 2) value = kind === 3 ? 238 : kind === 4 ? 96 : 8;
+    else {
+      value = kind === 3 ? 48 + 184 * (0.5 - 0.5 * Math.cos(Math.log2(Math.max(steps, 1) + 1) * 1.76)) : [6,18,32,0,86][kind];
+      if (palette === 1) value = 255 - value;
+    }
+    const byte = Math.round(value);
+    return [byte,byte,byte];
   }
   root.TetraCore = { STATUS, orbit64, makePreciseOrbit, color };
   if (typeof module !== 'undefined') module.exports = root.TetraCore;

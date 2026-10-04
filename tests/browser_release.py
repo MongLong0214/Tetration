@@ -38,7 +38,12 @@ def ready(page, mode=None):
     page.wait_for_selector(selector, state='attached', timeout=90000)
 
 
+def controls(page):
+    if not page.locator('#sidebar').is_visible():
+        page.locator('#settingsBtn').click()
+
 def coordinates(page, x, y, span):
+    controls(page)
     page.locator('details.coordinates').evaluate('(el) => el.open = true')
     for name, value in [('xInput', x), ('yInput', y), ('spanInput', span)]:
         page.locator('#' + name).fill(value)
@@ -107,6 +112,7 @@ try:
         restored.close()
         record('Copied URL reopens the same coordinates')
 
+        controls(page)
         page.locator('#iterations').select_option('64')
         coordinates(page, '0.5', '0', '0.001')
         ready(page, 'cpu')

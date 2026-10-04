@@ -1,0 +1,5 @@
+
+> tetra-atlas@0.4.0 build
+> node build.cjs
+
+Built dist/index.html (88999 bytes) with SHA-256 CSP. No runtime dependencies.

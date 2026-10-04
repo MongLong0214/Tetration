@@ -1,0 +1,10 @@
+{
+  "date": "2026-10-04",
+  "text_files_scanned": 46,
+  "findings": [],
+  "scope": "High-confidence credential patterns and prohibited reference URLs in the current source/docs; not an exhaustive secret or security audit.",
+  "classifier_prefix_unchanged": true,
+  "precision_module_unchanged": true,
+  "csp_preserved": true,
+  "runtime_dependencies": 0
+}

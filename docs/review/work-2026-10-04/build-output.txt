@@ -1,6 +1,0 @@
-npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
-
-> tetra-atlas@0.2.0 build
-> node build.cjs
-
-Built dist/index.html (76203 bytes) with SHA-256 CSP. No runtime dependencies.

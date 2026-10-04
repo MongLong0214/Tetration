@@ -1,0 +1,381 @@
+{
+  "origin": "http://127.0.0.1:4173",
+  "bundle_sha256": "11f2747dc69c7700d823d6b693d0bb4e54c472860e98e8901fb996ad4d86de2d",
+  "limitations": [
+    "Software Vulkan/SwiftShader; no physical GPU or Safari validation."
+  ],
+  "browser_version": "153.0.8010.0",
+  "adapter": {
+    "vendor": "google",
+    "architecture": "swiftshader",
+    "description": ""
+  },
+  "passed": true,
+  "checks": [
+    {
+      "name": "Qualified WebGPU is the application renderer",
+      "passed": true,
+      "detail": {
+        "vendor": "google",
+        "architecture": "swiftshader",
+        "description": ""
+      }
+    },
+    {
+      "name": "15 WebGPU reference pixels match FP64 across all palettes",
+      "passed": true,
+      "detail": [
+        {
+          "x": 0.5,
+          "y": 0,
+          "palette": 0,
+          "actual": [
+            18,
+            18,
+            18,
+            255
+          ],
+          "expected": [
+            18,
+            18,
+            18
+          ]
+        },
+        {
+          "x": 0.01,
+          "y": 0,
+          "palette": 0,
+          "actual": [
+            32,
+            32,
+            32,
+            255
+          ],
+          "expected": [
+            32,
+            32,
+            32
+          ]
+        },
+        {
+          "x": 2,
+          "y": 0,
+          "palette": 0,
+          "actual": [
+            119,
+            119,
+            119,
+            255
+          ],
+          "expected": [
+            119,
+            119,
+            119
+          ]
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "palette": 0,
+          "actual": [
+            86,
+            86,
+            86,
+            255
+          ],
+          "expected": [
+            86,
+            86,
+            86
+          ]
+        },
+        {
+          "x": 0.5,
+          "y": 0.25,
+          "palette": 0,
+          "actual": [
+            18,
+            18,
+            18,
+            255
+          ],
+          "expected": [
+            18,
+            18,
+            18
+          ]
+        },
+        {
+          "x": 0.5,
+          "y": 0,
+          "palette": 1,
+          "actual": [
+            237,
+            237,
+            237,
+            255
+          ],
+          "expected": [
+            237,
+            237,
+            237
+          ]
+        },
+        {
+          "x": 0.01,
+          "y": 0,
+          "palette": 1,
+          "actual": [
+            223,
+            223,
+            223,
+            255
+          ],
+          "expected": [
+            223,
+            223,
+            223
+          ]
+        },
+        {
+          "x": 2,
+          "y": 0,
+          "palette": 1,
+          "actual": [
+            136,
+            136,
+            136,
+            255
+          ],
+          "expected": [
+            136,
+            136,
+            136
+          ]
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "palette": 1,
+          "actual": [
+            169,
+            169,
+            169,
+            255
+          ],
+          "expected": [
+            169,
+            169,
+            169
+          ]
+        },
+        {
+          "x": 0.5,
+          "y": 0.25,
+          "palette": 1,
+          "actual": [
+            237,
+            237,
+            237,
+            255
+          ],
+          "expected": [
+            237,
+            237,
+            237
+          ]
+        },
+        {
+          "x": 0.5,
+          "y": 0,
+          "palette": 2,
+          "actual": [
+            8,
+            8,
+            8,
+            255
+          ],
+          "expected": [
+            8,
+            8,
+            8
+          ]
+        },
+        {
+          "x": 0.01,
+          "y": 0,
+          "palette": 2,
+          "actual": [
+            8,
+            8,
+            8,
+            255
+          ],
+          "expected": [
+            8,
+            8,
+            8
+          ]
+        },
+        {
+          "x": 2,
+          "y": 0,
+          "palette": 2,
+          "actual": [
+            238,
+            238,
+            238,
+            255
+          ],
+          "expected": [
+            238,
+            238,
+            238
+          ]
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "palette": 2,
+          "actual": [
+            96,
+            96,
+            96,
+            255
+          ],
+          "expected": [
+            96,
+            96,
+            96
+          ]
+        },
+        {
+          "x": 0.5,
+          "y": 0.25,
+          "palette": 2,
+          "actual": [
+            8,
+            8,
+            8,
+            255
+          ],
+          "expected": [
+            8,
+            8,
+            8
+          ]
+        }
+      ]
+    },
+    {
+      "name": "WebGPU PNG retains completed image after presentation",
+      "passed": true,
+      "detail": [
+        18,
+        18,
+        18
+      ]
+    },
+    {
+      "name": "A partial WebGPU export freezes its pixels and coordinates across navigation",
+      "passed": true,
+      "detail": [
+        "TETRA / GPU / 64 LIMIT / PARTIAL PREVIEW",
+        "Re 0.5  Im 0  Span 0.05"
+      ]
+    },
+    {
+      "name": "WebGPU preserves export pixels when createImageBitmap is unavailable",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "Parallel FP64 completes every pixel through OffscreenCanvas transfer",
+      "passed": true,
+      "detail": {
+        "view": {
+          "x": "0.5",
+          "y": "0",
+          "span": "0.1"
+        },
+        "mode": "cpu",
+        "digits": 41,
+        "iterations": 64,
+        "palette": 0,
+        "complete": true,
+        "lastCompleted": {
+          "view": {
+            "x": "0.5",
+            "y": "0",
+            "span": "0.1"
+          },
+          "mode": "cpu",
+          "iterations": 64,
+          "palette": 0,
+          "width": 712,
+          "height": 449,
+          "counts": [
+            0,
+            319688,
+            0,
+            0,
+            0
+          ],
+          "elapsed": 548.5999999996275
+        },
+        "backend": "cpu",
+        "webgpuStatus": "ready",
+        "workers": 0,
+        "poolLimit": 4,
+        "workerTransfer": "bitmap",
+        "savedCount": 0,
+        "focus": false,
+        "version": "0.4.0"
+      }
+    },
+    {
+      "name": "Cancelled parallel high-precision work cannot overwrite WebGPU",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "Actual WebGPU device destruction falls back to WebGL2",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "Subsequent WebGL2 context loss falls back to parallel FP64",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "No WebGPU, OffscreenCanvas or scheduler uses transferable pixel buffers and timer yield",
+      "passed": true,
+      "detail": [
+        0,
+        319308,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "Single active Worker quota uses transferable pixel buffers and timer yield",
+      "passed": true,
+      "detail": [
+        0,
+        319308,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "No uncaught browser exceptions",
+      "passed": true,
+      "detail": null
+    }
+  ],
+  "count": 12,
+  "uncaught_errors": []
+}

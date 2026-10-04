@@ -10,21 +10,13 @@
  uniform int uIterations,uPalette;
  out vec4 pixel;
  vec3 palette(int kind,float steps){
-  if(uPalette==2)return kind==3?vec3(232,235,226)/255.:kind==4?vec3(95,90,98)/255.:vec3(9,14,17)/255.;
-  if(kind!=3){
-   if(uPalette==0){
-    if(kind==1)return vec3(21,44,43)/255.;if(kind==2)return vec3(27,36,49)/255.;if(kind==4)return vec3(78,52,68)/255.;return vec3(8,15,18)/255.;
-   }
-   if(kind==1)return vec3(19,33,64)/255.;if(kind==2)return vec3(39,24,57)/255.;if(kind==4)return vec3(92,56,96)/255.;return vec3(9,12,23)/255.;
+  float value;
+  if(uPalette==2)value=kind==3?238.:kind==4?96.:8.;
+  else{
+   value=kind==3?48.+184.*(.5-.5*cos(log2(max(steps,1.)+1.)*1.76)):kind==1?18.:kind==2?32.:kind==4?86.:6.;
+   if(uPalette==1)value=255.-value;
   }
-  float pos=fract(log2(max(steps,1.)+1.)*.28)*6.;int i=int(floor(pos));float k=fract(pos);
-  vec3 a,b;
-  if(uPalette==0){
-   if(i==0){a=vec3(9,24,31);b=vec3(39,79,89);}else if(i==1){a=vec3(39,79,89);b=vec3(81,130,132);}else if(i==2){a=vec3(81,130,132);b=vec3(213,204,167);}else if(i==3){a=vec3(213,204,167);b=vec3(234,142,82);}else if(i==4){a=vec3(234,142,82);b=vec3(110,60,59);}else{a=vec3(110,60,59);b=vec3(30,32,46);}
-  }else{
-   if(i==0){a=vec3(13,16,44);b=vec3(34,63,147);}else if(i==1){a=vec3(34,63,147);b=vec3(69,151,199);}else if(i==2){a=vec3(69,151,199);b=vec3(191,223,226);}else if(i==3){a=vec3(191,223,226);b=vec3(192,122,205);}else if(i==4){a=vec3(192,122,205);b=vec3(89,48,139);}else{a=vec3(89,48,139);b=vec3(16,20,58);}
-  }
-  return mix(a,b,k)/255.;
+  return vec3(value/255.);
  }
  void main(){
   vec2 c=uCenter+(gl_FragCoord.xy-uSize*.5)*(uSpan/uSize.x);
@@ -50,7 +42,7 @@
  class TetraGPU {
   constructor(canvas){
    const gl=canvas.getContext('webgl2',{alpha:false,antialias:false,depth:false,stencil:false,preserveDrawingBuffer:true,powerPreference:'high-performance'});
-   if(!gl)throw Error('WebGL2를 사용할 수 없어 CPU로 계산합니다.');
+   if(!gl)throw Error('WebGL2 unavailable; using CPU.');
    this.gl=gl;this.canvas=canvas;this.kind='webgl2';
    const compile=(type,source)=>{const s=gl.createShader(type);gl.shaderSource(s,source);gl.compileShader(s);if(!gl.getShaderParameter(s,gl.COMPILE_STATUS)){const m=gl.getShaderInfoLog(s);gl.deleteShader(s);throw Error(m);}return s;};
    const vs=compile(gl.VERTEX_SHADER,vertex),fs=compile(gl.FRAGMENT_SHADER,fragment),p=gl.createProgram();
