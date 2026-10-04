@@ -6,6 +6,13 @@
  void main(){vec2 p=vec2((gl_VertexID<<1)&2,gl_VertexID&2);gl_Position=vec4(p*2.-1.,0.,1.);}`;
 
   // Shared by both programs: sampling, adaptive edge pass and palette.
+  /* Range-reduced cos/sin from multiply-adds only (|error| ~1e-7 for |x| <= 1e3). GLSL ES
+   * leaves builtin trig precision undefined; some drivers (SwiftShader, Vulkan-minimum
+   * implementations) err by ~2e-4, which changes chaotic pixels. Used where a start-up
+   * probe finds the builtins imprecise (PRECISE_TRIG). */
+  const polySinCos = `vec2 polyCosSin(float x){float q=floor(x*.636619772367581+.5);float r=((x-q*1.5703125)-q*4.837512969970703e-4)-q*7.549789954891882e-8;float r2=r*r;
+   float s=r+r*r2*(-1.6666654611e-1+r2*(8.3321608736e-3+r2*-1.9515295891e-4));float c=1.-.5*r2+r2*r2*(4.166664568298827e-2+r2*(-1.388731625493765e-3+r2*2.443315711809948e-5));
+   int n=int(q-4.*floor(q*.25));return n==0?vec2(c,s):n==1?vec2(-s,c):n==2?vec2(-c,-s):vec2(s,-c);}`;
   const header = `#version 300 es
  precision highp float;
  precision highp int;
@@ -16,23 +23,39 @@
  uniform sampler2D uSource;
  out vec4 pixel;
  const float LOG_R=23.025850929940457;
+ ${polySinCos}
+ #ifdef PRECISE_TRIG
+ vec2 cosSin(float x){return polyCosSin(x);}
+ #else
+ vec2 cosSin(float x){return vec2(cos(x),sin(x));}
+ #endif
  ${TetraCore.paletteGLSL}`;
 
   // Rotated-grid and stratified sample offsets in pixels.
+  /* Alpha marks how a pixel was sampled: 1 = one sample or 16, 64/255 = the rotated-grid
+   * 4 samples. The 4 rotated-grid points lie on the 4x4 grid, so a 16x pixel whose seed
+   * was a 4x pixel reuses their average and computes only the 12 new samples. */
   const footer = `
  const vec2 RG[4]=vec2[4](vec2(-.125,-.375),vec2(.375,-.125),vec2(.125,.375),vec2(-.375,.125));
+ const int RGROW[4]=int[4](1,3,0,2);
  void main(){
   vec2 point=gl_FragCoord.xy+uOffset;
+  vec4 seed=vec4(0.);
   if(uAdaptive==1){
-   ivec2 p=ivec2(gl_FragCoord.xy),size=textureSize(uSource,0);vec3 center=texelFetch(uSource,p,0).rgb;float contrast=0.;
+   ivec2 p=ivec2(gl_FragCoord.xy),size=textureSize(uSource,0);seed=texelFetch(uSource,p,0);vec3 center=seed.rgb;float contrast=0.;
    for(int y=-1;y<=1;y++)for(int x=-1;x<=1;x++){vec3 delta=abs(center-texelFetch(uSource,clamp(p+ivec2(x,y),ivec2(0),size-1),0).rgb);contrast=max(contrast,max(delta.r,max(delta.g,delta.b)));}
-   if(contrast<uThreshold){pixel=vec4(center,1.);return;}
+   if(contrast<uThreshold){pixel=seed;return;}
   }
-  vec3 rgb=vec3(0.);
-  if(uSamples==16){for(int j=0;j<4;j++)for(int i=0;i<4;i++)rgb+=orbitColor(point+(vec2(float(i),float(j))+.5)*.25-.5);rgb*=.0625;}
-  else if(uSamples==4){for(int i=0;i<4;i++)rgb+=orbitColor(point+RG[i]);rgb*=.25;}
+  vec3 rgb=vec3(0.);float alpha=1.;
+  if(uSamples==16){
+   bool reuse=uAdaptive==1&&abs(seed.a-64./255.)<.5/255.;
+   if(reuse)rgb=seed.rgb*4.;
+   for(int j=0;j<4;j++)for(int i=0;i<4;i++)if(!reuse||i!=RGROW[j])rgb+=orbitColor(point+(vec2(float(i),float(j))+.5)*.25-.5);
+   rgb*=.0625;
+  }
+  else if(uSamples==4){for(int i=0;i<4;i++)rgb+=orbitColor(point+RG[i]);rgb*=.25;alpha=64./255.;}
   else rgb=orbitColor(point);
-  pixel=vec4(rgb,1.);
+  pixel=vec4(rgb,alpha);
  }`;
 
   const direct = header + `
@@ -49,7 +72,7 @@
    if(isnan(a)||isnan(b)||isinf(a)||isinf(b)){kind=4;steps=float(i);break;}
    if(a>LOG_R){kind=3;steps=float(i)+min(1.,(a-LOG_R)/LOG_R);break;}
    if(a<uLowA||abs(b)>uMaxB){kind=4;steps=float(i);break;}
-   float r=exp(a);vec2 next=r*vec2(cos(b),sin(b));float tol=uTol*(1.+r);
+   float r=exp(a);vec2 next=r*cosSin(b);float tol=uTol*(1.+r);
    fixedCount=length(next-w)<tol?fixedCount+1:0;
    periodCount=i>2&&length(next-old)<tol?periodCount+1:0;
    old=w;w=next;
@@ -83,7 +106,7 @@
    s=x*(1.-x2*(1./6.-x2*(1./120.-x2*(1./5040.-x2*(1./362880.)))));
    c=1.-x2*(.5-x2*(1./24.-x2*(1./720.-x2*(1./40320.))));
    h=y*(1.-y2*(1./6.-y2*(1./120.-y2*(1./5040.))));}
-  else{s=sin(x);c=cos(x);h=sin(.5*x);}
+  else{vec2 cs=cosSin(x);s=cs.y;c=cs.x;h=cosSin(.5*x).y;}
  }
  float log1ps(float v){if(abs(v)<.25){float t=v/(2.+v),t2=t*t;return 2.*t*(1.+t2*(1./3.+t2*(1./5.+t2*(1./7.+t2*(1./9.+t2*(1./11.))))));}return log(1.+v);}
  float atan2s(float y,float x){
@@ -119,7 +142,7 @@
    if(isnan(a)||isnan(b)||isinf(a)||isinf(b)||a<uLowA||abs(b)>uMaxB){kind=4;steps=float(i);break;}
    vec2 next;
    if(k+1>=uRefValues){
-    next=exp(a)*vec2(cos(b),sin(b));dm=next;de=0;normalizeExp(dm,de);k=0;cur=vec4(0.,0.,LOG_R,0.);
+    next=exp(a)*cosSin(b);dm=next;de=0;normalizeExp(dm,de);k=0;cur=vec4(0.,0.,LOG_R,0.);
    }else{
     vec4 nx=refAt(k+1);vec2 Vn=nx.xy;
     if(Ee<-12){
@@ -209,6 +232,7 @@
       this.bits = gl.getShaderPrecisionFormat(gl.FRAGMENT_SHADER, gl.HIGH_FLOAT)?.precision || 0;
       if (this.bits < 23) throw Error('Insufficient fragment precision');
       this.maxTexture = gl.getParameter(gl.MAX_TEXTURE_SIZE);
+      this.preciseTrig = this.probeTrig();
       this.programs = {direct: this.link(direct, UNIFORMS.direct), perturb: this.link(perturb, UNIFORMS.perturb)};
       // The BLA program (deep views) links in warm(), in the background where the driver allows.
       this.parallel = gl.getExtension('KHR_parallel_shader_compile');
@@ -221,9 +245,31 @@
       // blaMode: 'auto' uses BLA where it saves enough steps, 'on' wherever a table exists, 'off' never.
       this.bla = null; this.blaTexture = null; this.blaMode = 'auto';
     }
+    /* One 256x2 draw comparing builtin cos/sin with the multiply-add version over |x| <= 60.
+     * True when the builtins err by more than 4e-6 anywhere (then PRECISE_TRIG is compiled in). */
+    probeTrig() {
+      const gl = this.gl;
+      try {
+        const fragment = `#version 300 es
+ precision highp float;
+ out vec4 o;
+ ${polySinCos}
+ void main(){float x=(gl_FragCoord.x-128.)*(gl_FragCoord.y<1.?.025:.47)+.0137;vec2 a=vec2(cos(x),sin(x)),b=polyCosSin(x);
+  o=vec4(max(abs(a.x-b.x),abs(a.y-b.y))>4e-6?1.:0.,0.,0.,1.);}`;
+        const {program} = this.link(fragment, []), texture = gl.createTexture(), buffer = gl.createFramebuffer();
+        gl.bindTexture(gl.TEXTURE_2D, texture); gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA8, 256, 2);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, buffer); gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
+        gl.viewport(0, 0, 256, 2); gl.useProgram(program); gl.drawArrays(gl.TRIANGLES, 0, 3);
+        const out = new Uint8Array(256 * 2 * 4); gl.readPixels(0, 0, 256, 2, gl.RGBA, gl.UNSIGNED_BYTE, out);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.deleteFramebuffer(buffer); gl.deleteTexture(texture); gl.deleteProgram(program);
+        for (let i = 0; i < out.length; i += 4) if (out[i] > 127) return true;
+        return false;
+      } catch { return true; }
+    }
     // Compile and link without waiting; finishLink() reads the result (and blocks until it is ready).
     startLink(fragmentSource) {
       const gl = this.gl, program = gl.createProgram();
+      if (this.preciseTrig) fragmentSource = fragmentSource.replace('#version 300 es\n', '#version 300 es\n#define PRECISE_TRIG\n');
       const shaders = [[gl.VERTEX_SHADER, vertex], [gl.FRAGMENT_SHADER, fragmentSource]].map(([type, source]) => {
         const shader = gl.createShader(type);
         gl.shaderSource(shader, source); gl.compileShader(shader); gl.attachShader(program, shader);

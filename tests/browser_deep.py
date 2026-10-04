@@ -112,6 +112,15 @@ def body():
             assert q['shortMismatch'] <= d['shortMismatch'], (d['shortMismatch'], q['shortMismatch'])
         suite.record('Perturbation is at least as faithful to FP64 as direct FP32 near the handover depth')
 
+        # 6b. Direct FP32 stays close to FP64 in chaotic views: imprecise builtin trig is detected and replaced.
+        trig = {}
+        for x, y, s in [('-1.84', '0.09', '0.0285'), ('-2.5', '0', '1.8')]:
+            r = page.evaluate('([x,y,s]) => __tetraPixels.compare(x,y,s,128,80,384,0,"direct",1e9)', [x, y, s])
+            wrong = r['shortMismatch'] + r['longMismatch']
+            assert wrong <= r['total'] * 0.15 and r['blockDiff'] <= 5, (x, y, s, wrong, r['blockDiff'])
+            trig[f'{x},{y},{s}'] = {'wrong': wrong, 'total': r['total'], 'block_diff': round(r['blockDiff'], 2)}
+        suite.record('Direct FP32 matches FP64 within 15% of chaotic pixels (precise trig where builtins are imprecise)', trig)
+
         # 7. The app renders every depth at full display resolution with perturbation.
         for x, y, s in [PLUME, ABYSS, HORIZON, ('0.5', '0', '1e-200')]:
             info = open_app(page, f'v=1&x={x}&y={y}&s={s}&q=1', 'perturb')

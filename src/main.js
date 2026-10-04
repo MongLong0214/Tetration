@@ -1016,6 +1016,6 @@
     referencesComputed: references.computed,
     savedCount: savedViews.length, focus: document.body.classList.contains('focus-mode'), version: VERSION, renderStage, quality, colorPhase: hue(), flow,
     interactiveFrames: interactiveCount, animating: !!motion.raf, gpuFrames: gpu ? gpu.live : 0, gpuPooled: gpu ? gpu.pool.length : 0, displayWidth: display.canvas.width, displayHeight: display.canvas.height,
-    bla: gpu?.bla ? {levels: gpu.bla.levels, reach: gpu.bla.reach, compiled: !!gpu.programs.perturbBla, mode: gpu.blaMode} : null, blaReady: !!gpu?.programs.perturbBla,
+    bla: gpu?.bla ? {levels: gpu.bla.levels, reach: gpu.bla.reach, compiled: !!gpu.programs.perturbBla, mode: gpu.blaMode} : null, blaReady: !!gpu?.programs.perturbBla, preciseTrig: !!gpu?.preciseTrig,
   })});
 })();
