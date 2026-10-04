@@ -1,0 +1,13 @@
+{
+  "version": "0.5.0",
+  "baseline_commit": "4b16c005c635ac73ee0f11019524e8e1d68f5f4c",
+  "baseline_bundle_sha256": "11f2747dc69c7700d823d6b693d0bb4e54c472860e98e8901fb996ad4d86de2d",
+  "bundle_bytes": 110075,
+  "bundle_sha256": "df4815f01272ee8181e458d5875e3f2cd77a53c80181c9fc5727b931a1eeb677",
+  "finite_orbit_classifiers_unchanged": true,
+  "precision_js_unchanged": true,
+  "software_graphics_only": true,
+  "physical_iphone_safari": false,
+  "five_hour_soak": false,
+  "public_https_verified": false
+}

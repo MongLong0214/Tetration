@@ -6,3 +6,6 @@
 
 /* Keep controls clear of display cutouts and the home indicator. */
 .topbar{padding-top:env(safe-area-inset-top,0px);padding-left:max(12px,env(safe-area-inset-left,0px));padding-right:max(12px,env(safe-area-inset-right,0px))}.statusbar{padding-bottom:env(safe-area-inset-bottom,0px);padding-left:max(12px,env(safe-area-inset-left,0px));padding-right:max(12px,env(safe-area-inset-right,0px))}#exitFocusBtn{top:calc(16px + env(safe-area-inset-top,0px));right:max(16px,env(safe-area-inset-right,0px))}@media(max-width:760px){.inspector{padding-top:calc(20px + env(safe-area-inset-top,0px));padding-bottom:calc(18px + env(safe-area-inset-bottom,0px))}.inspector .panel-heading{top:calc(-20px - env(safe-area-inset-top,0px));padding-top:calc(12px + env(safe-area-inset-top,0px))}}
+
+/* Geometry stays on the compositor while new image tiles are computed. */
+#cpuCanvas,#gpuCanvas,#webgpuCanvas{transform-origin:50% 50%;will-change:transform}.palettes button{padding:0 6px}.control-row:has(.palettes){flex-wrap:wrap;gap:8px;padding:8px 0}.palettes{margin-left:auto}body.focus-mode .crosshair{display:none}

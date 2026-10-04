@@ -26,7 +26,7 @@ def gl(name,result,*args):
 getstr=gl('glGetString',C.c_char_p,U);create_shader=gl('glCreateShader',U,U);source=gl('glShaderSource',None,U,I,C.POINTER(C.c_char_p),C.POINTER(I));compile_shader=gl('glCompileShader',None,U);shader_iv=gl('glGetShaderiv',None,U,U,C.POINTER(I));shader_log=gl('glGetShaderInfoLog',None,U,I,C.POINTER(I),C.c_void_p)
 create_program=gl('glCreateProgram',U);attach=gl('glAttachShader',None,U,U);link=gl('glLinkProgram',None,U);program_iv=gl('glGetProgramiv',None,U,U,C.POINTER(I));program_log=gl('glGetProgramInfoLog',None,U,I,C.POINTER(I),C.c_void_p)
 use=gl('glUseProgram',None,U);location=gl('glGetUniformLocation',I,U,C.c_char_p);onef=gl('glUniform1f',None,I,F);twof=gl('glUniform2f',None,I,F,F);onei=gl('glUniform1i',None,I,I);viewport=gl('glViewport',None,I,I,I,I);draw=gl('glDrawArrays',None,U,I,I);read=gl('glReadPixels',None,I,I,I,I,U,U,C.c_void_p)
-text=(ROOT/'src/gpu.js').read_text();sources=[re.search(r'const '+name+r' = `([\s\S]*?)`;',text).group(1) for name in ['vertex','fragment']]
+compiled=json.loads(subprocess.check_output(['node','-e',"require('./src/core.js');require('./src/gpu.js');console.log(JSON.stringify(TetraGPU.sources))"],cwd=ROOT,text=True));sources=[compiled[name] for name in ['vertex','fragment']]
 checks=[];program=create_program()
 for name,kind,code in zip(['vertex','fragment'],[0x8B31,0x8B30],sources):
  shader=create_shader(kind);encoded=C.c_char_p(code.encode());source(shader,1,C.byref(encoded),None);compile_shader(shader);ok=I();shader_iv(shader,0x8B81,C.byref(ok))
@@ -40,7 +40,7 @@ checks.append({'name':'Production shader program links','passed':True});use(prog
 u={name:location(program,('u'+name).encode()) for name in ['Size','Center','Span','Iterations','Palette']}
 twof(u['Size'],1,1);onef(u['Span'],1);onei(u['Iterations'],512);onei(u['Palette'],0)
 cases=[('fixed',.5,0),('period2',.01,0),('threshold',2,0),('origin',0,0),('complex',.5,.25)]
-js="require('./src/precision.js');const c=require('./src/core.js');const cases="+json.dumps(cases)+";console.log(JSON.stringify(cases.map(([name,x,y])=>{const r=c.orbit64(x,y,512);return {name,kind:r.kind,color:c.color(r.kind,r.steps,0)}})))"
+js="require('./src/precision.js');const c=require('./src/core.js');const cases="+json.dumps(cases)+";console.log(JSON.stringify(cases.map(([name,x,y])=>{const r=c.orbit64(x,y,512);return {name,kind:r.kind,color:c.color(r.kind,r.steps,0,r.re,r.im)}})))"
 expected=json.loads(subprocess.check_output(['node','-e',js],cwd=ROOT,text=True))
 for (name,x,y),item in zip(cases,expected):
  twof(u['Center'],x,y);draw(4,0,3);pixel=(C.c_ubyte*4)();read(0,0,1,1,0x1908,0x1401,pixel)

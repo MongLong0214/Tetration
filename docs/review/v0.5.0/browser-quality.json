@@ -1,0 +1,84 @@
+{
+  "bundle_sha256": "df4815f01272ee8181e458d5875e3f2cd77a53c80181c9fc5727b931a1eeb677",
+  "limitations": [
+    "Software WebGL2; one sampled camera for the image error comparison. No universal error or frame-rate bound.",
+    "Color flow is exercised briefly; this is not a five-hour thermal or memory soak."
+  ],
+  "browser_version": "153.0.8010.0",
+  "passed": true,
+  "checks": [
+    {
+      "name": "Default detail reaches display resolution with adaptive four-sample edges",
+      "passed": true,
+      "detail": {
+        "view": {
+          "x": "-2.5",
+          "y": "0",
+          "span": "1.8"
+        },
+        "mode": "gpu",
+        "iterations": 256,
+        "palette": 0,
+        "width": 1280,
+        "height": 710,
+        "counts": null,
+        "elapsed": 3095.9000000003725,
+        "samples": 4
+      }
+    },
+    {
+      "name": "GPU-resident tiles agree with one full-frame draw without seams",
+      "passed": true,
+      "detail": 0
+    },
+    {
+      "name": "Adaptive antialiasing reduces image error against a 16-sample reference",
+      "passed": true,
+      "detail": {
+        "camera": {
+          "x": "-.2",
+          "y": "0",
+          "span": "7"
+        },
+        "reference": "16 samples per pixel, box averaged in JS",
+        "tile_max_channel_error": 0,
+        "single_rmse": 23.223094000821373,
+        "adaptive_rmse": 11.138549511486147,
+        "changed_pixels": 6424,
+        "total_pixels": 36864
+      }
+    },
+    {
+      "name": "Dragging reprojects the cached GPU image without orbit draws",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "Color flow changes only presentation, without recomputing or moving coordinates",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "A shared view retains quality and hue and opens without automatic motion",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "Reduced-motion preference changes stop active color flow",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "CPU keeps the reprojected camera while replacement Workers are pending",
+      "passed": true,
+      "detail": 0
+    },
+    {
+      "name": "No uncaught exceptions in quality and motion flows",
+      "passed": true,
+      "detail": null
+    }
+  ],
+  "count": 9,
+  "uncaught_errors": []
+}

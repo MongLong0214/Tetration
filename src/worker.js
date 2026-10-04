@@ -32,7 +32,7 @@ self.onmessage = async function ({ data: job }) {
         for (let x = t.x; x < t.x + t.width; x++) {
           const result = calculate ? calculate(xr[x], yr[y], job.iterations) : TetraCore.orbit64(xr[x], yr[y], job.iterations);
           counts[result.kind]++;
-          const rgb = TetraCore.color(result.kind, result.steps, job.palette);
+          const rgb = TetraCore.color(result.kind, result.steps, job.palette, result.re, result.im);
           pixels[p++] = rgb[0]; pixels[p++] = rgb[1]; pixels[p++] = rgb[2]; pixels[p++] = 255;
         }
       }

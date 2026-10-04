@@ -1,0 +1,98 @@
+{
+  "bundle_sha256": "df4815f01272ee8181e458d5875e3f2cd77a53c80181c9fc5727b931a1eeb677",
+  "visual_times": {
+    "preview_ms": 603.8999999985099,
+    "native_ms": 2259.5999999996275,
+    "complete_ms": 3996.5
+  },
+  "browser": "153.0.8010.0",
+  "initial_seconds": 4.073671102523804,
+  "initial": {
+    "view": {
+      "x": "-0.2",
+      "y": "0",
+      "span": "7"
+    },
+    "mode": "gpu",
+    "digits": 40,
+    "iterations": 256,
+    "palette": 0,
+    "complete": true,
+    "lastCompleted": {
+      "view": {
+        "x": "-0.2",
+        "y": "0",
+        "span": "7"
+      },
+      "mode": "gpu",
+      "iterations": 256,
+      "palette": 0,
+      "width": 1440,
+      "height": 870,
+      "counts": null,
+      "elapsed": 3902.699999999255,
+      "samples": 4
+    },
+    "backend": "webgl2",
+    "webgpuStatus": "unavailable",
+    "workers": 0,
+    "poolLimit": 4,
+    "workerTransfer": "pixels",
+    "savedCount": 0,
+    "focus": false,
+    "version": "0.5.0",
+    "renderStage": "complete",
+    "quality": 4,
+    "colorPhase": 0,
+    "flow": false,
+    "displayWidth": 1440,
+    "displayHeight": 870
+  },
+  "scope": "Chromium, ANGLE/SwiftShader, 1440x960, DPR 1. Mouse input through Playwright; not a hardware benchmark.",
+  "drag_seconds": 0.5001471042633057,
+  "drag_gpu_calls": 0,
+  "frames": 32,
+  "frame_gap_p95_ms": 16.700000000000728,
+  "frame_gap_max_ms": 16.700000000000728,
+  "after": {
+    "view": {
+      "x": "-0.9048611111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111",
+      "y": "0.2114583333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333",
+      "span": "7"
+    },
+    "mode": "gpu",
+    "digits": 40,
+    "iterations": 256,
+    "palette": 0,
+    "complete": true,
+    "lastCompleted": {
+      "view": {
+        "x": "-0.9048611111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111",
+        "y": "0.2114583333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333",
+        "span": "7"
+      },
+      "mode": "gpu",
+      "iterations": 256,
+      "palette": 0,
+      "width": 1440,
+      "height": 870,
+      "counts": null,
+      "elapsed": 3414.4000000003725,
+      "samples": 4
+    },
+    "backend": "webgl2",
+    "webgpuStatus": "unavailable",
+    "workers": 0,
+    "poolLimit": 4,
+    "workerTransfer": "pixels",
+    "savedCount": 0,
+    "focus": false,
+    "version": "0.5.0",
+    "renderStage": "complete",
+    "quality": 4,
+    "colorPhase": 0,
+    "flow": false,
+    "displayWidth": 1440,
+    "displayHeight": 870
+  }
+}

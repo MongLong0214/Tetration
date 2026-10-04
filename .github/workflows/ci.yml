@@ -41,6 +41,7 @@ jobs:
           python3 tests/browser_review.py
           python3 tests/browser_release.py
           python3 tests/browser_modern.py
+          python3 tests/browser_quality.py
           python3 tests/browser_explorer.py
           python3 tests/browser_webkit.py
         env:
