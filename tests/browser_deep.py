@@ -118,7 +118,10 @@ def body():
             last = info['lastCompleted']
             assert last['width'] == 480 and last['height'] == round(page.locator('#viewport').bounding_box()['height']), last
             assert last['mode'] == 'perturb' and info['references'], info
-            suite.record(f'Full display resolution at span {s}', {'size': [last['width'], last['height']], 'iterations': last['iterations'], 'ms': round(last['elapsed'])})
+            if s == HORIZON[2]:
+                # The app itself renders 10^100 with BLA (table levels and a compiled BLA program).
+                assert info['bla'] and info['bla']['levels'] > 0 and info['bla']['compiled'] and info['bla']['reach'] > 1000, info['bla']
+            suite.record(f'Full display resolution at span {s}', {'size': [last['width'], last['height']], 'iterations': last['iterations'], 'ms': round(last['elapsed']), 'bla': info['bla']})
         page.screenshot(path=str(OUT / 'deep-1e-200.png'))
 
         # 8. Auto iterations deepen with zoom; fixed limits stay fixed.

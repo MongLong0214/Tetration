@@ -1,0 +1,134 @@
+{
+  "suite": "perf",
+  "origin": "http://127.0.0.1:4173",
+  "bundle_sha256": "4986c0248db2837079b21515deda49647efddcb8f8eb66d299512e40eb07c0c2",
+  "playwright": "1.56.0",
+  "limitations": [
+    "SwiftShader timings on a shared CPU runner; budgets are regression bounds, not device forecasts."
+  ],
+  "browser_version": "141.0.7390.37",
+  "passed": true,
+  "checks": [
+    {
+      "name": "First image appears quickly after navigation",
+      "passed": true,
+      "detail": {
+        "first_frame_ms": 375,
+        "complete_s": 3.88
+      },
+      "seconds": 4.52
+    },
+    {
+      "name": "Initial render keeps the main thread responsive",
+      "passed": true,
+      "detail": {
+        "long_tasks_ms": [
+          86,
+          91,
+          62,
+          100,
+          71,
+          63,
+          87,
+          50,
+          106,
+          121,
+          58,
+          82
+        ]
+      },
+      "seconds": 4.53
+    },
+    {
+      "name": "Shallow views never compile the deep-zoom (BLA) program",
+      "passed": true,
+      "detail": null,
+      "seconds": 7.53
+    },
+    {
+      "name": "Shallow drag: live frames and display cadence",
+      "passed": true,
+      "detail": {
+        "frames_in_2s": 60,
+        "frame_gap_p95_ms": 16.8,
+        "median_ms": 16.7
+      },
+      "seconds": 11.08
+    },
+    {
+      "name": "Deep-zoom (BLA) program compiles in a quiet moment at perturbation depth",
+      "passed": true,
+      "detail": {
+        "long_tasks_ms": []
+      },
+      "seconds": 31.92
+    },
+    {
+      "name": "Deep (10^25) drag keeps live perturbation frames",
+      "passed": true,
+      "detail": {
+        "frames_in_2s": 60,
+        "frame_gap_p95_ms": 33.4
+      },
+      "seconds": 59.58
+    },
+    {
+      "name": "Smooth wheel zoom keeps display cadence",
+      "passed": true,
+      "detail": {
+        "frames": 39,
+        "frame_gap_p95_ms": 66.7
+      },
+      "seconds": 80.03
+    },
+    {
+      "name": "Exact 10^100 reference orbit (6,144 steps, 140 digits) computes in a Worker",
+      "passed": true,
+      "detail": {
+        "x": "-0.6051379389723799009718170481321474982",
+        "y": "0.43774044207480056296942658666911315580",
+        "digits": 140,
+        "iterations": 6144,
+        "length": 2692,
+        "elapsed": 73
+      },
+      "seconds": 125.68
+    },
+    {
+      "name": "Deep (10^100) drag keeps live BLA perturbation frames",
+      "passed": true,
+      "detail": {
+        "frames_in_2s": 60,
+        "frame_gap_p95_ms": 50,
+        "complete_s": 24.8,
+        "bla": {
+          "levels": 10,
+          "reach": 2344,
+          "compiled": true,
+          "mode": "auto"
+        }
+      },
+      "seconds": 130.57
+    },
+    {
+      "name": "Sixty-action session keeps GPU textures, Workers and heap bounded",
+      "passed": true,
+      "detail": {
+        "live_gpu_frames": 4,
+        "pooled": 3,
+        "workers": 0,
+        "heap_growth_mb": 0.22
+      },
+      "seconds": 167.28
+    },
+    {
+      "name": "No uncaught browser exceptions",
+      "passed": true,
+      "detail": null,
+      "seconds": 167.28
+    }
+  ],
+  "count": 11,
+  "uncaught_errors": [],
+  "seconds": 167.4
+}

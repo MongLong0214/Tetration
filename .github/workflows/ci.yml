@@ -21,6 +21,7 @@ jobs:
         with:
           node-version: '24'
           package-manager-cache: false
+      - run: npx --yes eslint@10.1.0 .
       - run: npm test
       - run: npm run build
   browser:

@@ -1,0 +1,29 @@
+{
+  "version": "1.0.0",
+  "baseline_commit": "2cfce5b5d5f20822e941f710746f75da68cc24f7",
+  "baseline_bundle_sha256": "df4815f01272ee8181e458d5875e3f2cd77a53c80181c9fc5727b931a1eeb677",
+  "bundle_bytes": 192182,
+  "bundle_sha256": "4986c0248db2837079b21515deda49647efddcb8f8eb66d299512e40eb07c0c2",
+  "source_sha256": {
+    "src/core.js": "9e3c03b1b01ff0bbaae40639f4ed822d3634a5e0eec4a5cf36cece770e247c27",
+    "src/gpu.js": "b1760191da7f44f5e033384c2cbbd23825add10587f03d291f53bbc1dea484fb",
+    "src/index.html": "8d11933950b362f5ce6ee8d084d8a39d38f5c0b6e6002826678060003b3d587c",
+    "src/main.js": "ab2365597aad45e85ed4166542fa7f45b25f2592437cfa46712aeafa95ef7145",
+    "src/manifest.webmanifest": "63fac471e90c60ee9e028c796456b3867c1495c82439e061b8b1fc7994dd7170",
+    "src/precision.js": "ba4f251c6a630b3d831f72dbec98030caa6b46391135c00ec394253efaa199f3",
+    "src/reference.js": "5cc84d464c5bf6feaaaa561ccf7b25eb738334da5b46ae9e2f50b143ad79b6ee",
+    "src/render.js": "a6e1110af68054307093a9095153afbf915c75af485afa2b3f903ed32baa2117",
+    "src/saved.js": "3fc763b2f42c114f667ab046e1655e21b170057636b5861d3c967cd131a9827e",
+    "src/style.css": "a4db6a8d320891a74b0725356904872dbdc2ed9854bdde089361b36ed25aa0e3",
+    "src/sw.js": "8e9fd0f4e5170780a7e71ef982ab445abfb04ce73b5fff9c06be6a041f2eb134",
+    "src/worker.js": "6ef1deeef2bbeb7e36710c83c5a833d98affdd5495a0f5df282d5a59fe059614"
+  },
+  "browser_reports_share_bundle_hash": true,
+  "software_graphics_only": true,
+  "physical_iphone_safari": false,
+  "hardware_gpu": false,
+  "five_hour_soak": false,
+  "public_https_verified": false,
+  "remote_ci_run": false,
+  "remote_ci_note": "workflow_dispatch refused with HTTP 403 (no Actions permission for the integration)"
+}

@@ -4,7 +4,13 @@
 (() => {
   const F = createFixed(256);
   let renderer = null;
-  const gpu = () => renderer || (renderer = new TetraGPU(document.createElement('canvas')));
+  // The harness waits for the BLA program, so comparisons never fall back to the plain one while it links.
+  const gpu = () => {
+    if (renderer) return renderer;
+    renderer = new TetraGPU(document.createElement('canvas'));
+    renderer.blaMode = 'on'; renderer.blaProgram(); renderer.blaMode = 'auto';
+    return renderer;
+  };
 
   // Exact per-pixel orbit with the GPU rule set (Euclidean tolerance), decimal BigInt.
   function exactOrbit(x, y, iterations, digits) {

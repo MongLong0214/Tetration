@@ -1,5 +1,5 @@
 // Correctness-focused lint rules for the dependency-free source. Run with ESLint 9+:
-//   npx eslint .
+//   npm run lint   (npx eslint@10.1.0 .)
 // The style of the dense numerical code is intentional; these rules target defects.
 const browser = {window: 'readonly', document: 'readonly', navigator: 'readonly', location: 'readonly', history: 'readonly', localStorage: 'readonly',
   matchMedia: 'readonly', requestAnimationFrame: 'readonly', cancelAnimationFrame: 'readonly', setTimeout: 'readonly', clearTimeout: 'readonly',

@@ -1,0 +1,16 @@
+PASS Default Ultra quality reaches display resolution with 16-sample edges {"view": {"x": "-2.5", "y": "0", "span": "1.8"}, "mode": "gpu", "iterations": 384, "palette": 0, "width": 1000, "height": 590, "counts": null, "elapsed": 12160, "samples": 16}
+PASS Adaptive 4x and 16x antialiasing reduce error against a 64-sample reference: direct overview {"rmse1": 23.93341344653493, "rmse4": 10.720969062555826, "rmse16": 5.296309388156134, "changed4": 4961, "changed16": 5393, "pixels": 25600, "reference": "64 samples per pixel"}
+PASS Adaptive 4x and 16x antialiasing reduce error against a 64-sample reference: direct filaments {"rmse1": 35.85067937137183, "rmse4": 17.32674054608673, "rmse16": 8.914196407238428, "changed4": 11970, "changed16": 12265, "pixels": 25600, "reference": "64 samples per pixel"}
+PASS Adaptive 4x and 16x antialiasing reduce error against a 64-sample reference: perturbation plume {"rmse1": 62.98289539550211, "rmse4": 30.70090215404195, "rmse16": 15.643349211519224, "changed4": 12495, "changed16": 12551, "pixels": 14400, "reference": "64 samples per pixel"}
+PASS Direct tiles with adaptive samples equal one full-frame draw 0
+PASS Dragging shows live single-sample frames, then refines on release {"frames": 39, "draws": {"1": 39, "4": 0, "16": 0}}
+PASS Wheel zoom eases the visible camera onto the exact target {"target_span": "0.237716252204793110"}
+PASS A flick keeps gliding with decaying inertia, then renders 
+PASS Colour flow changes only presentation, without recomputing 
+PASS A shared view keeps quality and hue and opens without motion 
+PASS Reduced-motion preference stops colour flow 
+PASS Reduced motion jumps directly and disables inertia 
+PASS CPU keeps the reprojected image while replacement Workers are pending 0
+PASS Palette changes recolour the rendered view 
+PASS No uncaught browser exceptions 
+ALL 15 PASSED

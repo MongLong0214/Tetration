@@ -1,0 +1,495 @@
+{
+  "suite": "deep",
+  "origin": "http://127.0.0.1:4173",
+  "bundle_sha256": "4986c0248db2837079b21515deda49647efddcb8f8eb66d299512e40eb07c0c2",
+  "playwright": "1.56.0",
+  "limitations": [
+    "SwiftShader WebGL2 on a Linux runner; FP32 GPU arithmetic as on hardware, but no hardware driver qualification.",
+    "Chaotic regions are compared statistically: finite precision of any kind changes individual chaotic pixels."
+  ],
+  "browser_version": "141.0.7390.37",
+  "passed": true,
+  "checks": [
+    {
+      "name": "GPU perturbation equals FP64 pixel for pixel: threshold boundary at 1e-55",
+      "passed": true,
+      "detail": {
+        "kinds": [
+          0,
+          0,
+          0,
+          2560,
+          0
+        ],
+        "total": 2560,
+        "refLength": 513,
+        "gpuMs": 1970
+      },
+      "seconds": 3.68
+    },
+    {
+      "name": "GPU perturbation equals FP64 pixel for pixel: convergence boundary at 2e-6",
+      "passed": true,
+      "detail": {
+        "kinds": [
+          0,
+          2560,
+          0,
+          0,
+          0
+        ],
+        "total": 2560,
+        "refLength": 513,
+        "gpuMs": 753
+      },
+      "seconds": 4.57
+    },
+    {
+      "name": "GPU perturbation equals FP64 pixel for pixel: negative real axis at 1e-9",
+      "passed": true,
+      "detail": {
+        "kinds": [
+          0,
+          0,
+          0,
+          2560,
+          0
+        ],
+        "total": 2560,
+        "refLength": 7,
+        "gpuMs": 5
+      },
+      "seconds": 4.62
+    },
+    {
+      "name": "GPU perturbation equals FP64 pixel for pixel: lower half plane at 1e-30",
+      "passed": true,
+      "detail": {
+        "kinds": [
+          0,
+          2560,
+          0,
+          0,
+          0
+        ],
+        "total": 2560,
+        "refLength": 513,
+        "gpuMs": 21
+      },
+      "seconds": 4.68
+    },
+    {
+      "name": "GPU perturbation equals FP64 pixel for pixel: view containing the origin at 1e-20",
+      "passed": true,
+      "detail": {
+        "kinds": [
+          0,
+          0,
+          2560,
+          0,
+          0
+        ],
+        "total": 2560,
+        "refLength": 513,
+        "gpuMs": 13
+      },
+      "seconds": 4.74
+    },
+    {
+      "name": "GPU perturbation equals FP64 pixel for pixel: fixed-point interior at 1e-150",
+      "passed": true,
+      "detail": {
+        "kinds": [
+          0,
+          2560,
+          0,
+          0,
+          0
+        ],
+        "total": 2560,
+        "refLength": 513,
+        "gpuMs": 19
+      },
+      "seconds": 4.92
+    },
+    {
+      "name": "GPU perturbation equals FP64 pixel for pixel: reference above the axis at 3e-9",
+      "passed": true,
+      "detail": {
+        "kinds": [
+          0,
+          0,
+          0,
+          2560,
+          0
+        ],
+        "total": 2560,
+        "refLength": 57,
+        "gpuMs": 12
+      },
+      "seconds": 4.97
+    },
+    {
+      "name": "Chaotic view keeps FP64 structure and class statistics: Plume 10^11",
+      "passed": true,
+      "detail": {
+        "fp64_kinds": [
+          281,
+          0,
+          0,
+          1352,
+          927
+        ],
+        "gpu_numeric": 927,
+        "gpu_unresolved": 294,
+        "block_diff": 10.72
+      },
+      "seconds": 6.2
+    },
+    {
+      "name": "Chaotic view keeps FP64 structure and class statistics: Abyss 10^25",
+      "passed": true,
+      "detail": {
+        "fp64_kinds": [
+          46,
+          0,
+          0,
+          1441,
+          1073
+        ],
+        "gpu_numeric": 1079,
+        "gpu_unresolved": 44,
+        "block_diff": 13.44
+      },
+      "seconds": 8.6
+    },
+    {
+      "name": "Chaotic view keeps FP64 structure and class statistics: Horizon 10^100",
+      "passed": true,
+      "detail": {
+        "fp64_kinds": [
+          5,
+          0,
+          0,
+          1517,
+          1038
+        ],
+        "gpu_numeric": 1044,
+        "gpu_unresolved": 6,
+        "block_diff": 14.61
+      },
+      "seconds": 11.59
+    },
+    {
+      "name": "With BLA forced on, structured views still equal FP64 pixel for pixel",
+      "passed": true,
+      "detail": {
+        "views": 7
+      },
+      "seconds": 12.37
+    },
+    {
+      "name": "BLA is as faithful to FP64 as plain FP32 perturbation in chaotic views",
+      "passed": true,
+      "detail": {
+        "Abyss 10^25": {
+          "off": {
+            "mismatch": 1113,
+            "block_diff": 13.71
+          },
+          "on": {
+            "mismatch": 1111,
+            "block_diff": 13.44
+          }
+        },
+        "Horizon 10^100": {
+          "off": {
+            "mismatch": 1333,
+            "block_diff": 14.67
+          },
+          "on": {
+            "mismatch": 1263,
+            "block_diff": 14.61
+          }
+        }
+      },
+      "seconds": 15.2
+    },
+    {
+      "name": "Automatic BLA renders deep views several times faster",
+      "passed": true,
+      "detail": {
+        "Horizon 10^100": {
+          "span": "7e-100",
+          "levels": 10,
+          "reach": 2344,
+          "plainMs": 2435,
+          "autoMs": 572,
+          "onMs": 714,
+          "speedup": 4.26,
+          "differing": 7688,
+          "total": 15360,
+          "blockDiff": 14.52
+        },
+        "threshold 1e-55": {
+          "span": "1e-55",
+          "levels": 8,
+          "reach": 510,
+          "plainMs": 450,
+          "autoMs": 38,
+          "onMs": 34,
+          "speedup": 11.81,
+          "differing": 0,
+          "total": 15360,
+          "blockDiff": 0
+        },
+        "Plume 10^11": {
+          "span": "5e-11",
+          "levels": 6,
+          "reach": 12,
+          "plainMs": 326,
+          "autoMs": 369,
+          "onMs": 396,
+          "speedup": 0.88,
+          "differing": 2953,
+          "total": 15360,
+          "blockDiff": 7.06
+        }
+      },
+      "seconds": 31.91
+    },
+    {
+      "name": "GPU perturbation pixels equal exact 95-digit orbits at 1e-55",
+      "passed": true,
+      "detail": [
+        {
+          "i": 3,
+          "j": 3,
+          "kind": 3,
+          "steps": 512.0000549992454,
+          "diff": 0
+        },
+        {
+          "i": 10,
+          "j": 20,
+          "kind": 3,
+          "steps": 512.0000549992454,
+          "diff": 0
+        },
+        {
+          "i": 24,
+          "j": 16,
+          "kind": 3,
+          "steps": 512.0000549992454,
+          "diff": 0
+        },
+        {
+          "i": 40,
+          "j": 5,
+          "kind": 3,
+          "steps": 512.0000549992454,
+          "diff": 0
+        },
+        {
+          "i": 44,
+          "j": 28,
+          "kind": 3,
+          "steps": 512.0000549992454,
+          "diff": 0
+        },
+        {
+          "i": 30,
+          "j": 10,
+          "kind": 3,
+          "steps": 512.0000549992454,
+          "diff": 0
+        },
+        {
+          "i": 8,
+          "j": 28,
+          "kind": 3,
+          "steps": 512.0000549992454,
+          "diff": 0
+        },
+        {
+          "i": 20,
+          "j": 2,
+          "kind": 3,
+          "steps": 512.0000549992454,
+          "diff": 0
+        },
+        {
+          "i": 55,
+          "j": 33,
+          "kind": 3,
+          "steps": 512.0000549992454,
+          "diff": 0
+        },
+        {
+          "i": 60,
+          "j": 1,
+          "kind": 3,
+          "steps": 512.0000549992454,
+          "diff": 0
+        }
+      ],
+      "seconds": 32.2
+    },
+    {
+      "name": "Views centred on the real axis are exactly conjugate-symmetric at depth",
+      "passed": true,
+      "detail": null,
+      "seconds": 32.38
+    },
+    {
+      "name": "Perturbation tiles are seamless at 1, 4 and 16 samples",
+      "passed": true,
+      "detail": null,
+      "seconds": 40.68
+    },
+    {
+      "name": "Perturbation is at least as faithful to FP64 as direct FP32 near the handover depth",
+      "passed": true,
+      "detail": null,
+      "seconds": 41.16
+    },
+    {
+      "name": "Full display resolution at span 5e-11",
+      "passed": true,
+      "detail": {
+        "size": [
+          480,
+          236
+        ],
+        "iterations": 768,
+        "ms": 3476,
+        "bla": {
+          "levels": 6,
+          "reach": 12,
+          "compiled": false,
+          "mode": "auto"
+        }
+      },
+      "seconds": 45.18
+    },
+    {
+      "name": "Full display resolution at span 7e-25",
+      "passed": true,
+      "detail": {
+        "size": [
+          480,
+          236
+        ],
+        "iterations": 1536,
+        "ms": 5298,
+        "bla": {
+          "levels": 7,
+          "reach": 232,
+          "compiled": true,
+          "mode": "auto"
+        }
+      },
+      "seconds": 50.62
+    },
+    {
+      "name": "Full display resolution at span 7e-100",
+      "passed": true,
+      "detail": {
+        "size": [
+          480,
+          236
+        ],
+        "iterations": 4096,
+        "ms": 6466,
+        "bla": {
+          "levels": 10,
+          "reach": 2344,
+          "compiled": true,
+          "mode": "auto"
+        }
+      },
+      "seconds": 57.48
+    },
+    {
+      "name": "Full display resolution at span 1e-200",
+      "passed": true,
+      "detail": {
+        "size": [
+          480,
+          236
+        ],
+        "iterations": 8192,
+        "ms": 1636,
+        "bla": {
+          "levels": 12,
+          "reach": 12,
+          "compiled": false,
+          "mode": "auto"
+        }
+      },
+      "seconds": 59.49
+    },
+    {
+      "name": "Auto iteration limit follows depth",
+      "passed": true,
+      "detail": {
+        "7": 384,
+        "5e-11": 768,
+        "7e-25": 1536,
+        "7e-100": 4096,
+        "1e-200": 8192
+      },
+      "seconds": 59.65
+    },
+    {
+      "name": "Pans, zooms and history return reuse one exact reference orbit",
+      "passed": true,
+      "detail": {
+        "x": "-0.6051379389723799009718169860885862588",
+        "y": "0.43774044207480056296942650770971280628",
+        "digits": 65,
+        "iterations": 2048,
+        "length": 407,
+        "elapsed": 8
+      },
+      "seconds": 96.72
+    },
+    {
+      "name": "Continuous wheel zoom over eight decades keeps live perturbation frames",
+      "passed": true,
+      "detail": {
+        "span": "0.00000000000000000008781766442932356017",
+        "frames": 231,
+        "references": 5
+      },
+      "seconds": 109.17
+    },
+    {
+      "name": "CPU FP64 perturbation completes every pixel at full resolution",
+      "passed": true,
+      "detail": [
+        52848,
+        0,
+        0,
+        43438,
+        16994
+      ],
+      "seconds": 112.18
+    },
+    {
+      "name": "Exact per-pixel mode still renders deep views",
+      "passed": true,
+      "detail": 64,
+      "seconds": 114.64
+    },
+    {
+      "name": "No uncaught browser exceptions",
+      "passed": true,
+      "detail": null,
+      "seconds": 114.64
+    }
+  ],
+  "count": 27,
+  "uncaught_errors": [],
+  "seconds": 114.7
+}

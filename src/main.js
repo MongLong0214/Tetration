@@ -554,16 +554,20 @@
     updateURL();
     scheduleWarm();
   }
-  // Compile the deep-zoom (BLA) program while idle, so the first deep view does not wait for it.
-  let warmTimer = 0;
+  /* Prepare the deep-zoom (BLA) program once the explorer is in perturbation depths, in
+   * a quiet moment: compiling can occupy a slow GPU process for a second, which should
+   * not land in the middle of a gesture or delay the first image. */
+  let warmTimer = 0, quietSince = 0;
   function scheduleWarm() {
-    if (!gpu || gpu.programs.perturbBla || warmTimer) return;
+    if (!gpu || gpu.warmed || warmTimer || currentMode !== 'perturb') return;
     warmTimer = setTimeout(() => {
       warmTimer = 0;
       if (!gpu || document.hidden) return;
-      if (gpuBusy || !lastRenderComplete) { scheduleWarm(); return; }
-      try { gpu.warm(); } catch { /* the plain program keeps working */ }
-    }, 1500);
+      if (gpuBusy || !lastRenderComplete || pointerMap.size || motion.raf || performance.now() - quietSince < 2500) { scheduleWarm(); return; }
+      let done = true;
+      try { done = gpu.warm(); } catch { /* the plain program keeps working */ }
+      if (!done) scheduleWarm();
+    }, 2500);
   }
   function invalidate() {
     serial++; stopCPU(); lastRenderComplete = false;
@@ -572,7 +576,7 @@
   // Every camera or setting change ends here. Interactive changes keep showing and
   // refining low-cost frames; the full render starts when the camera rests.
   function changed(options = {}) {
-    invalidate();
+    invalidate(); quietSince = performance.now();
     if (!options.keepVisual && (reducedMotion.matches || !options.animate)) visual = clone(view);
     syncControls(); updateReadout(); reproject(); setProgress(0);
     showLoading(options.interactive || options.animate ? 'Preview · refining when you pause' : 'Computing view');
@@ -975,5 +979,6 @@
     referencesComputed: references.computed,
     savedCount: savedViews.length, focus: document.body.classList.contains('focus-mode'), version: VERSION, renderStage, quality, colorPhase: hue(), flow,
     interactiveFrames: interactiveCount, animating: !!motion.raf, gpuFrames: gpu ? gpu.live : 0, gpuPooled: gpu ? gpu.pool.length : 0, displayWidth: display.canvas.width, displayHeight: display.canvas.height,
+    bla: gpu?.bla ? {levels: gpu.bla.levels, reach: gpu.bla.reach, compiled: !!gpu.programs.perturbBla, mode: gpu.blaMode} : null, blaReady: !!gpu?.programs.perturbBla,
   })});
 })();

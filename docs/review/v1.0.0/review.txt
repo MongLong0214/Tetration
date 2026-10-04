@@ -1,0 +1,30 @@
+PASS Initial production-CSP render at full display resolution {"view": {"x": "-2.5", "y": "0", "span": "1.8"}, "mode": "gpu", "iterations": 384, "palette": 0, "width": 1200, "height": 710, "counts": null, "elapsed": 5028.199999999255, "samples": 4}
+PASS CSP blocks unapproved inline JavaScript 
+PASS CSP blocks outbound fetch 
+PASS Wheel zoom keeps the point under the cursor fixed and glides to rest 
+PASS Drag pans without changing scale 
+PASS Keyboard zoom is exact and Home resets 
+PASS Preset, iteration limit and palette complete a render 
+PASS Coordinate grid toggles 
+PASS Named guide dialog closes with Escape 
+PASS Clipboard share returned without an uncaught error 
+PASS PNG export has the rendered resolution 1200
+PASS Invalid coordinates do not replace the view 
+PASS Deep coordinates render with perturbation at full resolution {"mode": "perturb", "reference": {"x": "0.500000000000000000000000000001", "y": "0.0000000000000000000000000000001", "digits": 70, "iterations": 256, "length": 257, "elapsed": 6}}
+PASS Deep pan keeps a sub-FP64 coordinate change 
+PASS Cancelled exact work cannot replace the CPU result 
+PASS Minimum span renders at full resolution with a 240-digit reference {"x": "0.5", "y": "0", "digits": 240, "iterations": 256, "length": 257, "elapsed": 7}
+PASS Minimum zoom boundary does not drift off-anchor 
+PASS Maximum zoom boundary does not drift off-anchor 
+PASS Exact shared URL rehydrates and renders 
+PASS Unsupported link schema does not replace the view 
+PASS Links from earlier releases (e=big) keep working 
+PASS Mobile layout: no horizontal overflow, 2x density rendering {"view": {"x": "-2.5", "y": "0", "span": "1.8"}, "mode": "gpu", "iterations": 384, "palette": 0, "width": 780, "height": 1520, "counts": null, "elapsed": 3372.2000000011176, "samples": 1}
+PASS Closed mobile drawer cannot receive focus 
+PASS Open mobile drawer moves focus and inerts the background 
+PASS Escape closes the drawer and restores focus 
+PASS Mobile guide is reachable 
+PASS Real touch dispatch: pinch zoom 
+PASS Real touch dispatch: single-finger pan 
+PASS No uncaught browser exceptions 
+ALL 29 PASSED

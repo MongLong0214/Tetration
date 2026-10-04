@@ -1,0 +1,632 @@
+{
+  "suite": "explorer",
+  "origin": "http://127.0.0.1:4173",
+  "bundle_sha256": "4986c0248db2837079b21515deda49647efddcb8f8eb66d299512e40eb07c0c2",
+  "playwright": "1.56.0",
+  "limitations": [
+    "Mobile input is emulated. No physical iPhone or hardware GPU qualification."
+  ],
+  "browser_version": "141.0.7390.37",
+  "accessibility": [
+    {
+      "view": "desktop map",
+      "violations": [],
+      "passes": 23,
+      "incomplete": [
+        {
+          "id": "color-contrast",
+          "targets": [
+            [
+              ".brand-mark"
+            ],
+            [
+              "#locationTag"
+            ],
+            [
+              "#viewSubtitle"
+            ],
+            [
+              "#engineTag"
+            ],
+            [
+              "#zoomLabel"
+            ],
+            [
+              "#scaleLabel"
+            ],
+            [
+              "#gestureHint"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "view": "desktop controls",
+      "violations": [],
+      "passes": 22,
+      "incomplete": [
+        {
+          "id": "color-contrast",
+          "targets": [
+            [
+              "section:nth-child(2) > h2"
+            ],
+            [
+              "#presetRange"
+            ],
+            [
+              "button[data-index=\"0\"] > .preset-number"
+            ],
+            [
+              "button[data-index=\"0\"] > span:nth-child(2) > .preset-name"
+            ],
+            [
+              "button[data-index=\"0\"] > span:nth-child(2) > .preset-sub"
+            ],
+            [
+              "button[data-index=\"1\"] > .preset-number"
+            ],
+            [
+              "button[data-index=\"1\"] > span:nth-child(2) > .preset-name"
+            ],
+            [
+              "button[data-index=\"1\"] > span:nth-child(2) > .preset-sub"
+            ],
+            [
+              "button[data-index=\"2\"] > .preset-number"
+            ],
+            [
+              "button[data-index=\"2\"] > span:nth-child(2) > .preset-name"
+            ],
+            [
+              "button[data-index=\"2\"] > span:nth-child(2) > .preset-sub"
+            ],
+            [
+              "button[data-index=\"3\"] > .preset-number"
+            ],
+            [
+              "button[data-index=\"3\"] > span:nth-child(2) > .preset-name"
+            ],
+            [
+              "button[data-index=\"3\"] > span:nth-child(2) > .preset-sub"
+            ],
+            [
+              "button[data-index=\"4\"] > .preset-number"
+            ],
+            [
+              "button[data-index=\"4\"] > span:nth-child(2) > .preset-name"
+            ],
+            [
+              "button[data-index=\"4\"] > span:nth-child(2) > .preset-sub"
+            ],
+            [
+              "button[data-index=\"5\"] > .preset-number"
+            ],
+            [
+              "button[data-index=\"5\"] > span:nth-child(2) > .preset-name"
+            ],
+            [
+              "button[data-index=\"5\"] > span:nth-child(2) > .preset-sub"
+            ],
+            [
+              "button[data-index=\"6\"] > .preset-number"
+            ],
+            [
+              "button[data-index=\"6\"] > span:nth-child(2) > .preset-name"
+            ],
+            [
+              "button[data-index=\"6\"] > span:nth-child(2) > .preset-sub"
+            ],
+            [
+              "section:nth-child(3) > h2"
+            ],
+            [
+              "label[for=\"iterations\"]"
+            ],
+            [
+              "#iterations"
+            ],
+            [
+              "label[for=\"engine\"]"
+            ],
+            [
+              "#engine"
+            ],
+            [
+              "#paletteLabel"
+            ],
+            [
+              ".active"
+            ],
+            [
+              "button[data-palette=\"1\"]"
+            ],
+            [
+              "button[data-palette=\"2\"]"
+            ],
+            [
+              "button[data-palette=\"3\"]"
+            ],
+            [
+              "label[for=\"quality\"]"
+            ],
+            [
+              "#quality"
+            ],
+            [
+              "label[for=\"flow\"] > span"
+            ],
+            [
+              "label[for=\"grid\"] > span"
+            ],
+            [
+              "span > kbd"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "view": "guide",
+      "violations": [],
+      "passes": 15,
+      "incomplete": [
+        {
+          "id": "color-contrast",
+          "targets": [
+            [
+              "#guideTitle"
+            ],
+            [
+              "button[aria-label=\"Close guide\"]"
+            ],
+            [
+              ".formula"
+            ],
+            [
+              "#helpDialog > p:nth-child(3)"
+            ],
+            [
+              "p:nth-child(3) > i"
+            ],
+            [
+              "h3:nth-child(4)"
+            ],
+            [
+              "dt:nth-child(1)"
+            ],
+            [
+              "dd:nth-child(2)"
+            ],
+            [
+              "dt:nth-child(3)"
+            ],
+            [
+              "dd:nth-child(4)"
+            ],
+            [
+              "dt:nth-child(5)"
+            ],
+            [
+              "dd:nth-child(6)"
+            ],
+            [
+              "dt:nth-child(7)"
+            ],
+            [
+              "dd:nth-child(8)"
+            ],
+            [
+              "dt:nth-child(9)"
+            ],
+            [
+              "dd:nth-child(10)"
+            ],
+            [
+              "dt:nth-child(11)"
+            ],
+            [
+              "dd:nth-child(12)"
+            ],
+            [
+              "dt:nth-child(13)"
+            ],
+            [
+              "dd:nth-child(14)"
+            ],
+            [
+              "dt:nth-child(15)"
+            ],
+            [
+              "dd:nth-child(16)"
+            ],
+            [
+              "dt:nth-child(17)"
+            ],
+            [
+              "dd:nth-child(18)"
+            ],
+            [
+              "h3:nth-child(6)"
+            ],
+            [
+              "p:nth-child(7)"
+            ],
+            [
+              "h3:nth-child(8)"
+            ],
+            [
+              "p:nth-child(9)"
+            ],
+            [
+              "h3:nth-child(10)"
+            ],
+            [
+              "p:nth-child(11)"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "view": "mobile map",
+      "violations": [],
+      "passes": 23,
+      "incomplete": [
+        {
+          "id": "color-contrast",
+          "targets": [
+            [
+              "#locationTag"
+            ],
+            [
+              "#viewSubtitle"
+            ],
+            [
+              "#engineTag"
+            ],
+            [
+              "#zoomLabel"
+            ],
+            [
+              "#scaleLabel"
+            ],
+            [
+              "#gestureHint"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "view": "mobile controls",
+      "violations": [],
+      "passes": 23,
+      "incomplete": [
+        {
+          "id": "color-contrast",
+          "targets": [
+            [
+              "section:nth-child(2) > h2"
+            ],
+            [
+              "#presetRange"
+            ],
+            [
+              "button[data-index=\"0\"] > .preset-number"
+            ],
+            [
+              "button[data-index=\"0\"] > span:nth-child(2) > .preset-name"
+            ],
+            [
+              "button[data-index=\"0\"] > span:nth-child(2) > .preset-sub"
+            ],
+            [
+              "button[data-index=\"1\"] > .preset-number"
+            ],
+            [
+              "button[data-index=\"1\"] > span:nth-child(2) > .preset-name"
+            ],
+            [
+              "button[data-index=\"1\"] > span:nth-child(2) > .preset-sub"
+            ],
+            [
+              "button[data-index=\"2\"] > .preset-number"
+            ],
+            [
+              "button[data-index=\"2\"] > span:nth-child(2) > .preset-name"
+            ],
+            [
+              "button[data-index=\"2\"] > span:nth-child(2) > .preset-sub"
+            ],
+            [
+              "button[data-index=\"3\"] > .preset-number"
+            ],
+            [
+              "button[data-index=\"3\"] > span:nth-child(2) > .preset-name"
+            ],
+            [
+              "button[data-index=\"3\"] > span:nth-child(2) > .preset-sub"
+            ],
+            [
+              "button[data-index=\"4\"] > .preset-number"
+            ],
+            [
+              "button[data-index=\"4\"] > span:nth-child(2) > .preset-name"
+            ],
+            [
+              "button[data-index=\"4\"] > span:nth-child(2) > .preset-sub"
+            ],
+            [
+              "button[data-index=\"5\"] > .preset-number"
+            ],
+            [
+              "button[data-index=\"5\"] > span:nth-child(2) > .preset-name"
+            ],
+            [
+              "button[data-index=\"5\"] > span:nth-child(2) > .preset-sub"
+            ],
+            [
+              "button[data-index=\"6\"] > .preset-number"
+            ],
+            [
+              "button[data-index=\"6\"] > span:nth-child(2) > .preset-name"
+            ],
+            [
+              "button[data-index=\"6\"] > span:nth-child(2) > .preset-sub"
+            ],
+            [
+              "section:nth-child(3) > h2"
+            ],
+            [
+              "label[for=\"iterations\"]"
+            ],
+            [
+              "#iterations"
+            ],
+            [
+              "label[for=\"engine\"]"
+            ],
+            [
+              "#engine"
+            ],
+            [
+              "#paletteLabel"
+            ],
+            [
+              ".active"
+            ],
+            [
+              "button[data-palette=\"1\"]"
+            ],
+            [
+              "button[data-palette=\"2\"]"
+            ],
+            [
+              "button[data-palette=\"3\"]"
+            ],
+            [
+              "label[for=\"quality\"]"
+            ],
+            [
+              "#quality"
+            ],
+            [
+              "label[for=\"flow\"] > span"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "view": "manual sharing",
+      "violations": [],
+      "passes": 14,
+      "incomplete": [
+        {
+          "id": "color-contrast",
+          "targets": [
+            [
+              "#shareTitle"
+            ],
+            [
+              "button[aria-label=\"Close sharing\"]"
+            ],
+            [
+              "#shareMessage"
+            ],
+            [
+              "#shareText"
+            ],
+            [
+              "#copyLinkBtn"
+            ]
+          ]
+        }
+      ]
+    }
+  ],
+  "passed": true,
+  "checks": [
+    {
+      "name": "English, edge-to-edge map uses the available workspace",
+      "passed": true,
+      "detail": {
+        "x": 0,
+        "y": 58,
+        "width": 1440,
+        "height": 870
+      },
+      "seconds": 4.93
+    },
+    {
+      "name": "Automated WCAG checks: desktop map",
+      "passed": true,
+      "detail": {
+        "passed_rules": 23,
+        "incomplete": [
+          "color-contrast"
+        ]
+      },
+      "seconds": 5.18
+    },
+    {
+      "name": "Automated WCAG checks: desktop controls",
+      "passed": true,
+      "detail": {
+        "passed_rules": 22,
+        "incomplete": [
+          "color-contrast"
+        ]
+      },
+      "seconds": 5.42
+    },
+    {
+      "name": "Back, forward and a new navigation branch preserve history",
+      "passed": true,
+      "detail": null,
+      "seconds": 9.65
+    },
+    {
+      "name": "Focus mode fills the screen at full resolution and preserves exact coordinates",
+      "passed": true,
+      "detail": null,
+      "seconds": 17.14
+    },
+    {
+      "name": "Starting-point shortcuts 1-7 include the deep perturbation places",
+      "passed": true,
+      "detail": null,
+      "seconds": 20.94
+    },
+    {
+      "name": "Discover (D and button) jumps to new detailed places and joins history",
+      "passed": true,
+      "detail": {
+        "x": "-0.33841954804956914",
+        "y": "0.97417870499193671",
+        "span": "1.6"
+      },
+      "seconds": 32.19
+    },
+    {
+      "name": "Named views survive reload and restore sub-FP64 coordinates safely",
+      "passed": true,
+      "detail": null,
+      "seconds": 54.03
+    },
+    {
+      "name": "One-action clipboard sharing reopens the exact coordinates",
+      "passed": true,
+      "detail": null,
+      "seconds": 60.98
+    },
+    {
+      "name": "Removing a saved view persists",
+      "passed": true,
+      "detail": null,
+      "seconds": 69.32
+    },
+    {
+      "name": "Automated WCAG checks: guide",
+      "passed": true,
+      "detail": {
+        "passed_rules": 15,
+        "incomplete": [
+          "color-contrast"
+        ]
+      },
+      "seconds": 69.57
+    },
+    {
+      "name": "Automated WCAG checks: mobile map",
+      "passed": true,
+      "detail": {
+        "passed_rules": 23,
+        "incomplete": [
+          "color-contrast"
+        ]
+      },
+      "seconds": 71.74
+    },
+    {
+      "name": "Automated WCAG checks: mobile controls",
+      "passed": true,
+      "detail": {
+        "passed_rules": 23,
+        "incomplete": [
+          "color-contrast"
+        ]
+      },
+      "seconds": 71.98
+    },
+    {
+      "name": "Coordinate draft survives keyboard-like resizing and submits",
+      "passed": true,
+      "detail": null,
+      "seconds": 73.54
+    },
+    {
+      "name": "Controls reachable at 390x844 with 44px targets",
+      "passed": true,
+      "detail": null,
+      "seconds": 73.54
+    },
+    {
+      "name": "Controls reachable at 320x568 with 44px targets",
+      "passed": true,
+      "detail": null,
+      "seconds": 74.85
+    },
+    {
+      "name": "Controls reachable at 844x390 with 44px targets",
+      "passed": true,
+      "detail": null,
+      "seconds": 76.59
+    },
+    {
+      "name": "Controls reachable at 1280x720 with 44px targets",
+      "passed": true,
+      "detail": null,
+      "seconds": 79.65
+    },
+    {
+      "name": "Touch devices share the link and the rendered PNG through native share (API stub)",
+      "passed": true,
+      "detail": {
+        "name": "tetra-1791110051935.png",
+        "type": "image/png",
+        "size": 116296,
+        "text": "http://127.0.0.1:4173/#v=1&x=-2.5&y=0&s=1.8&n=auto&p=0&e=auto&g=0&q=1&c=0"
+      },
+      "seconds": 81.35
+    },
+    {
+      "name": "Automated WCAG checks: manual sharing",
+      "passed": true,
+      "detail": {
+        "passed_rules": 14,
+        "incomplete": [
+          "color-contrast"
+        ]
+      },
+      "seconds": 83.92
+    },
+    {
+      "name": "Blocked clipboard and storage expose usable fallbacks",
+      "passed": true,
+      "detail": null,
+      "seconds": 85.86
+    },
+    {
+      "name": "No uncaught browser exceptions",
+      "passed": true,
+      "detail": null,
+      "seconds": 85.88
+    }
+  ],
+  "count": 22,
+  "uncaught_errors": [],
+  "seconds": 86.0
+}

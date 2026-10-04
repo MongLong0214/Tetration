@@ -5,6 +5,8 @@ from playwright.sync_api import sync_playwright
 
 suite = Suite('webkit', ['Linux WebKit with mobile viewport emulation; not physical Safari/iPhone.', 'Software rendering only.'])
 DEEP = 'v=1&x=0.500000000000000000000000000001&y=0&s=1e-30&n=256&q=1'
+HORIZON = ('v=1&x=-0.605137938972379900971817048132147498249950297815856628491748908858224992290680363711703001492344905661729028182206'
+           '&y=0.437740442074800562969426586669113155808012201307319340609925561376648113051190710894591896027315034323404945092475&s=7e-100&n=1024&q=1')
 
 
 def body():
@@ -28,6 +30,13 @@ def body():
         info = open_app(page, DEEP)
         assert info['mode'] in ('perturb', 'cpu-perturb') and info['lastCompleted']['width'] >= 390
         suite.record('Deep view renders at full resolution with perturbation', {'mode': info['mode'], 'width': info['lastCompleted']['width']})
+
+        # 10^100 uses bilinear approximation on the GPU path (and in Workers on the CPU path).
+        info = open_app(page, HORIZON)
+        assert info['mode'] in ('perturb', 'cpu-perturb') and info['lastCompleted']['width'] >= 390
+        if info['mode'] == 'perturb':
+            assert info['bla'] and info['bla']['levels'] > 0 and info['bla']['compiled'], info['bla']
+        suite.record('10^100 renders at full resolution with BLA', {'mode': info['mode'], 'bla': info['bla'], 'seconds': round(info['lastCompleted']['elapsed'] / 1000, 1)})
 
         page.locator('#viewport').focus()
         before = state(page)['view']

@@ -37,6 +37,10 @@ def body():
         long_tasks = page.evaluate('__perf.longTasks')
         assert not long_tasks or max(long_tasks) < 400, long_tasks
         suite.record('Initial render keeps the main thread responsive', {'long_tasks_ms': long_tasks[:12]})
+        # Shallow exploration never compiles the deep-zoom (BLA) program.
+        page.wait_for_timeout(3000)
+        assert not state(page)['blaReady'], 'BLA program compiled outside perturbation depths'
+        suite.record('Shallow views never compile the deep-zoom (BLA) program')
 
         box = page.locator('#viewport').bounding_box()
         cx, cy = box['x'] + box['width'] / 2, box['y'] + box['height'] / 2
@@ -57,6 +61,14 @@ def body():
         assert p95 is not None and p95 < 120, p95
         suite.record('Shallow drag: live frames and display cadence', {'frames_in_2s': frames, 'frame_gap_p95_ms': round(p95, 1), 'median_ms': round(statistics.median(gaps), 1)})
         settle(page)
+
+        # At perturbation depth the BLA program is prepared in a quiet moment, without long tasks.
+        open_app(page, 'v=1&x=-2.2930579295624999999999991&y=0.33208044555625&s=5e-11&q=1', 'perturb')
+        page.evaluate('() => { __perf.longTasks.length = 0; }')
+        page.wait_for_function('() => tetraDiagnostics.blaReady', timeout=30000)
+        long_tasks = page.evaluate('__perf.longTasks')
+        assert not long_tasks or max(long_tasks) < 400, long_tasks
+        suite.record('Deep-zoom (BLA) program compiles in a quiet moment at perturbation depth', {'long_tasks_ms': long_tasks[:12]})
 
         open_app(page, 'v=1&x=-0.605137938972379900971816986088586258864125&y=0.437740442074800562969426507709712806289976004723289995229&s=7e-25&q=1', 'perturb')
         frames0 = state(page)['interactiveFrames']
@@ -83,6 +95,16 @@ def body():
         info = open_app(page, 'v=1&x=-0.605137938972379900971817048132147498249950297815856628491748908858224992290680363711703001492344905661729028182206&y=0.437740442074800562969426586669113155808012201307319340609925561376648113051190710894591896027315034323404945092475&s=7e-100&q=1', 'perturb')
         assert info['reference']['elapsed'] < 3000, info['reference']
         suite.record('Exact 10^100 reference orbit (6,144 steps, 140 digits) computes in a Worker', info['reference'])
+
+        # At 10^100 bilinear approximation keeps live frames as fluid as at 10^25.
+        assert info['bla'] and info['bla']['levels'] > 0 and info['bla']['compiled'], info['bla']
+        frames0 = state(page)['interactiveFrames']
+        gaps = frame_gaps(page, drag)
+        frames = state(page)['interactiveFrames'] - frames0
+        p95 = gaps[int(len(gaps) * .95)]
+        assert frames >= 25 and p95 < 150, (frames, p95)
+        suite.record('Deep (10^100) drag keeps live BLA perturbation frames', {'frames_in_2s': frames, 'frame_gap_p95_ms': round(p95, 1), 'complete_s': round(info['lastCompleted']['elapsed'] / 1000, 1), 'bla': info['bla']})
+        settle(page)
 
         # Resource stability across a long exploration session.
         open_app(page, 'v=1&x=-2.5&y=0&s=1.8&q=4')

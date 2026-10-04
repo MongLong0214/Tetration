@@ -1,0 +1,154 @@
+{
+  "suite": "quality",
+  "origin": "http://127.0.0.1:4173",
+  "bundle_sha256": "4986c0248db2837079b21515deda49647efddcb8f8eb66d299512e40eb07c0c2",
+  "playwright": "1.56.0",
+  "limitations": [
+    "Software WebGL2; antialiasing error measured on sampled cameras.",
+    "Motion is driven by Playwright input events."
+  ],
+  "browser_version": "141.0.7390.37",
+  "passed": true,
+  "checks": [
+    {
+      "name": "Default Ultra quality reaches display resolution with 16-sample edges",
+      "passed": true,
+      "detail": {
+        "view": {
+          "x": "-2.5",
+          "y": "0",
+          "span": "1.8"
+        },
+        "mode": "gpu",
+        "iterations": 384,
+        "palette": 0,
+        "width": 1000,
+        "height": 590,
+        "counts": null,
+        "elapsed": 12160,
+        "samples": 16
+      },
+      "seconds": 13.05
+    },
+    {
+      "name": "Adaptive 4x and 16x antialiasing reduce error against a 64-sample reference: direct overview",
+      "passed": true,
+      "detail": {
+        "rmse1": 23.93341344653493,
+        "rmse4": 10.720969062555826,
+        "rmse16": 5.296309388156134,
+        "changed4": 4961,
+        "changed16": 5393,
+        "pixels": 25600,
+        "reference": "64 samples per pixel"
+      },
+      "seconds": 17.01
+    },
+    {
+      "name": "Adaptive 4x and 16x antialiasing reduce error against a 64-sample reference: direct filaments",
+      "passed": true,
+      "detail": {
+        "rmse1": 35.85067937137183,
+        "rmse4": 17.32674054608673,
+        "rmse16": 8.914196407238428,
+        "changed4": 11970,
+        "changed16": 12265,
+        "pixels": 25600,
+        "reference": "64 samples per pixel"
+      },
+      "seconds": 19.9
+    },
+    {
+      "name": "Adaptive 4x and 16x antialiasing reduce error against a 64-sample reference: perturbation plume",
+      "passed": true,
+      "detail": {
+        "rmse1": 62.98289539550211,
+        "rmse4": 30.70090215404195,
+        "rmse16": 15.643349211519224,
+        "changed4": 12495,
+        "changed16": 12551,
+        "pixels": 14400,
+        "reference": "64 samples per pixel"
+      },
+      "seconds": 54.59
+    },
+    {
+      "name": "Direct tiles with adaptive samples equal one full-frame draw",
+      "passed": true,
+      "detail": 0,
+      "seconds": 55.04
+    },
+    {
+      "name": "Dragging shows live single-sample frames, then refines on release",
+      "passed": true,
+      "detail": {
+        "frames": 39,
+        "draws": {
+          "1": 39,
+          "4": 0,
+          "16": 0
+        }
+      },
+      "seconds": 63.69
+    },
+    {
+      "name": "Wheel zoom eases the visible camera onto the exact target",
+      "passed": true,
+      "detail": {
+        "target_span": "0.237716252204793110"
+      },
+      "seconds": 66.08
+    },
+    {
+      "name": "A flick keeps gliding with decaying inertia, then renders",
+      "passed": true,
+      "detail": null,
+      "seconds": 70.49
+    },
+    {
+      "name": "Colour flow changes only presentation, without recomputing",
+      "passed": true,
+      "detail": null,
+      "seconds": 71.12
+    },
+    {
+      "name": "A shared view keeps quality and hue and opens without motion",
+      "passed": true,
+      "detail": null,
+      "seconds": 73.51
+    },
+    {
+      "name": "Reduced-motion preference stops colour flow",
+      "passed": true,
+      "detail": null,
+      "seconds": 73.54
+    },
+    {
+      "name": "Reduced motion jumps directly and disables inertia",
+      "passed": true,
+      "detail": null,
+      "seconds": 79.73
+    },
+    {
+      "name": "CPU keeps the reprojected image while replacement Workers are pending",
+      "passed": true,
+      "detail": 0,
+      "seconds": 84.63
+    },
+    {
+      "name": "Palette changes recolour the rendered view",
+      "passed": true,
+      "detail": null,
+      "seconds": 88.1
+    },
+    {
+      "name": "No uncaught browser exceptions",
+      "passed": true,
+      "detail": null,
+      "seconds": 88.1
+    }
+  ],
+  "count": 15,
+  "uncaught_errors": [],
+  "seconds": 88.2
+}

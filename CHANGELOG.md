@@ -5,6 +5,7 @@
 Infinite zoom at full resolution, live interaction and an installable app.
 
 - **Perturbation deep zoom.** One exact reference orbit per view (binary fixed-point BigInt in a Worker, about 3× faster than the previous decimal arithmetic) and per-pixel FP32 offsets on the GPU with a mantissa/exponent representation, series for small arguments, exact threshold differences, rebasing and conjugate mirroring across the branch cut. Every depth down to 1e−200 now renders at full display resolution; the previous deep path stopped at 72 horizontal samples.
+- **Bilinear approximation (BLA).** Deep pixels skip aligned runs of linear perturbation steps (`d ← A·d + B·δL`) from a per-view table with validity radii; runs never cover a step near the escape threshold, a numerical limit, a fixed point or a period-2 cycle. On software WebGL2 a 10¹⁰⁰ frame renders 4× faster (2.6 s → 0.6 s for 160 × 96) and the full-resolution Horizon render drops from 22 s to 7 s; a 10⁵⁵ boundary view renders 14× faster. Structured views are unchanged pixel for pixel; chaotic views keep FP64 statistics. The GPU uses a separate BLA program only where it pays off and prepares it in a quiet moment at perturbation depth (in the background where parallel shader compilation exists); FP64 Workers use BLA too.
 - **Auto iterations** grow with depth (`320 + 34 × decades`, up to 16,384); fixed limits now reach 16,384.
 - **Live interaction.** Dragging, pinching and wheel zoom show freshly computed single-sample frames sized to the GPU's measured speed; wheel and button zooms glide, drags carry inertia (both disabled by reduced motion). The final render no longer recomputes after tab switches when it was complete, and window resizes refine immediately.
 - **Ultra quality** (default on precise pointers) adds adaptive 16-sample edges after the 4-sample pass, with a rotated-grid 4-sample pattern. Measured error against 64-sample references fell by 78% versus one sample in the overview.
@@ -16,7 +17,7 @@ Infinite zoom at full resolution, live interaction and an installable app.
 - **Robustness.** GPU context restoration returns to the GPU; the main thread computes references when Workers are blocked; reference-counted frame ownership prevents texture reuse while a stage still reads it.
 - **Security headers.** HSTS, Cross-Origin-Opener-Policy and Cross-Origin-Resource-Policy; the CSP allows the same-origin service worker and manifest only.
 - WebGPU was removed. It used the same FP32 arithmetic, doubled the shader code paths and re-rendered every view once it became ready; WebGL2 is available in every supported browser.
-- Test suites rewritten: 96 unit tests and seven browser suites, including GPU-versus-exact pixel comparisons at every depth, performance budgets and leak checks.
+- Test suites rewritten: 122 unit tests and seven browser suites, including GPU-versus-exact pixel comparisons at every depth, BLA equality and speed checks, performance budgets and leak checks. ESLint correctness rules cover every source and test script.
 
 Finite classifiers keep their thresholds; GPU rules (−80 underflow, |b| > 10⁶, tolerance 2·10⁻⁶) now also govern GPU perturbation, so the image does not change when the camera crosses between direct and perturbation rendering.
 

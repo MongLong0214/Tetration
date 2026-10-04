@@ -209,8 +209,10 @@
       this.bits = gl.getShaderPrecisionFormat(gl.FRAGMENT_SHADER, gl.HIGH_FLOAT)?.precision || 0;
       if (this.bits < 23) throw Error('Insufficient fragment precision');
       this.maxTexture = gl.getParameter(gl.MAX_TEXTURE_SIZE);
-      // The BLA program links on first use (deep views only).
       this.programs = {direct: this.link(direct, UNIFORMS.direct), perturb: this.link(perturb, UNIFORMS.perturb)};
+      // The BLA program (deep views) starts linking in the background where the driver allows.
+      this.parallel = gl.getExtension('KHR_parallel_shader_compile');
+      this.pendingBla = this.parallel ? this.startLink(perturbBla) : null; this.warmed = false;
       this.empty = gl.createTexture();
       gl.bindTexture(gl.TEXTURE_2D, this.empty);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 0, 255]));
@@ -219,26 +221,30 @@
       // blaMode: 'auto' uses BLA where it saves enough steps, 'on' wherever a table exists, 'off' never.
       this.bla = null; this.blaTexture = null; this.blaMode = 'auto';
     }
-    link(fragmentSource, names) {
-      const gl = this.gl;
-      const compile = (type, source) => {
+    // Compile and link without waiting; finishLink() reads the result (and blocks until it is ready).
+    startLink(fragmentSource) {
+      const gl = this.gl, program = gl.createProgram();
+      const shaders = [[gl.VERTEX_SHADER, vertex], [gl.FRAGMENT_SHADER, fragmentSource]].map(([type, source]) => {
         const shader = gl.createShader(type);
-        gl.shaderSource(shader, source); gl.compileShader(shader);
-        if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-          const message = gl.getShaderInfoLog(shader); gl.deleteShader(shader); throw Error(message || 'Shader compilation failed');
-        }
+        gl.shaderSource(shader, source); gl.compileShader(shader); gl.attachShader(program, shader);
         return shader;
-      };
-      const vs = compile(gl.VERTEX_SHADER, vertex), fs = compile(gl.FRAGMENT_SHADER, fragmentSource), program = gl.createProgram();
-      gl.attachShader(program, vs); gl.attachShader(program, fs); gl.linkProgram(program);
-      gl.deleteShader(vs); gl.deleteShader(fs);
-      if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-        const message = gl.getProgramInfoLog(program); gl.deleteProgram(program); throw Error(message || 'Shader link failed');
-      }
+      });
+      gl.linkProgram(program);
+      return {program, shaders};
+    }
+    finishLink({program, shaders}, names) {
+      const gl = this.gl;
+      try {
+        if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+          const message = shaders.map(shader => gl.getShaderInfoLog(shader)).filter(Boolean).join('\n') || gl.getProgramInfoLog(program);
+          gl.deleteProgram(program); throw Error(message || 'Shader link failed');
+        }
+      } finally { for (const shader of shaders) gl.deleteShader(shader); }
       const uniforms = {};
       for (const name of names) uniforms[name] = gl.getUniformLocation(program, 'u' + name);
       return {program, uniforms};
     }
+    link(fragmentSource, names) { return this.finishLink(this.startLink(fragmentSource), names); }
     setNearest() {
       const gl = this.gl;
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
@@ -260,27 +266,41 @@
       this.reference = ref;
     }
     program(name) {
+      if (name === 'perturbBla') return this.blaProgram();
       return this.programs[name] || (this.programs[name] = this.link(SOURCES[name], UNIFORMS[name]));
     }
-    // The BLA program, linked on demand; a driver that rejects it keeps the plain program.
+    /* The BLA program. With KHR_parallel_shader_compile it links in the background from
+     * start-up and is used once ready (the plain program draws until then); otherwise it
+     * links on first use. A driver that rejects it keeps the plain program. */
     blaProgram() {
       if (this.blaMode === 'off') return null;
-      try { return this.program('perturbBla'); } catch { this.blaMode = 'off'; return null; }
+      if (this.programs.perturbBla) return this.programs.perturbBla;
+      const pending = this.pendingBla;
+      if (pending && this.parallel && this.blaMode !== 'on' && !this.gl.getProgramParameter(pending.program, this.parallel.COMPLETION_STATUS_KHR)) return null;
+      this.pendingBla = null;
+      try { this.programs.perturbBla = pending ? this.finishLink(pending, UNIFORMS.perturbBla) : this.link(perturbBla, UNIFORMS.perturbBla); }
+      catch { this.blaMode = 'off'; return null; }
+      return this.programs.perturbBla;
     }
-    // Compile the BLA program while idle (one 1x1 draw also triggers lazy driver compilation),
-    // so the first deep view does not wait for it.
+    // Idle-time preparation of the BLA program; one 1x1 draw also triggers lazy driver
+    // compilation. Returns false while a background link is still running.
     warm() {
-      if (this.programs.perturbBla || this.lost()) return;
+      if (this.warmed || this.lost() || this.blaMode === 'off') return true;
+      if (!this.programs.perturbBla && !this.pendingBla && this.parallel) { this.pendingBla = this.startLink(perturbBla); return false; }
       const bla = this.blaProgram();
-      if (!bla) return;
-      const gl = this.gl, frame = this.beginFrame(1, 1), u = bla.uniforms;
-      gl.bindFramebuffer(gl.FRAMEBUFFER, frame.buffer); gl.viewport(0, 0, 1, 1); gl.useProgram(bla.program);
+      if (!bla) return this.blaMode === 'off';
+      // A throwaway 1x1 target, so the frame pool is left as it was.
+      const gl = this.gl, u = bla.uniforms, texture = gl.createTexture(), buffer = gl.createFramebuffer();
+      gl.bindTexture(gl.TEXTURE_2D, texture); gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA8, 1, 1);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, buffer); gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
+      gl.viewport(0, 0, 1, 1); gl.useProgram(bla.program);
       gl.uniform2f(u.Size, 1, 1); gl.uniform1i(u.Iterations, 0); gl.uniform1i(u.Samples, 1); gl.uniform1i(u.Adaptive, 0);
       for (const [unit, name] of [[0, 'Source'], [1, 'Ref'], [2, 'Bla']]) { gl.activeTexture(gl.TEXTURE0 + unit); gl.bindTexture(gl.TEXTURE_2D, this.empty); gl.uniform1i(u[name], unit); }
       gl.activeTexture(gl.TEXTURE0);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
-      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-      this.releaseFrame(frame);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.deleteFramebuffer(buffer); gl.deleteTexture(texture);
+      this.warmed = true;
+      return true;
     }
     /* BLA table for a reference and the view's largest |dL| (TetraCore.blaTable),
      * as RGBA32F floatexp texels. A table built for a larger |dL| stays valid, so it
@@ -288,7 +308,8 @@
     useBla(ref, rules, dL) {
       const cached = this.bla;
       if (cached && cached.ref === ref && cached.rules === rules && dL <= cached.dL && dL * 64 >= cached.dL) return cached;
-      const bound = 2 ** Math.ceil(Math.log2(Math.max(dL, 1e-300)));
+      // One octave of headroom, so small changes of the view do not rebuild the table.
+      const bound = 2 ** (Math.ceil(Math.log2(Math.max(dL, 1e-300))) + 1);
       const table = TetraCore.blaTable(ref, bound, rules, TetraCore.BLA_EPS.gpu);
       this.bla = {ref, rules, dL: bound, levels: 0, reach: 0, base: null};
       if (!table) return this.bla;
@@ -325,9 +346,10 @@
     // BLA levels to use for a perturbation draw into this frame (0 = plain program).
     blaLevels(frame, scene) {
       if (this.blaMode === 'off') return 0;
-      // Largest |dL| over the frame, half a pixel beyond its edges for subpixel samples.
-      const pad = 1 / frame.width, offset = TetraCore.offsetBound(scene.delta[0], scene.delta[1], scene.deltaMirror[1], scene.imCenter,
-        scene.spanMant * (0.5 + pad), scene.spanMant * (0.5 * frame.height / frame.width + pad));
+      // Largest |dL| over the frame plus 2% of the span for subpixel samples (half a pixel
+      // at 25 px and wider), the same for every frame size so live frames share the table.
+      const offset = TetraCore.offsetBound(scene.delta[0], scene.delta[1], scene.deltaMirror[1], scene.imCenter,
+        scene.spanMant * 0.52, scene.spanMant * (0.5 * frame.height / frame.width + 0.02));
       const dL = TetraCore.logOffsetBound(offset * Math.hypot(scene.inv[0], scene.inv[1]) * 2 ** (scene.scale + scene.invExp));
       if (!(dL < Infinity)) return 0;
       const bla = this.useBla(scene.ref, scene.rules, dL);
@@ -455,6 +477,7 @@
       for (const frame of this.pool) { gl.deleteFramebuffer(frame.buffer); gl.deleteTexture(frame.texture); }
       this.pool = [];
       for (const {program} of Object.values(this.programs)) gl.deleteProgram(program);
+      if (this.pendingBla) gl.deleteProgram(this.pendingBla.program);
       gl.deleteTexture(this.empty); if (this.referenceTexture) gl.deleteTexture(this.referenceTexture); if (this.blaTexture) gl.deleteTexture(this.blaTexture);
     }
   }

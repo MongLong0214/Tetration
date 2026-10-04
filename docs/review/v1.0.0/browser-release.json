@@ -1,0 +1,202 @@
+{
+  "suite": "release",
+  "origin": "http://127.0.0.1:4173",
+  "bundle_sha256": "4986c0248db2837079b21515deda49647efddcb8f8eb66d299512e40eb07c0c2",
+  "playwright": "1.56.0",
+  "limitations": [
+    "No physical iPhone/Safari test.",
+    "Software graphics is not hardware GPU qualification."
+  ],
+  "browser_version": "141.0.7390.37",
+  "graphics": {
+    "renderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+    "version": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+    "precision": 23,
+    "maxTexture": 8192
+  },
+  "passed": true,
+  "checks": [
+    {
+      "name": "HTTP security headers and served bytes match the production build",
+      "passed": true,
+      "detail": null,
+      "seconds": 0.67
+    },
+    {
+      "name": "Application renders through browser WebGL2",
+      "passed": true,
+      "detail": {
+        "renderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+        "version": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+        "precision": 23,
+        "maxTexture": 8192
+      },
+      "seconds": 2.3
+    },
+    {
+      "name": "24 direct-shader reference pixels match FP64 across all palettes",
+      "passed": true,
+      "detail": 24,
+      "seconds": 2.58
+    },
+    {
+      "name": "Perturbation-shader reference pixels match the exact reference orbit",
+      "passed": true,
+      "detail": [
+        {
+          "x": "0.5",
+          "y": "0",
+          "actual": [
+            20,
+            40,
+            41,
+            255
+          ],
+          "expected": [
+            20,
+            40,
+            41
+          ]
+        },
+        {
+          "x": "0.5",
+          "y": "0.25",
+          "actual": [
+            16,
+            36,
+            41,
+            255
+          ],
+          "expected": [
+            16,
+            36,
+            41
+          ]
+        },
+        {
+          "x": "-0.2",
+          "y": "0.7",
+          "actual": [
+            32,
+            9,
+            43,
+            255
+          ],
+          "expected": [
+            32,
+            9,
+            43
+          ]
+        },
+        {
+          "x": "2",
+          "y": "0.3",
+          "actual": [
+            10,
+            9,
+            24,
+            255
+          ],
+          "expected": [
+            10,
+            9,
+            24
+          ]
+        },
+        {
+          "x": "-1.2",
+          "y": "0.0000001",
+          "actual": [
+            42,
+            31,
+            47,
+            255
+          ],
+          "expected": [
+            42,
+            31,
+            47
+          ]
+        }
+      ],
+      "seconds": 5.7
+    },
+    {
+      "name": "Copied URL reopens the same coordinates on a loopback origin",
+      "passed": true,
+      "detail": null,
+      "seconds": 7.36
+    },
+    {
+      "name": "Automatic engine switches direct GPU, perturbation and back by depth",
+      "passed": true,
+      "detail": null,
+      "seconds": 14.49
+    },
+    {
+      "name": "Real WebGL context loss completes an FP64 Worker render",
+      "passed": true,
+      "detail": null,
+      "seconds": 18.99
+    },
+    {
+      "name": "Deep view during GPU loss uses full-resolution FP64 perturbation",
+      "passed": true,
+      "detail": null,
+      "seconds": 19.84
+    },
+    {
+      "name": "Context restoration recompiles shaders and returns to the GPU",
+      "passed": true,
+      "detail": null,
+      "seconds": 23.88
+    },
+    {
+      "name": "WebGL2 unavailable at startup uses the Worker FP64 path",
+      "passed": true,
+      "detail": null,
+      "seconds": 24.96
+    },
+    {
+      "name": "Without WebGL2, deep views still render at full resolution (FP64 perturbation)",
+      "passed": true,
+      "detail": null,
+      "seconds": 25.93
+    },
+    {
+      "name": "No OffscreenCanvas or scheduler uses transferable pixel buffers and timer yields",
+      "passed": true,
+      "detail": 3,
+      "seconds": 26.98
+    },
+    {
+      "name": "Single active Worker quota uses transferable pixel buffers and timer yields",
+      "passed": true,
+      "detail": 2,
+      "seconds": 28.53
+    },
+    {
+      "name": "Service worker installs the app shell and reloads it offline",
+      "passed": true,
+      "detail": {
+        "scope": "http://127.0.0.1:4173/"
+      },
+      "seconds": 33.46
+    },
+    {
+      "name": "Without Workers, the GPU still renders deep views (main-thread reference)",
+      "passed": true,
+      "detail": null,
+      "seconds": 35.65
+    },
+    {
+      "name": "No uncaught browser exceptions",
+      "passed": true,
+      "detail": null,
+      "seconds": 35.67
+    }
+  ],
+  "count": 16,
+  "uncaught_errors": [],
+  "seconds": 35.7
+}
