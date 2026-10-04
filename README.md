@@ -6,7 +6,7 @@
 
 저장된 이미지를 확대하는 것이 아닙니다. 카메라가 바뀌면 새 좌표에서 `wₙ₊₁ = exp(wₙ · Log(z))`를 다시 계산합니다.
 
-![TETRA 실제 계산 화면](docs/images/preview.png)
+![TETRA 실제 계산 화면](docs/review/modern-2026-10-04/desktop-modern.png)
 
 > **0.3.0 · 실험용 프리릴리스 / 정식 프로덕션 승인 보류**  
 > WebGPU, 최대 4개 Worker 병렬 계산, OffscreenCanvas 전송을 추가했습니다. 지원되지 않는 기능은 WebGL2·Worker·픽셀 버퍼로 복구합니다. 소프트웨어 GPU와 Chromium 모바일 에뮬레이션 검증은 통과했습니다. 물리 GPU·iPhone/Safari 및 공개 HTTPS는 아직 미검증입니다. 무제한 정밀도·고해상도·실시간 성능을 보장하지 않습니다.
@@ -34,7 +34,7 @@
 
 ## 시작하기
 
-**Node.js 24 권장, Node.js 22 또는 24와 npm**을 사용합니다. `.nvmrc`는 24입니다. 별도 `npm install` 없이 실행할 수 있습니다. 이번 Work 검증은 Node.js 24.19.0에서 수행했습니다. GitHub Actions는 Node 24용으로 구성했으며 실제 실행 상태는 위 Actions 링크와 [게시 기록](docs/PUBLISHING.md)에서 확인합니다.
+**Node.js 24 권장, Node.js 22 또는 24와 npm**을 사용합니다. `.nvmrc`는 24입니다. 별도 `npm install` 없이 실행할 수 있습니다. 이번 Work 검증은 Node.js 24.19.0에서 수행했습니다. GitHub Actions는 Node 24용으로 구성했으며 PR #1의 원격 Node·세 브라우저 검사도 통과했습니다. [게시 기록](docs/PUBLISHING.md)에 실제 응답을 남겼습니다.
 
 ```bash
 npm test
@@ -210,7 +210,7 @@ scripts/publish-github.sh 새 공개 GitHub 저장소 최초 게시 도우미
 
 ## 기여와 다음 작업
 
-버그에는 공유 URL, 브라우저·기기, 반복 한도, 엔진·정밀도·계산 해상도를 함께 남겨 주세요. 판정 로직 변경에는 재현 테스트와 독립 참조값을 포함하세요. 남은 우선순위는 원격 CI 확인, 하드웨어 GPU/물리 Safari 검증, 공개 HTTPS smoke test, 극단적 확대의 연산 비용·해상도 개선입니다. 새 프레임워크·백엔드·데이터베이스 추가는 현재 필수 과제가 아닙니다.
+버그에는 공유 URL, 브라우저·기기, 반복 한도, 엔진·정밀도·계산 해상도를 함께 남겨 주세요. 판정 로직 변경에는 재현 테스트와 독립 참조값을 포함하세요. 남은 우선순위는 하드웨어 GPU/물리 Safari 검증, 공개 HTTPS smoke test, 극단적 확대의 연산 비용·해상도 개선입니다. 새 프레임워크·백엔드·데이터베이스 추가는 현재 필수 과제가 아닙니다.
 
 ## 참고와 라이선스
 

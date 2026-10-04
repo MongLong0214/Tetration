@@ -31,7 +31,7 @@ WebGPU는 SwiftShader/Vulkan, WebGL2는 ANGLE/SwiftShader입니다. Chromium의 
 
 | 항목 | 상태 |
 | --- | --- |
-| GitHub 전체 게시·소스 일치·원격 CI | [현재 게시 기록](PUBLISHING.md)에서 실제 응답 기준으로 갱신 |
+| GitHub 전체 게시·소스 일치·원격 CI | 완료. PR #1 병합, 91개 파일 대조, Actions #1 성공. [게시 기록](PUBLISHING.md) |
 | 공개 HTTPS | Vercel 팀 조회 403. 배포·헤더·공유·PNG 재검증 필요 |
 | 하드웨어 GPU | 미검증. 타깃 기기 WebGPU/WebGL2·손실·복구 필요 |
 | 물리 iPhone/Safari | 미검증. 실제 터치·메모리·백그라운드 복귀·공유·PNG 필요 |

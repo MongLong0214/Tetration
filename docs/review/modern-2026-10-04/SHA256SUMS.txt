@@ -15,6 +15,8 @@ f38a3760a583cd48755b5eecb6133e24154cc9168a12f667029082dfe343a593  docs/review/mo
 90364a2d5166a27e237984356921a70ac42d958a126b8690c9a64957ebd670a4  docs/review/modern-2026-10-04/landscape-modern.png
 aa160fe98d2a783d11b26c09815d9d874530449a7c8689e27f0dcad808238f67  docs/review/modern-2026-10-04/mobile-modern.png
 ffa6d554a5231bfdf910d09acbff2e8f06f1694b5a355ca3e10a910bffff1b3a  docs/review/modern-2026-10-04/mobile-small-modern.png
+f3c94ca519a44610ec24c6b9b74afdf55cff7bc6a0e6e524165db878b1189d45  docs/review/modern-2026-10-04/remote-ci-output.txt
+dd737f1a8dc4b5ff919c4fda638b494418a380805583da05a2614e229d76bfb0  docs/review/modern-2026-10-04/remote-publication.json
 66e6db636d08660b5f12e6da98f04cf23e5d51d4d0b763b13ab80cd0cd9676d0  docs/review/modern-2026-10-04/security-scan.json
 f55acbc61c29929b4056aa8f9eaba4a06cc0d7501937089c990294e9caf91fa7  docs/review/modern-2026-10-04/unit-tests.txt
 4f3122722d35ca35cde61691358a3a2119fa149b57a2cb315973acbb0e2da407  docs/review/modern-2026-10-04/visual-modern.json

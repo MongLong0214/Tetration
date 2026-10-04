@@ -9,6 +9,7 @@
 | WebGPU·병렬 Worker·호환 경로 | 10/10 | [browser-modern.json](review/modern-2026-10-04/browser-modern.json) |
 | 반응형 화면 | 4개 크기 | [visual-modern.json](review/modern-2026-10-04/visual-modern.json) |
 | 소프트웨어 GLES | 8/8 | [gpu-software.json](review/modern-2026-10-04/gpu-software.json) |
+| GitHub Actions | 성공: Node 59 + 브라우저 29/16/10 | [실제 응답](review/modern-2026-10-04/remote-publication.json), [출력](review/modern-2026-10-04/remote-ci-output.txt) |
 
 Chromium 153.0.8010.0, Playwright 1.57.0. WebGPU는 SwiftShader/Vulkan, WebGL2는 ANGLE/SwiftShader. GLES는 llvmpipe 소프트웨어 렌더입니다. 실기기·물리 GPU·공개 HTTPS 검사를 뜻하지 않습니다.
 
