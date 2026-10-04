@@ -16,5 +16,13 @@ f9630fed62e86fe29ea90d613fb30a04802409762f383c49603bd41097f4ad33  docs/review/v0
 a4fcf7ed42a2bd1fc816f056e7cb74fa1358187752dbb84902e449b6a9fb5043  docs/review/v0.5.0/provenance.json
 a6cd5d91ee3991e10fc49a94eae63d8dab9db72960365e1fc5eb2a9fbc1ea80c  docs/review/v0.5.0/quality.txt
 d22a8d566a28c789a8a0172c0a5b3409e630538e79d338de2fb7a96ca53d69d4  docs/review/v0.5.0/release.txt
+0e4e728709d3586f52781db518cc2a7d4380b4693a7787131d8bae6befb85711  docs/review/v0.5.0/remote-ci/browser-explorer.json
+9c6b1e18968bdebf696ebacd85fd86da92e9b41d3db6e15d86f857c152d74e81  docs/review/v0.5.0/remote-ci/browser-modern.json
+b33348efd6c7176100392d9223c0e2c9292cc8a4d740fa8d79474923f2e6e854  docs/review/v0.5.0/remote-ci/browser-quality.json
+b8224f308346aefbc0e49fdd7a98ff7069b7f9911f12beb3e0483fdf789b2b69  docs/review/v0.5.0/remote-ci/browser-release.json
+129303b37946322a6f3af1883a5693ca6a5f806dff4b7c3c993994fcc79f98a8  docs/review/v0.5.0/remote-ci/browser-review.json
+a4a3c217477a3a1d5c1fa2db2d0fb9427dc09469da629c26c0408290c8151ea8  docs/review/v0.5.0/remote-ci/browser-webkit.json
+d197c1ea513a1611df4a423d810aa06a53b03403cadfaa876c001f58da7c6b1f  docs/review/v0.5.0/remote-ci/provenance.json
+a250bbc6cec3671a67aa9af26932fb865564a90d6794b10b295891bfb18e0675  docs/review/v0.5.0/remote-ci/webkit-mobile.png
 4dbb34d6de7cc3e97bb363eb22833767a6bdf4d0c02b0b7f401620924fa5b16c  docs/review/v0.5.0/unit.txt
 df4815f01272ee8181e458d5875e3f2cd77a53c80181c9fc5727b931a1eeb677  dist/index.html

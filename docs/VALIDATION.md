@@ -59,6 +59,8 @@ A scratch benchmark wrapper initially lacked its output environment variable and
 
 ## Remote CI and remaining gaps
 
-The workflow runs Node checks, all Chromium suites and Linux WebKit, then uploads browser evidence. Current remote results are added only after the run completes. Historical WebKit evidence from 0.4.0 does not qualify this build.
+[Run 37182647231](https://github.com/MongLong0214/Tetration/actions/runs/37182647231) passed for source commit `88e680673b2e07c3a90c9ce13faa42e1883e2571`. Node tests/build passed. Chromium 143.0.7499.4 passed 29 + 16 + 12 + 9 + 21 checks; Linux WebKit 26.0 passed 10 checks. All six downloaded browser reports carry the same final local bundle hash. No uncaught browser errors were reported.
+
+The downloaded artifact's SHA-256 is `a0c5f3534ef554824f5bdd6228a45f555448d68ffd0d7a3a890f03a9240bf697`. Six JSON reports and the WebKit mobile screenshot are committed under `review/v0.5.0/remote-ci/`, so this evidence outlives the seven-day workflow artifact retention. WebKit runs on Linux using the CPU path and emulated mobile layout; it is not physical Safari.
 
 Public HTTPS, physical iPhone/Safari, physical GPU drivers and a five-hour memory/thermal soak remain unverified. The high-precision renderer still ends at at most 72 horizontal samples. Minimum span `1e-200` and maximum 240 orbit decimal places are unchanged.

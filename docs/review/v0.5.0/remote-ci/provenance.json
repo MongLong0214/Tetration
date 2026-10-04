@@ -1,0 +1,11 @@
+{
+  "run_id": 37182647231,
+  "source_commit": "88e680673b2e07c3a90c9ce13faa42e1883e2571",
+  "merge_commit": "cebb6c2b3ab4af768913ae7db85c7b51ee6ff918",
+  "conclusion": "success",
+  "artifact_id": 11295468303,
+  "artifact_sha256": "a0c5f3534ef554824f5bdd6228a45f555448d68ffd0d7a3a890f03a9240bf697",
+  "bundle_sha256": "df4815f01272ee8181e458d5875e3f2cd77a53c80181c9fc5727b931a1eeb677",
+  "source_paths_verified": 94,
+  "source_pngs_verified": 12
+}

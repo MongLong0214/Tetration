@@ -42,7 +42,7 @@ The updated full-resolution antialiased frame takes longer to finish than the ol
 | Area | Current status |
 | --- | --- |
 | Local units, browser interactions, software GPU, quality checks | Passed; see current evidence |
-| Remote GitHub CI, including Linux WebKit | Recorded after the actual run in the publication/validation documents |
+| Remote GitHub CI, including Linux WebKit | Passed: Chromium 87 checks, Linux WebKit 10, plus Node test/build |
 | Public Vercel HTTPS | Not yet verified; current team-scope lookup returns HTTP 403 |
 | Physical iPhone/Safari and hardware GPU | Not tested |
 | Five-hour sustained memory, battery and thermal behavior | Not tested |
