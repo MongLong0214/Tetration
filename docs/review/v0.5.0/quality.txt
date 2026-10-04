@@ -1,0 +1,9 @@
+PASS Default detail reaches display resolution with adaptive four-sample edges {'view': {'x': '-2.5', 'y': '0', 'span': '1.8'}, 'mode': 'gpu', 'iterations': 256, 'palette': 0, 'width': 1280, 'height': 710, 'counts': None, 'elapsed': 3095.9000000003725, 'samples': 4}
+PASS GPU-resident tiles agree with one full-frame draw without seams 
+PASS Adaptive antialiasing reduces image error against a 16-sample reference {'camera': {'x': '-.2', 'y': '0', 'span': '7'}, 'reference': '16 samples per pixel, box averaged in JS', 'tile_max_channel_error': 0, 'single_rmse': 23.223094000821373, 'adaptive_rmse': 11.138549511486147, 'changed_pixels': 6424, 'total_pixels': 36864}
+PASS Dragging reprojects the cached GPU image without orbit draws 
+PASS Color flow changes only presentation, without recomputing or moving coordinates 
+PASS A shared view retains quality and hue and opens without automatic motion 
+PASS Reduced-motion preference changes stop active color flow 
+PASS CPU keeps the reprojected camera while replacement Workers are pending 
+PASS No uncaught exceptions in quality and motion flows 

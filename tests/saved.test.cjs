@@ -12,6 +12,12 @@ test('saved view bounds prevent unbounded growth and duplicate identities',()=>{
  assert.throws(()=>saved.encode([view,view]));assert.throws(()=>saved.encode([{...view,name:'x'.repeat(49)}]));assert.throws(()=>saved.encode(Array.from({length:25},(_,i)=>({...view,id:String(i)}))));
  const raw=JSON.stringify({version:1,views:[view,{...view,id:'2',hash:'bad'}]});assert.deepEqual(saved.decode(raw),[view]);
 });
-test('all shading modes remain achromatic without changing classifications',()=>{
- const {color}=require('../src/core.js');for(let p=0;p<3;p++)for(let kind=0;kind<5;kind++)for(const n of [0,1,8,12,64,256,1024]){const [r,g,b]=color(kind,n,p);assert.equal(r,g);assert.equal(g,b);assert.ok(r>=0&&r<=255);}
+test('art palettes are bounded, distinct and leave a neutral option',()=>{
+ const {color}=require('../src/core.js');
+ for(let p=0;p<4;p++)for(let kind=0;kind<5;kind++)for(const n of [0,1,8,12,64,256,1024]){
+  const rgb=color(kind,n,p,.5,.25);for(const v of rgb)assert.ok(Number.isInteger(v)&&v>=0&&v<=255);
+  if(p===3)assert.ok(rgb.every(v=>v===rgb[0]));
+ }
+ assert.notDeepEqual(color(3,8,0),color(3,8,1));assert.notDeepEqual(color(3,8,1),color(3,8,2));
+ assert.notDeepEqual(color(1,8,0,.5,.25),color(1,8,0,.5,-.25));
 });

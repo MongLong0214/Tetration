@@ -33,18 +33,19 @@ try:
   record('Qualified WebGPU is the application renderer',report['adapter'])
   pixels=page.evaluate('''async()=>{
    const r=await TetraWebGPU.create(document.createElement('canvas'));const out=[];
-   for(let palette=0;palette<3;palette++)for(const [x,y] of [[.5,0],[.01,0],[2,0],[0,0],[.5,.25]]){
-    const actual=await r.pixel(x,y,palette),o=TetraCore.orbit64(x,y,512);out.push({x,y,palette,actual,expected:TetraCore.color(o.kind,o.steps,palette)});
+   for(let palette=0;palette<4;palette++)for(const [x,y] of [[.5,0],[.01,0],[2,0],[0,0],[.5,.25]]){
+    const actual=await r.pixel(x,y,palette),o=TetraCore.orbit64(x,y,512);out.push({x,y,palette,actual,expected:TetraCore.color(o.kind,o.steps,palette,o.re,o.im)});
    }r.destroy();return out;
   }''')
   for pixel in pixels:
    assert pixel['actual'][3]==255 and max(abs(a-b) for a,b in zip(pixel['actual'],pixel['expected']))<=1,pixel
-  record('15 WebGPU reference pixels match FP64 across all palettes',pixels)
+  record('20 WebGPU reference pixels match FP64 across all palettes',pixels)
+  expected=tuple(page.evaluate('()=>{const o=TetraCore.orbit64(.5,0,64);return TetraCore.color(o.kind,o.steps,0,o.re,o.im)}'))
   page.wait_for_timeout(250)
   with page.expect_download() as event:page.locator('#exportBtn').click()
   event.value.save_as(str(OUT/'webgpu-export.png'))
   with Image.open(OUT/'webgpu-export.png') as img:
-   actual=img.convert('RGB').getpixel((img.width//2,img.height//2));assert actual==(18,18,18),actual
+   actual=img.convert('RGB').getpixel((img.width//2,img.height//2));assert max(abs(a-b) for a,b in zip(actual,expected))<=1,actual
   record('WebGPU PNG retains completed image after presentation',actual)
   page.screenshot(path=str(OUT/'webgpu-desktop.png'))
   # Start an asynchronous partial export, then navigate before it resolves.
@@ -53,16 +54,16 @@ try:
    page.evaluate("document.querySelector('#zoomIn').click();document.querySelector('#exportBtn').click();document.querySelector('#homeBtn').click()")
   event.value.save_as(str(OUT/'webgpu-partial-export.png'))
   with Image.open(OUT/'webgpu-partial-export.png') as img:
-   assert img.convert('RGB').getpixel((img.width//2,img.height//2))==(18,18,18)
+   assert max(abs(a-b) for a,b in zip(img.convert('RGB').getpixel((img.width//2,img.height//2)),expected))<=1
   labels=page.evaluate('__exportLabels');assert any('PARTIAL PREVIEW' in t for t in labels) and 'Re 0.5  Im 0  Span 0.05' in labels,labels
   ready(page,'gpu');assert state(page)['view']['span']=='7'
   record('A partial WebGPU export freezes its pixels and coordinates across navigation',labels)
   page.evaluate("window.__bitmap=window.createImageBitmap;window.createImageBitmap=undefined;location.hash='v=1&x=0.5&y=0&s=0.1&n=64'")
-  page.wait_for_function("tetraDiagnostics.view.span==='0.1'");ready(page,'gpu')
+  page.wait_for_function("() => tetraDiagnostics.view.span==='0.1'");ready(page,'gpu')
   with page.expect_download() as event:page.locator('#exportBtn').click()
   event.value.save_as(str(OUT/'webgpu-fallback-export.png'))
   with Image.open(OUT/'webgpu-fallback-export.png') as img:
-   assert img.convert('RGB').getpixel((img.width//2,img.height//2))==(18,18,18)
+   assert max(abs(a-b) for a,b in zip(img.convert('RGB').getpixel((img.width//2,img.height//2)),expected))<=1
   page.evaluate('() => {window.createImageBitmap=window.__bitmap;}')
   record('WebGPU preserves export pixels when createImageBitmap is unavailable')
   page.locator('#settingsBtn').click();page.locator('#engine').select_option('cpu');ready(page,'cpu')

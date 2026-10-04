@@ -1,6 +1,6 @@
 {
   "name": "tetra-atlas",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "private": true,
   "description": "A browser-native, multi-precision complex power-tower explorer.",
   "scripts": {
@@ -12,7 +12,8 @@
     "test:release": "python3 tests/browser_release.py",
     "test:modern": "python3 tests/browser_modern.py",
     "test:explorer": "python3 tests/browser_explorer.py",
-    "test:webkit": "python3 tests/browser_webkit.py"
+    "test:webkit": "python3 tests/browser_webkit.py",
+    "test:quality": "python3 tests/browser_quality.py"
   },
   "engines": {
     "node": "22.x || 24.x"

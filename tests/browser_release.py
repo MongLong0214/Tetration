@@ -85,11 +85,11 @@ try:
             const cases = [['fixed', .5, 0], ['period2', .01, 0], ['threshold', 2, 0],
                            ['origin', 0, 0], ['complex', .5, .25]];
             const results = cases.map(([name, x, y]) => {
-                renderer.render({x: String(x), y: String(y), span: '1'}, 1, 1, 512, 0);
+                renderer.render({x: String(x), y: String(y), span: '1'}, 1, 1, 512, 0, false);
                 const actual = new Uint8Array(4);
                 gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, actual);
                 const orbit = TetraCore.orbit64(x, y, 512);
-                return {name, actual: [...actual], expected: TetraCore.color(orbit.kind, orbit.steps, 0)};
+                return {name, actual: [...actual], expected: TetraCore.color(orbit.kind, orbit.steps, 0, orbit.re, orbit.im)};
             });
             gl.deleteProgram(renderer.program);
             gl.getExtension('WEBGL_lose_context')?.loseContext();

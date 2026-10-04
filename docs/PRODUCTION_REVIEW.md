@@ -1,52 +1,50 @@
-# Production review — TETRA 0.4.0
+# Production review — TETRA 0.5.0
 
-Review date: 2026-10-04. **Beta release candidate; unrestricted commercial readiness is not yet approved.** The remaining deployment and physical-device gaps are explicit below.
+Review date: 2026-10-04. **Beta release candidate. Full commercial readiness remains withheld pending the deployment and device conditions below.**
 
-## Scope
+## Scope and provenance
 
-Reviewed the complete path: open the map → pan/zoom → select a starting point or exact coordinate → change precision → save/reopen → share/reopen → export. Also reviewed cancellation, graphics failure, unavailable storage/clipboard, keyboard access, small viewports, CSP, build determinism and repository delivery.
+Continues public main `4b16c005c635ac73ee0f11019524e8e1d68f5f4c` and the reviewed 0.2.0 archive. No framework migration, backend, paid integration, runtime dependency or license change. The finite orbit classifiers and `precision.js` are unchanged; the numerical core's display palette is updated.
 
-The work continues the reviewed 0.2.0 archive and published 0.3.0 app. There is no framework migration or backend. The only change inside `core.js` is the grayscale color function. The orbit classifiers and `precision.js` remain unchanged.
+Reviewed the user path: open → choose a starting point → pan/zoom → change quality/palette/engine → focus → save/reopen → share/reopen → export. Failure paths include cancelled work, GPU loss, unavailable image-transfer features, blocked storage/clipboard, precise-coordinate drafts, small viewports and CSP enforcement.
 
-## Product changes
+## Improvements and defects
 
-- Edge-to-edge monochrome map. Controls live in a native modal panel; focus mode removes the surrounding interface.
-- English UI, errors, guidance, current README and review documents.
-- Three achromatic shading modes, forward/back history, direct keyboard commands and optional local saved views.
-- Exact-coordinate sharing with native touch-device sharing, clipboard and manual-copy paths.
-- Bounded interactive GPU previews. WebGPU final-image snapshots use an asynchronous ImageBitmap path; moving cancels old work.
-- No runtime dependency, analytics, account, external computation service, paid integration or license change.
-
-## Defects found and fixed
-
-| Finding | Fix | Regression evidence |
+| Finding | Change | Evidence |
 | --- | --- | --- |
-| A long controls dialog could extend beyond the viewport without usable scrolling | Explicit viewport-bounded dialog height and internal scrolling | Coordinate submit and all primary controls at four viewport sizes |
-| A keyboard-like viewport resize replaced an unfinished coordinate with the current camera value | Preserve coordinate drafts until successful submission or panel closure | Exact decimal draft survives resize and submits |
-| WebGPU preview snapshots forced extra image work during navigation | Skip preview snapshots; asynchronously preserve final frames | WebGPU rendering, cancellation and exported pixel checks |
-| An export in progress could label a different camera state after navigation | Freeze view, iteration limit, completion state and grid at export initiation | Start a partial WebGPU export, immediately navigate, then check actual PNG pixels and captured metadata |
-| Previous interface occupied map space and used mixed color palettes | Closed-by-default controls and neutral luminance shading | Screenshots, layout assertions and CPU/GPU reference pixels |
+| Low final sampling exposed coarse pixels | Bounded display-resolution GPU frames; adaptive four-sample edges; high-quality CPU image interpolation | Pixel dimensions and independent 16-sample image comparison |
+| Every drag movement launched orbit work | Reproject the cached image; restart tiles after release | Zero GPU tile draws during the recorded drag; frame timing record |
+| Copying tile images to the CPU added overhead | GPU-resident textures/framebuffers, scissored tiles, nonblocking completion waits | WebGL2/WebGPU output and export checks; no seam error in sampled WebGL2 image |
+| Cancelled GPU work could overlap replacement submission | Await the outstanding tile before a new frame starts | Cancellation and renderer-loss regressions |
+| The monochrome map did not support the requested visual experience | Three continuous ramps, observed fixed-point phase tint, optional hue flow, curated finite-coordinate views | Actual screenshots, all-palette reference pixels and motion/share checks |
+| CPU preview returned to the old camera while new Workers started | Bake the cached transform into the CPU seed image | Reproduced channel error 245 before the fix, at most 1 permitted after it with Worker replies intentionally withheld |
+| Export could change presentation state while capture was pending | Freeze camera, hue, grid and completion state before asynchronous capture | Completed and partial PNG checks across navigation |
 
-## Verification
+The antialiasing detector compares a native one-sample image with its neighbors. It only recomputes detected edges, so it is not exhaustive supersampling and can miss subpixel structures. The image-quality comparison covers one sampled camera, not every boundary. Palettes represent finite observations; no artificial detail or generated artwork is used for the map.
 
-Current local and remote results are listed in [VALIDATION.md](VALIDATION.md). Automated accessibility checks are supporting evidence, not a claim of full WCAG conformance. Items marked incomplete by the checker require manual interpretation; keyboard reachability, focus handling and primary target sizes are separately exercised.
+## Engineering review
 
-Graphics checks use software drivers. Startup, render and deep-view timings depend on the sampled view and test machine. They are not hardware benchmarks or worst-case guarantees. The app stays navigable during Worker computation and rejects stale results after navigation.
+- Explicit frame ownership retains the native image for the adaptive pass and releases superseded textures. A cancelled incomplete frame cannot replace a newer camera.
+- WebGPU qualification, WebGL2 context loss and Worker fallback are exercised in actual browsers using software graphics drivers.
+- Display work is bounded to 8,294,400 pixels, device density at most 2 and each GPU dimension at most 8,192. FP64 is bounded to 1.6 million samples / 2,048 across. This bounds work, not device memory availability or completion time.
+- The map and controls are English. Keyboard commands, modal focus, primary target sizes, exact links, local saved views and blocked-storage behavior are tested.
+- The production CSP remains enabled, with exact script/style hashes and no unsafe-eval or unsafe-inline allowance. No analytics or network computation service was added.
+- Flow is optional, pauses while hidden and stops on a reduced-motion preference change. A copied URL does not turn it on.
 
-## Numerical limits
+## Numerical and performance limits
 
-Finite observations only. Threshold crossing does not prove divergence. Fixed-point and period-2 classifications are candidates. Minimum span is `1e-200`; high-precision orbits use at most 240 decimal places; deep final passes have at most 72 horizontal samples. Engine transitions are heuristics, not proven error bounds. The arithmetic is not interval-certified.
+Threshold crossing is not a divergence proof; fixed points and periods are candidates. Minimum span remains `1e-200`, high-precision orbit arithmetic at most 240 decimal places, and deep final images at most 72 horizontal samples. BigInt arithmetic is truncated rather than interval-certified. Smooth interpolation cannot restore uncomputed deep detail.
+
+The updated full-resolution antialiased frame takes longer to finish than the old smaller single-sample frame on the measured software GPU. Interaction becomes smoother because dragging reuses the image. The exact comparison, environment and bundle hash are in [VALIDATION.md](VALIDATION.md). Neither continuous real-time rendering at every coordinate nor a five-hour session is certified.
 
 ## Release conditions
 
-| Area | Status |
+| Area | Current status |
 | --- | --- |
-| English monochrome product, bounded navigation and sharing | Implemented; browser evidence recorded |
-| Local numerical, CSP, graphics and interaction checks | See validation evidence |
-| Current GitHub source and CI | See [publication record](PUBLISHING.md) |
-| Public Vercel HTTPS | Blocked by team-scope HTTP 403 until the connection is authorized |
-| Linux WebKit | 10 checks passed in remote CI on WebKit 26.0; mobile viewport emulation, CPU path |
-| Physical iPhone/Safari | Not tested |
-| Hardware GPU and sustained mobile memory/thermal behavior | Not tested |
+| Local units, browser interactions, software GPU, quality checks | Passed; see current evidence |
+| Remote GitHub CI, including Linux WebKit | Recorded after the actual run in the publication/validation documents |
+| Public Vercel HTTPS | Not yet verified; current team-scope lookup returns HTTP 403 |
+| Physical iPhone/Safari and hardware GPU | Not tested |
+| Five-hour sustained memory, battery and thermal behavior | Not tested |
 
-Public HTTPS verification must confirm the deployed bytes, security headers, Worker execution, exact link sharing and PNG export. Physical Safari must verify actual pinch gestures, OS sharing, download behavior, safe-area layout and background recovery. Those checks are not replaced by desktop emulation.
+Public HTTPS review must confirm deployed bytes, security headers, Worker execution, shared-view restoration and PNG export. Physical Safari review must cover actual pinch input, OS sharing, downloads, safe areas and background recovery. Linux WebKit and touch emulation do not replace these checks.

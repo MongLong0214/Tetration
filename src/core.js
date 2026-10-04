@@ -59,17 +59,61 @@
       }
     };
   }
-  function color(kind, steps, palette = 0) {
-    // A neutral luminance ramp; classification and orbit arithmetic are unchanged.
-    let value;
-    if (palette === 2) value = kind === 3 ? 238 : kind === 4 ? 96 : 8;
-    else {
-      value = kind === 3 ? 48 + 184 * (0.5 - 0.5 * Math.cos(Math.log2(Math.max(steps, 1) + 1) * 1.76)) : [6,18,32,0,86][kind];
-      if (palette === 1) value = 255 - value;
+  // Cyclic, smoothly interpolated palettes shared by the CPU and both shaders.
+  const ramps = [
+    [[10,8,35],[51,25,122],[138,38,197],[240,76,148],[255,172,104],[138,239,220],[42,154,211],[24,50,133]],
+    [[24,5,27],[86,11,78],[189,35,103],[250,92,55],[255,203,116],[174,216,200],[67,96,165],[60,24,110]],
+    [[3,13,32],[13,40,100],[18,90,185],[22,178,204],[157,235,202],[227,245,210],[101,148,209],[45,37,139]]
+  ];
+  function color(kind, steps, palette = 0, re = 0, im = 0) {
+    if (palette === 3) {
+      const v = Math.round(kind===3?48+184*(.5-.5*Math.cos(Math.log2(Math.max(steps,1)+1)*1.76)):[6,18,32,0,86][kind]);
+      return [v,v,v];
     }
-    const byte = Math.round(value);
-    return [byte,byte,byte];
+    if(kind===4)return [42,31,47];
+    if(kind===0)return [10,9,24];
+    let t,light=1;
+    if(kind===3)t=Math.log2(Math.max(steps,1)+1)*.42+.08;
+    else if(kind===2){t=.27;light=.22;}
+    else{const magnitude=Math.min(Math.log2(1+Math.hypot(Number(re)||0,Number(im)||0)),3);t=.59+Math.atan2(Number(im)||0,Number(re)||0)/(2*Math.PI)*.5+magnitude*.12;light=.14+magnitude*.07;}
+    const position=((t%1+1)%1)*8,index=Math.floor(position),f=position-index,k=f*f*(3-2*f),ramp=ramps[palette]||ramps[0];
+    return ramp[index].map((v,c)=>Math.round((v+(ramp[(index+1)%8][c]-v)*k)*light));
   }
-  root.TetraCore = { STATUS, orbit64, makePreciseOrbit, color };
+  const vectors=(dialect,p)=>ramps[p].map(v=>`${dialect}(${v.map(n=>n+'.').join(',')})`).join(',');
+  const paletteGLSL=`
+  vec3 ramp(float t){
+    vec3 stops[8]=vec3[8](${vectors('vec3',0)});
+    if(uPalette==1)stops=vec3[8](${vectors('vec3',1)});
+    if(uPalette==2)stops=vec3[8](${vectors('vec3',2)});
+    float p=fract(t)*8.;int i=int(floor(p));float k=fract(p);k=k*k*(3.-2.*k);
+    return mix(stops[i],stops[(i+1)%8],k)/255.;
+  }
+  vec3 palette(int kind,float steps,vec2 w){
+    if(uPalette==3){float v=kind==3?48.+184.*(.5-.5*cos(log2(max(steps,1.)+1.)*1.76)):kind==1?18.:kind==2?32.:kind==4?86.:6.;return vec3(v/255.);}
+    if(kind==4)return vec3(42.,31.,47.)/255.;
+    if(kind==0)return vec3(10.,9.,24.)/255.;
+    if(kind==3)return ramp(log2(max(steps,1.)+1.)*.42+.08);
+    if(kind==2)return ramp(.27)*.22;
+    float m=min(log2(1.+length(w)),3.);float angle=length(w)==0.?0.:atan(w.y,w.x);
+    return ramp(.59+angle/6.28318530718*.5+m*.12)*(.14+m*.07);
+  }`;
+  const paletteWGSL=`
+  fn ramp(t:f32)->vec3f{
+    var stops=array<vec3f,8>(${vectors('vec3f',0)});
+    if(u.palette==1u){stops=array<vec3f,8>(${vectors('vec3f',1)});}
+    if(u.palette==2u){stops=array<vec3f,8>(${vectors('vec3f',2)});}
+    let p=fract(t)*8.;let i=u32(floor(p));let f=fract(p);let k=f*f*(3.-2.*f);
+    return mix(stops[i],stops[(i+1u)%8u],k)/255.;
+  }
+  fn color(kind:u32,steps:f32,w:vec2f)->vec3f{
+    if(u.palette==3u){var v=select(select(select(6.,18.,kind==1u),32.,kind==2u),86.,kind==4u);if(kind==3u){v=48.+184.*(.5-.5*cos(log2(max(steps,1.)+1.)*1.76));}return vec3f(v/255.);}
+    if(kind==4u){return vec3f(42.,31.,47.)/255.;}
+    if(kind==0u){return vec3f(10.,9.,24.)/255.;}
+    if(kind==3u){return ramp(log2(max(steps,1.)+1.)*.42+.08);}
+    if(kind==2u){return ramp(.27)*.22;}
+    let m=min(log2(1.+length(w)),3.);var angle=0.;if(length(w)>0.){angle=atan2(w.y,w.x);}
+    return ramp(.59+angle/6.28318530718*.5+m*.12)*(.14+m*.07);
+  }`;
+  root.TetraCore = { STATUS, orbit64, makePreciseOrbit, color, paletteGLSL, paletteWGSL };
   if (typeof module !== 'undefined') module.exports = root.TetraCore;
 })(globalThis);

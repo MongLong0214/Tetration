@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.5.0
+
+- Added Aurora, Ember and Tidal palettes, finite fixed-point phase shading, an optional slow color cycle, and more visually useful starting points. Mono remains available.
+- Raised GPU detail to the bounded display grid and added adaptive four-sample antialiasing. GPU-resident center-first tiles avoid per-tile image readbacks.
+- Reproject cached images during gestures instead of recomputing every pointer move. Cancelled jobs cannot enqueue an unbounded stream of GPU tiles.
+- Increased FP64 final sampling to at most 1.6 million pixels / 2,048 across. High-precision limits remain unchanged.
+- Fixed a reproduced CPU preview jump at the start of replacement Worker computation.
+- Shared views preserve hue and quality without autoplay. PNG capture freezes hue, coordinates, grid and completion state.
+- Added independent supersampling error comparisons, tile-seam checks, gesture draw-count checks and CPU preview regression coverage.
+
+Finite orbit classifiers and high-precision arithmetic are unchanged. Colors and rendering quality do not certify the mathematical boundary.
+
 ## 0.4.0
 
 - Replaced the decorative sidebar with an edge-to-edge monochrome map and an on-demand native controls dialog.

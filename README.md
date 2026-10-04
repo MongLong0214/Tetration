@@ -2,11 +2,11 @@
 
 A browser-native tetration explorer. Move through the complex plane, inspect its boundaries, save coordinates and share what you find.
 
-![TETRA explorer](docs/review/v0.4.0/desktop.png)
+![TETRA explorer](docs/review/v0.5.0/desktop.png)
 
 [![Validate](https://github.com/MongLong0214/Tetration/actions/workflows/ci.yml/badge.svg)](https://github.com/MongLong0214/Tetration/actions)
 
-**0.4.0 · beta release candidate.** Public deployment and device qualification are tracked in the [production review](docs/PRODUCTION_REVIEW.md). The app observes finite iterations; it does not prove convergence or divergence.
+**0.5.0 · beta release candidate.** Public deployment and device qualification are tracked in the [production review](docs/PRODUCTION_REVIEW.md). The app observes finite iterations; it does not prove convergence or divergence.
 
 ## Explore
 
@@ -23,7 +23,9 @@ The map fills the workspace. Open **Explore** for starting points, render settin
 | Saved views / share / PNG | B / S / E |
 | Grid / guide | G / ? |
 
-All three shading modes are monochrome: **Bands**, **Inverse**, **Binary**. Binary combines fixed-point candidates, period-2 candidates and unresolved samples into one dark tone.
+The fractal has three continuous color palettes: **Aurora**, **Ember** and **Tidal**, plus **Mono**. Controls remain neutral. **Detail** resolves the display grid and adds adaptive antialiasing; **Fast** skips the extra edge pass. Try **Bloom**, **Filaments** or **Feather**, then hide the interface with **Focus**.
+
+Optional **Color flow** slowly rotates the displayed hues without moving the camera or recomputing orbits. It starts off, pauses in a hidden tab and stops when the reduced-motion preference changes. Shared links preserve the captured hue and quality setting, but never start animation automatically. Color is an artistic encoding of finite observations, not a proof.
 
 Save up to 24 named views on the current device. Storage is optional: the app remains usable when it is blocked. A shared URL is a separate, portable copy of your coordinates. There is no account or cloud synchronization.
 
@@ -79,11 +81,15 @@ Deep views can be slow and visibly coarse. BigInt arithmetic uses truncation, no
 
 ## Rendering and privacy
 
-- Qualified **WebGPU / WGSL**, then **WebGL2 / GLSL**, provide FP32 previews. Five stable reference pixels gate WebGPU initialization.
-- A pool of **1–4 Workers** handles FP64 and high-precision computation. Deep-view limits stay the same.
-- **OffscreenCanvas / ImageBitmap** transfers tiles where supported; transferable pixel buffers remain the fallback.
-- Moving cancels active work. Old results cannot replace a newer view. WebGPU snapshots are requested before presentation expires and resolved asynchronously.
+- Qualified **WebGPU / WGSL**, then **WebGL2 / GLSL**, provide FP32 images. Five stable reference pixels gate WebGPU initialization.
+- GPU images stay in GPU memory. Center-first tiles progressively show a small preview, the display-resolution image, then adaptive four-sample edges. A native one-sample texture is the immutable edge-detection source; flat areas retain their original sample.
+- GPU resolution is capped at **8,294,400 pixels**, **2× device density** and **8,192 pixels per dimension**. This can reach a 4K pixel budget; it is not an unlimited-resolution or frame-rate guarantee.
+- Dragging repositions the cached image immediately. Orbit work resumes after release; changing views cancels stale results and waits for outstanding GPU work before starting replacement tiles. Reprojection does not create new mathematical detail.
+- A pool of **1–4 Workers** handles FP64 and high precision. FP64 final grids use at most 1.6 million samples / 2,048 across. Deep-view limits remain unchanged: at most 72 across, with smooth display interpolation rather than invented detail.
+- **OffscreenCanvas / ImageBitmap** transfers Worker tiles where supported; transferable pixel buffers remain the fallback. PNG export snapshots the GPU once and preserves the captured camera, hue, grid and completion label.
 - No framework, runtime npm dependency, external computation API, analytics script or login. Saved views are written only after an explicit save/remove action. Hosting access logs are separate from the app.
+
+A controlled software-GPU run found smoother drag response, but the larger antialiased image takes longer to finish than 0.4.0. See [measured results and limitations](docs/VALIDATION.md). Five-hour sessions, physical GPU performance and mobile thermal behavior have not been qualified.
 
 The build hashes exact script and stylesheet bytes into its CSP. It does not permit `unsafe-inline` or `unsafe-eval`. `connect-src 'none'` blocks app fetches; Workers are limited to blob URLs. Do not modify the built inline code without rebuilding.
 
@@ -115,6 +121,7 @@ python3 -m playwright install --with-deps chromium webkit
 TETRA_BASE_URL=http://127.0.0.1:4173 npm run test:browser
 TETRA_BASE_URL=http://127.0.0.1:4173 npm run test:release
 TETRA_BASE_URL=http://127.0.0.1:4173 npm run test:modern
+TETRA_BASE_URL=http://127.0.0.1:4173 npm run test:quality
 TETRA_BASE_URL=http://127.0.0.1:4173 npm run test:explorer
 TETRA_BASE_URL=http://127.0.0.1:4173 npm run test:webkit
 ```
@@ -129,11 +136,11 @@ See [validation evidence](docs/VALIDATION.md), [production review](docs/PRODUCTI
 | --- | --- |
 | `src/main.js` | Camera, input, navigation, orchestration and export |
 | `src/core.js`, `src/precision.js` | Finite orbit classification and numerical arithmetic |
-| `src/gpu.js`, `src/webgpu.js` | GPU preview renderers |
+| `src/gpu.js`, `src/webgpu.js`, `src/render.js` | GPU frames, progressive sampling and display utilities |
 | `src/worker.js`, `src/saved.js` | Parallel tiles and validated local saved views |
-| `src/index.html`, `src/style.css` | English monochrome interface |
+| `src/index.html`, `src/style.css` | English neutral interface around the colored map |
 | `tests/` | Numerical references and browser regression suites |
-| `docs/review/v0.4.0/` | Current review evidence |
+| `docs/review/v0.5.0/` | Current review evidence |
 
 Report bugs with a shared view URL, device/browser, iteration limit and precision mode. Numerical changes should include a reproducible case and independent reference values.
 
