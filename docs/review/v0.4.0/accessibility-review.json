@@ -1,0 +1,51 @@
+{
+  "method": "Manual review of visible screenshots and neutral CSS text/background pairs. Translucent map labels use a conservative white image beneath the overlay. Disabled controls, plot shades and decorative marks are excluded. This does not certify complete WCAG conformance.",
+  "pairs": [
+    {
+      "scope": "Body and dialog text",
+      "foreground": 238,
+      "background": 17,
+      "ratio": 16.28
+    },
+    {
+      "scope": "Muted text on hovered control",
+      "foreground": 170,
+      "background": 38,
+      "ratio": 6.51
+    },
+    {
+      "scope": "Secondary counts",
+      "foreground": 153,
+      "background": 17,
+      "ratio": 6.63
+    },
+    {
+      "scope": "Placeholder text",
+      "foreground": 136,
+      "background": 10,
+      "ratio": 5.58
+    },
+    {
+      "scope": "Map text over darkest 90% overlay on white",
+      "foreground": 170,
+      "background": 34.01960784313725,
+      "ratio": 6.85
+    },
+    {
+      "scope": "Primary button",
+      "foreground": 17,
+      "background": 238,
+      "ratio": 16.28
+    }
+  ],
+  "axe_violations": 0,
+  "axe_incomplete_rule": "color-contrast",
+  "screenshots_reviewed": [
+    "desktop.png",
+    "controls.png",
+    "mobile.png",
+    "mobile-small.png",
+    "landscape.png",
+    "mobile-controls.png"
+  ]
+}

@@ -44,15 +44,33 @@ try:
   with page.expect_download() as event:page.locator('#exportBtn').click()
   event.value.save_as(str(OUT/'webgpu-export.png'))
   with Image.open(OUT/'webgpu-export.png') as img:
-   actual=img.convert('RGB').getpixel((img.width//2,img.height//2));assert actual==(21,44,43),actual
+   actual=img.convert('RGB').getpixel((img.width//2,img.height//2));assert actual==(18,18,18),actual
   record('WebGPU PNG retains completed image after presentation',actual)
   page.screenshot(path=str(OUT/'webgpu-desktop.png'))
-  page.locator('#engine').select_option('cpu');ready(page,'cpu')
+  # Start an asynchronous partial export, then navigate before it resolves.
+  page.evaluate('''() => {window.__exportLabels=[];const fill=CanvasRenderingContext2D.prototype.fillText;CanvasRenderingContext2D.prototype.fillText=function(text,...args){if(typeof text==='string'&&(text.startsWith('TETRA /')||text.startsWith('Re ')))__exportLabels.push(text);return fill.call(this,text,...args)};}''')
+  with page.expect_download() as event:
+   page.evaluate("document.querySelector('#zoomIn').click();document.querySelector('#exportBtn').click();document.querySelector('#homeBtn').click()")
+  event.value.save_as(str(OUT/'webgpu-partial-export.png'))
+  with Image.open(OUT/'webgpu-partial-export.png') as img:
+   assert img.convert('RGB').getpixel((img.width//2,img.height//2))==(18,18,18)
+  labels=page.evaluate('__exportLabels');assert any('PARTIAL PREVIEW' in t for t in labels) and 'Re 0.5  Im 0  Span 0.05' in labels,labels
+  ready(page,'gpu');assert state(page)['view']['span']=='7'
+  record('A partial WebGPU export freezes its pixels and coordinates across navigation',labels)
+  page.evaluate("window.__bitmap=window.createImageBitmap;window.createImageBitmap=undefined;location.hash='v=1&x=0.5&y=0&s=0.1&n=64'")
+  page.wait_for_function("tetraDiagnostics.view.span==='0.1'");ready(page,'gpu')
+  with page.expect_download() as event:page.locator('#exportBtn').click()
+  event.value.save_as(str(OUT/'webgpu-fallback-export.png'))
+  with Image.open(OUT/'webgpu-fallback-export.png') as img:
+   assert img.convert('RGB').getpixel((img.width//2,img.height//2))==(18,18,18)
+  page.evaluate('() => {window.createImageBitmap=window.__bitmap;}')
+  record('WebGPU preserves export pixels when createImageBitmap is unavailable')
+  page.locator('#settingsBtn').click();page.locator('#engine').select_option('cpu');ready(page,'cpu')
   cpu=state(page);assert cpu['poolLimit']>=1 and cpu['workerTransfer']=='bitmap',cpu
   assert sum(cpu['lastCompleted']['counts'])==cpu['lastCompleted']['width']*cpu['lastCompleted']['height']
   record('Parallel FP64 completes every pixel through OffscreenCanvas transfer',cpu)
   page.locator('#engine').select_option('big');page.wait_for_timeout(35)
-  page.locator('#engine').select_option('auto');ready(page,'gpu');assert state(page)['backend']=='webgpu'
+  page.locator('#engine').select_option('auto');page.locator('#closeSettings').click();ready(page,'gpu');assert state(page)['backend']=='webgpu'
   record('Cancelled parallel high-precision work cannot overwrite WebGPU')
   page.evaluate('__devices[0].destroy()')
   page.wait_for_function('() => tetraDiagnostics.webgpuStatus==="lost"');ready(page,'gpu')

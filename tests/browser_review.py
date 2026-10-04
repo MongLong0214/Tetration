@@ -5,7 +5,7 @@ Set TETRA_BASE_URL for a real served URL, otherwise use the self-contained bundl
 from pathlib import Path
 from decimal import Decimal, getcontext
 from importlib.metadata import version
-import json, os, time
+import json, os, time, hashlib
 from playwright.sync_api import sync_playwright
 getcontext().prec=270
 ROOT=Path(__file__).resolve().parents[1]
@@ -23,7 +23,12 @@ def load(page,fragment=''):
   if fragment:page.evaluate('(h)=>location.hash=h',fragment)
   page.set_content(HTML,wait_until='load')
  ready(page)
+def controls(page):
+ if not page.locator('#sidebar').is_visible():page.locator('#settingsBtn').click()
+def close_controls(page):
+ if page.locator('#sidebar').is_visible():page.locator('#closeSettings').click()
 def coords(page,x,y,s):
+ controls(page)
  page.locator('details.coordinates').evaluate('(el)=>el.open=true')
  page.locator('#xInput').fill(x);page.locator('#yInput').fill(y);page.locator('#spanInput').fill(s);page.locator('#coordinateForm button').click()
 with sync_playwright() as p:
@@ -41,9 +46,9 @@ with sync_playwright() as p:
  page.mouse.move(box['x']+px,box['y']+py);page.mouse.wheel(0,-180);page.wait_for_timeout(80);after=state(page)['view'];assert Decimal(after['span'])<Decimal(before['span']);assert abs(at(before)-at(after))<Decimal('1e-8');record('Wheel zoom preserves cursor anchor')
  before=state(page)['view'];page.mouse.move(box['x']+px,box['y']+py);page.mouse.down();page.mouse.move(box['x']+px+45,box['y']+py+20);page.mouse.up();after=state(page)['view'];assert Decimal(after['x'])<Decimal(before['x']);assert Decimal(after['y'])>Decimal(before['y']);record('Drag pans without changing scale')
  page.locator('#homeBtn').click();page.locator('#viewport').focus();page.keyboard.press('+');assert state(page)['view']['span']=='3.5';page.keyboard.press('Home');assert state(page)['view']['span']=='7';record('Keyboard zoom and reset')
- page.locator('.preset').nth(3).click();page.locator('#iterations').select_option('64');page.locator('[data-palette="1"]').click();ready(page);assert state(page)['view']['span']=='0.18';record('Preset, iterations, palette complete a render')
+ controls(page);page.locator('.preset').nth(3).click();controls(page);page.locator('#iterations').select_option('64');page.locator('[data-palette="1"]').click();ready(page);assert state(page)['view']['span']=='0.18';record('Preset, iterations, palette complete a render')
  page.locator('#grid').check();assert page.locator('#grid').is_checked();record('Coordinate grid')
- page.locator('#helpBtn').click();assert page.locator('#helpDialog').is_visible();assert page.locator('#helpDialog').get_attribute('aria-label');page.keyboard.press('Escape');record('Named explanation dialog and Escape')
+ close_controls(page);page.locator('#helpBtn').click();assert page.locator('#helpDialog').is_visible();assert page.locator('#helpDialog').get_attribute('aria-labelledby');page.keyboard.press('Escape');record('Named explanation dialog and Escape')
  page.locator('#shareBtn').click();page.wait_for_timeout(80)
  if page.locator('#shareDialog').is_visible():
   assert 's=0.18' in page.locator('#shareText').input_value();page.locator('#shareDialog .close-dialog').first.click();record('Share fallback contains complete state URL')
@@ -53,7 +58,7 @@ with sync_playwright() as p:
  before=state(page)['view'];coords(page,'<script>','0','1');assert state(page)['view']==before;record('Invalid coordinates do not replace view')
  coords(page,'0.5','0','1e-30');ready(page);assert state(page)['mode']=='big';record('BigInt deep view completes')
  before=state(page)['view'];page.locator('#viewport').focus();page.keyboard.press('ArrowRight');after=state(page)['view'];assert Decimal(before['x'])<Decimal(after['x']);assert float(before['x'])==float(after['x']);record('Deep pan retains sub-Number coordinate change')
- page.locator('#homeBtn').click();page.locator('#engine').select_option('big');page.wait_for_timeout(30);page.locator('#engine').select_option('cpu');page.locator('#homeBtn').click();ready(page);assert state(page)['mode']=='cpu';assert state(page)['view']['span']=='7';record('Cancellation prevents stale BigInt tiles replacing CPU result')
+ page.locator('#homeBtn').click();controls(page);page.locator('#engine').select_option('big');page.wait_for_timeout(30);page.locator('#engine').select_option('cpu');close_controls(page);page.locator('#homeBtn').click();ready(page);assert state(page)['mode']=='cpu';assert state(page)['view']['span']=='7';record('Cancellation prevents stale BigInt tiles replacing CPU result')
  coords(page,'0.5','0','1e-200');ready(page);assert state(page)['digits']==240;record('Minimum span renders using 240 decimal places',state(page)['lastCompleted']['elapsed'])
  before=state(page)['view'];page.mouse.move(box['x']+px,box['y']+py);page.mouse.wheel(0,-180);page.wait_for_timeout(60);assert state(page)['view']==before;record('Minimum zoom boundary does not drift off-anchor')
  coords(page,'0.5','0','1e12');before=state(page)['view'];page.mouse.wheel(0,180);page.wait_for_timeout(60);assert state(page)['view']==before;record('Maximum zoom boundary does not drift off-anchor')
@@ -63,15 +68,15 @@ with sync_playwright() as p:
  previous=state(page)['view'];page.evaluate('location.hash="v=99&x=0&y=0&s=1"');page.wait_for_timeout(80);assert state(page)['view']==previous;record('Unsupported share schema does not replace current view');page.close()
  context=browser.new_context(viewport={'width':390,'height':844},device_scale_factor=2,is_mobile=True,has_touch=True)
  phone=context.new_page();load(phone);assert phone.evaluate('document.documentElement.scrollWidth<=innerWidth');phone.screenshot(path=str(OUT/'mobile.png'));record('Mobile layout: no horizontal overflow')
- assert phone.locator('#sidebar').evaluate('(el)=>el.inert');phone.locator('#iterations').evaluate('(el)=>el.focus()');assert phone.evaluate('document.activeElement.id')!='iterations';record('Closed mobile drawer cannot receive focus')
- phone.locator('#settingsBtn').click();phone.locator('#sidebar').evaluate('(el)=>Promise.all(el.getAnimations().map(a=>a.finished.catch(()=>{})))');assert phone.locator('#sidebar').bounding_box()['x']>=-0.5;assert phone.evaluate('document.activeElement.id')=='closeSettings';assert phone.locator('#viewport').evaluate('(el)=>el.inert');assert phone.locator('.topbar').evaluate('(el)=>el.inert');record('Open mobile drawer moves focus and inerts background')
- phone.keyboard.press('Shift+Tab');assert phone.evaluate('document.activeElement.id')=='mobileHelpBtn';phone.keyboard.press('Tab');assert phone.evaluate('document.activeElement.id')=='closeSettings';record('Mobile drawer traps forward and reverse Tab')
- phone.screenshot(path=str(OUT/'mobile-settings.png'));phone.keyboard.press('Escape');assert phone.evaluate('document.activeElement.id')=='settingsBtn';assert phone.locator('#sidebar').evaluate('(el)=>el.inert');record('Escape closes drawer and restores focus')
+ assert not phone.locator('#sidebar').is_visible();phone.locator('#iterations').evaluate('(el)=>el.focus()');assert phone.evaluate('document.activeElement.id')!='iterations';record('Closed mobile drawer cannot receive focus')
+ phone.locator('#settingsBtn').click();phone.locator('#sidebar').evaluate('(el)=>Promise.all(el.getAnimations().map(a=>a.finished.catch(()=>{})))');assert phone.locator('#sidebar').bounding_box()['x']>=-0.5;assert phone.evaluate('document.activeElement.id')=='closeSettings';phone.locator('#viewport').evaluate('(el)=>el.focus()');assert phone.evaluate('document.activeElement.id')=='closeSettings';record('Open mobile drawer moves focus and inerts background')
+ phone.keyboard.press('Shift+Tab');assert phone.evaluate('!!document.activeElement.closest("#sidebar")');phone.keyboard.press('Tab');assert phone.evaluate('document.activeElement.id')=='closeSettings';record('Native modal keyboard traversal stays in the controls')
+ phone.screenshot(path=str(OUT/'mobile-settings.png'));phone.keyboard.press('Escape');assert phone.evaluate('document.activeElement.id')=='settingsBtn';assert not phone.locator('#sidebar').is_visible();record('Escape closes drawer and restores focus')
  phone.locator('#settingsBtn').click();phone.locator('#mobileHelpBtn').click();assert phone.locator('#helpDialog').is_visible();phone.keyboard.press('Escape');record('Mobile explanation is reachable')
  session=context.new_cdp_session(phone)
  def touch(kind,points):session.send('Input.dispatchTouchEvent',{'type':kind,'touchPoints':[{'id':i,'x':x,'y':y,'radiusX':3,'radiusY':3} for i,x,y in points]})
  before=state(phone)['view'];touch('touchStart',[(1,130,400),(2,250,400)]);touch('touchMove',[(1,100,400),(2,280,400)]);touch('touchEnd',[]);phone.wait_for_timeout(60);assert Decimal(state(phone)['view']['span'])<Decimal(before['span']);record('Real browser touch dispatch: pinch zoom')
  before=state(phone)['view'];touch('touchStart',[(1,180,410)]);touch('touchMove',[(1,215,435)]);touch('touchEnd',[]);phone.wait_for_timeout(60);assert Decimal(state(phone)['view']['x'])<Decimal(before['x']);record('Real browser touch dispatch: single finger pan')
  context.close();assert not errors,errors;record('No uncaught browser exceptions')
- report={'checks':checks,'count':len(checks),'browser_version':browser.version,'playwright':version('playwright'),'bundle_mode':'served URL' if base_url else 'set_content: not a deployed URL','gpu_in_browser':initial['mode']=='gpu','limitations':['Touch testing uses Chromium emulation, not physical iPhone/Safari.','No public HTTPS deployment was tested.','Untrusted script and network probes intentionally create CSP console messages.']};browser.close()
+ report={'bundle_sha256':hashlib.sha256(HTML.encode()).hexdigest(),'checks':checks,'count':len(checks),'browser_version':browser.version,'playwright':version('playwright'),'bundle_mode':'served URL' if base_url else 'set_content: not a deployed URL','gpu_in_browser':initial['mode']=='gpu','limitations':['Touch testing uses Chromium emulation, not physical iPhone/Safari.','No public HTTPS deployment was tested.','Untrusted script and network probes intentionally create CSP console messages.']};browser.close()
 (OUT/'browser-review.json').write_text(json.dumps(report,indent=2,ensure_ascii=False)+'\n');print('ALL',len(checks),'PASSED',flush=True)

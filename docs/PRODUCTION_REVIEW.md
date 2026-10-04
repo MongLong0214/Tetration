@@ -1,39 +1,52 @@
-# TETRA 0.3.0 — 프로덕션 준비도 리뷰
+# Production review — TETRA 0.4.0
 
-검토일: 2026-10-04. 판정: **실험용 베타 후보, 정식 프로덕션 승인 보류**.
+Review date: 2026-10-04. **Beta release candidate; unrestricted commercial readiness is not yet approved.** The remaining deployment and physical-device gaps are explicit below.
 
-## 출처와 변경
+## Scope
 
-정본은 `tetra-atlas-reviewed.zip` 0.2.0, SHA-256 `89ac19d248b8ca3f488ae6cbd0c6d2323e0b338058ba4644017c8e6acab1364c`입니다. 먼저 복원·검증한 후 사용자의 최신 웹 기술 적용 요청에 따라 기존 앱을 0.3.0으로 확장했습니다. 기존 디자인·카메라·수학 엔진을 유지했습니다.
+Reviewed the complete path: open the map → pan/zoom → select a starting point or exact coordinate → change precision → save/reopen → share/reopen → export. Also reviewed cancellation, graphics failure, unavailable storage/clipboard, keyboard access, small viewports, CSP, build determinism and repository delivery.
 
-- WebGPU/WGSL FP32 렌더러와 5개 안정 기준점 자기 검사. 미지원·장치 손실 시 WebGL2, 이후 CPU 복구.
-- 1–4개 Worker가 중심 우선 타일을 나눠 계산. 코어·메모리 힌트를 참고하며 Worker 생성 제한에서는 작은 풀로 진행.
-- OffscreenCanvas/ImageBitmap 소유권 이전·해제. 미지원 시 기존 픽셀 버퍼 이전 유지.
-- Worker의 scheduler.yield와 타이머 대체 경로. 이동 시 Worker 종료 및 오래된 응답 폐기 유지.
-- WebGPU PNG가 표시 후 검게 저장되는 결함을 재현하고, 표시 텍스처가 만료되기 전 스냅샷을 보존하도록 수정. 실제 PNG 픽셀 회귀 검사 추가.
-- GPU 큐 작업 완료를 기다린 뒤 완료 표시. 런타임 npm 의존성·외부 API·프레임워크·라이선스는 추가하지 않음.
+The work continues the reviewed 0.2.0 archive and published 0.3.0 app. There is no framework migration or backend. The only change inside `core.js` is the grayscale color function. The orbit classifiers and `precision.js` remain unchanged.
 
-## 새 검증 근거
+## Product changes
 
-Node 24.19.0에서 59개 단위·참조·CSP·서버 검사가 통과했습니다. 추가 2개는 FP64/BigInt 병렬 Worker의 픽셀·관측 개수가 단일 Worker와 동일하고 모든 모서리 픽셀이 한 번씩 계산되는지 확인합니다.
+- Edge-to-edge monochrome map. Controls live in a native modal panel; focus mode removes the surrounding interface.
+- English UI, errors, guidance, current README and review documents.
+- Three achromatic shading modes, forward/back history, direct keyboard commands and optional local saved views.
+- Exact-coordinate sharing with native touch-device sharing, clipboard and manual-copy paths.
+- Bounded interactive GPU previews. WebGPU final-image snapshots use an asynchronous ImageBitmap path; moving cancels old work.
+- No runtime dependency, analytics, account, external computation service, paid integration or license change.
 
-실제 loopback HTTP 원점에서 Chromium 153.0.8010.0 / Playwright 1.57.0으로 기존 브라우저 29개, WebGL2 출시 검사 16개, WebGPU·병렬 계산 10개를 통과했습니다. WebGPU 검사에는 3개 팔레트 × 5개 기준점 비교가 포함되며 별도 15개 검사로 중복 집계하지 않습니다. CSP를 비활성화하지 않았습니다.
+## Defects found and fixed
 
-WebGPU는 SwiftShader/Vulkan, WebGL2는 ANGLE/SwiftShader입니다. Chromium의 Vulkan 설정 누락 시 장치 손실을 재현했으며, 지원되는 소프트웨어 Vulkan 설정에서는 렌더·복구를 확인했습니다. 이는 물리 GPU 성능이나 호환성 근거가 아닙니다.
+| Finding | Fix | Regression evidence |
+| --- | --- | --- |
+| A long controls dialog could extend beyond the viewport without usable scrolling | Explicit viewport-bounded dialog height and internal scrolling | Coordinate submit and all primary controls at four viewport sizes |
+| A keyboard-like viewport resize replaced an unfinished coordinate with the current camera value | Preserve coordinate drafts until successful submission or panel closure | Exact decimal draft survives resize and submits |
+| WebGPU preview snapshots forced extra image work during navigation | Skip preview snapshots; asynchronously preserve final frames | WebGPU rendering, cancellation and exported pixel checks |
+| An export in progress could label a different camera state after navigation | Freeze view, iteration limit, completion state and grid at export initiation | Start a partial WebGPU export, immediately navigate, then check actual PNG pixels and captured metadata |
+| Previous interface occupied map space and used mixed color palettes | Closed-by-default controls and neutral luminance shading | Screenshots, layout assertions and CPU/GPU reference pixels |
 
-정확한 실행 출력·빌드 해시·스크린샷은 [검증 기록](VALIDATION.md)에 있습니다. 이전 증거와 문서는 `review/work-2026-10-04/` 및 `review/modern-2026-10-04/before-modern-*`에 보존했습니다.
+## Verification
 
-## 유지하는 한계
+Current local and remote results are listed in [VALIDATION.md](VALIDATION.md). Automated accessibility checks are supporting evidence, not a claim of full WCAG conformance. Items marked incomplete by the checker require manual interpretation; keyboard reachability, focus handling and primary target sizes are separately exercised.
 
-계산은 유한 반복 관측입니다. 임계값 통과·고정점·2주기 후보는 수학적 증명이 아닙니다. 최소 span `1e-200`, 고정밀 최대 240자리, 깊은 확대의 최종 가로 샘플 최대 72개를 유지합니다. 경계에서 엔진 간 차이·오차가 있을 수 있습니다. WebGPU도 FP32이며 병렬화가 정밀도를 높이지는 않습니다.
+Graphics checks use software drivers. Startup, render and deep-view timings depend on the sampled view and test machine. They are not hardware benchmarks or worst-case guarantees. The app stays navigable during Worker computation and rejects stale results after navigation.
 
-## 남은 출시 조건
+## Numerical limits
 
-| 항목 | 상태 |
+Finite observations only. Threshold crossing does not prove divergence. Fixed-point and period-2 classifications are candidates. Minimum span is `1e-200`; high-precision orbits use at most 240 decimal places; deep final passes have at most 72 horizontal samples. Engine transitions are heuristics, not proven error bounds. The arithmetic is not interval-certified.
+
+## Release conditions
+
+| Area | Status |
 | --- | --- |
-| GitHub 전체 게시·소스 일치·원격 CI | 완료. PR #1 병합, 91개 파일 대조, Actions #1 성공. [게시 기록](PUBLISHING.md) |
-| 공개 HTTPS | Vercel 팀 조회 403. 배포·헤더·공유·PNG 재검증 필요 |
-| 하드웨어 GPU | 미검증. 타깃 기기 WebGPU/WebGL2·손실·복구 필요 |
-| 물리 iPhone/Safari | 미검증. 실제 터치·메모리·백그라운드 복귀·공유·PNG 필요 |
+| English monochrome product, bounded navigation and sharing | Implemented; browser evidence recorded |
+| Local numerical, CSP, graphics and interaction checks | See validation evidence |
+| Current GitHub source and CI | See [publication record](PUBLISHING.md) |
+| Public Vercel HTTPS | Blocked by team-scope HTTP 403 until the connection is authorized |
+| Linux WebKit | Added to remote CI; local runtime lacks required system libraries |
+| Physical iPhone/Safari | Not tested |
+| Hardware GPU and sustained mobile memory/thermal behavior | Not tested |
 
-현재 브라우저 검사는 모바일 터치 에뮬레이션이며 실기기 검사가 아닙니다. 새 증거가 없는 항목은 승인으로 바꾸지 않았습니다.
+Public HTTPS verification must confirm the deployed bytes, security headers, Worker execution, exact link sharing and PNG export. Physical Safari must verify actual pinch gestures, OS sharing, download behavior, safe-area layout and background recovery. Those checks are not replaced by desktop emulation.

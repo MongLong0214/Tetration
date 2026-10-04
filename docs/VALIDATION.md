@@ -1,33 +1,36 @@
-# 검증 기록 — 0.3.0 / 2026-10-04
+# Validation — 0.4.0
 
-| 실행 | 결과 | 증거 |
+Date: 2026-10-04. Every result is tied to a build hash in `docs/review/v0.4.0/`. Earlier release evidence remains in Git history.
+
+## Local checks
+
+| Suite | Result | Scope |
 | --- | --- | --- |
-| Node 24.19.0 | 59/59 | [unit-tests.txt](review/modern-2026-10-04/unit-tests.txt) |
-| 결정적 빌드·CSP | 성공 | [build-output.txt](review/modern-2026-10-04/build-output.txt) |
-| HTTP 브라우저 입력·보안·모바일 | 29/29 | [browser-review.json](review/modern-2026-10-04/browser-review.json) |
-| WebGL2·복구·클립보드·응답 헤더 | 16/16 | [browser-release.json](review/modern-2026-10-04/browser-release.json) |
-| WebGPU·병렬 Worker·호환 경로 | 10/10 | [browser-modern.json](review/modern-2026-10-04/browser-modern.json) |
-| 반응형 화면 | 4개 크기 | [visual-modern.json](review/modern-2026-10-04/visual-modern.json) |
-| 소프트웨어 GLES | 8/8 | [gpu-software.json](review/modern-2026-10-04/gpu-software.json) |
-| GitHub Actions | 성공: Node 59 + 브라우저 29/16/10 | [실제 응답](review/modern-2026-10-04/remote-publication.json), [출력](review/modern-2026-10-04/remote-ci-output.txt) |
+| `npm test` | 65 passed; 0 failed or skipped | Numerical arithmetic, independent finite-orbit references, deterministic CSP/build/server behavior, Worker pixel parity, saved-view validation and product constraints |
+| `test:browser` | 29 passed | Map input, finite precision, CSP and mobile emulation |
+| `test:release` | 16 passed | WebGL2, context loss, clipboard, exact links and HTTP headers |
+| `test:modern` | 12 passed | WebGPU/parallel Workers, 15 reference pixels, completed/partial PNGs and ImageBitmap-unavailable fallback |
+| `test:explorer` | 21 passed | Saved coordinates, history, focus, resize drafts, share/storage fallbacks, four viewport sizes and accessibility |
+| Software GLES | 8 passed | Production shader compilation/link and stable pixels |
 
-Chromium 153.0.8010.0, Playwright 1.57.0. WebGPU는 SwiftShader/Vulkan, WebGL2는 ANGLE/SwiftShader. GLES는 llvmpipe 소프트웨어 렌더입니다. 실기기·물리 GPU·공개 HTTPS 검사를 뜻하지 않습니다.
+The final counts and pass states are in the adjacent JSON and text evidence. Browser scripts run on a real loopback HTTP origin with the production CSP enabled. No `unsafe-eval`, `unsafe-inline` or CSP bypass is added to make the app pass.
 
-Node 검사에는 300자리 독립 참조와 240자리 구현을 비교하는 12개 입력 및 미세 좌표 구분 검사가 포함됩니다. 일부 유한 궤도 검증이며 보편적 오차 상한이나 수학적 증명이 아닙니다. WebGPU 브라우저 10개 검사 안에는 총 15개 기준 픽셀과 실제 PNG 픽셀 검사가 포함됩니다.
+Six axe-core scans reported zero violations. The `color-contrast` rule returned incomplete nodes, so this is not a full accessibility conformance claim. Screenshots and neutral text/background pairs were reviewed separately, including a conservative white image beneath translucent map labels; sampled text contrast was at least 5.58:1. Native focus isolation, keyboard paths and 44px primary targets have separate browser assertions. See `accessibility-review.json` for scope and exclusions.
 
-## 재현
+The reproducible HTML is 88,999 bytes, SHA-256 `11f2747dc69c7700d823d6b693d0bb4e54c472860e98e8901fb996ad4d86de2d`.
 
-```bash
-npm test
-npm run build
-python3 -m pip install -r tests/requirements.txt
-python3 -m playwright install chromium
-# 다른 터미널에서 npm start
-TETRA_BASE_URL=http://127.0.0.1:4173 npm run test:browser
-TETRA_BASE_URL=http://127.0.0.1:4173 npm run test:release
-TETRA_BASE_URL=http://127.0.0.1:4173 npm run test:modern
-```
+## Environment and interpretation
 
-`CHROMIUM_PATH`로 실행 파일을 지정할 수 있습니다. WebGPU 검사는 소프트웨어 Vulkan을 요청하는 Chromium 플래그를 명시합니다. WebGL2 검사는 WebGPU를 테스트에서만 숨겨 대체 경로를 독립적으로 확인합니다. CSP를 완화하지 않습니다. PNG 판독용 Pillow는 QA 의존성입니다.
+Local runtime: Node 24.19.0; Chromium 153.0.8010.0; Playwright 1.57.0; axe-core 4.11.0. WebGL2 uses ANGLE/SwiftShader; WebGPU uses SwiftShader/Vulkan. Separate GLES uses llvmpipe. These are software drivers.
 
-빌드 및 증거 무결성: [SHA256SUMS.txt](review/modern-2026-10-04/SHA256SUMS.txt). 원격 결과: [게시 기록](PUBLISHING.md).
+The WebGPU launch flags explicitly enable software Vulkan. The legacy suite hides WebGPU only inside its test context to independently exercise WebGL2 and CPU fallbacks. The native-share test uses an API stub and does not claim an actual phone share sheet was tested.
+
+Playwright WebKit 26.0 was downloaded locally, but its required GTK/GStreamer system libraries are absent. The GitHub workflow installs these dependencies and runs `test:webkit`. Its actual result is recorded after the run, not assumed in advance. Linux WebKit is not physical Safari.
+
+The numerical tests compare selected finite orbits against independent high-precision references. They do not certify every coordinate, prove convergence or establish a universal error bound.
+
+## Reproduce
+
+Follow the commands in the [README](../README.md). Browser output goes to `tests/review-output/`; current review evidence is copied into this directory's `review/v0.4.0/` subdirectory. `SHA256SUMS.txt` records evidence and bundle hashes. CI stores browser artifacts for seven days.
+
+Public HTTPS, physical iPhone/Safari and hardware GPU validation remain separate release conditions.
