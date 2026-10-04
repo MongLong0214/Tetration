@@ -1,50 +1,45 @@
-# Production review — TETRA 0.5.0
+# Production review — TETRA 1.0.0
 
-Review date: 2026-10-04. **Beta release candidate. Full commercial readiness remains withheld pending the deployment and device conditions below.**
+Review date: 2026-10-04. Scope: the complete source (`src/`), build, server, headers, tests and documentation, reviewed against one goal: explore an effectively unbounded tetration fractal quickly, comfortably and at maximum sharpness, then save and share it.
 
-## Scope and provenance
+## Findings in 0.5.0 and what changed
 
-Continues public main `4b16c005c635ac73ee0f11019524e8e1d68f5f4c` and the reviewed 0.2.0 archive. No framework migration, backend, paid integration, runtime dependency or license change. The finite orbit classifiers and `precision.js` are unchanged; the numerical core's display palette is updated.
-
-Reviewed the user path: open → choose a starting point → pan/zoom → change quality/palette/engine → focus → save/reopen → share/reopen → export. Failure paths include cancelled work, GPU loss, unavailable image-transfer features, blocked storage/clipboard, precise-coordinate drafts, small viewports and CSP enforcement.
-
-## Improvements and defects
-
-| Finding | Change | Evidence |
-| --- | --- | --- |
-| Low final sampling exposed coarse pixels | Bounded display-resolution GPU frames; adaptive four-sample edges; high-quality CPU image interpolation | Pixel dimensions and independent 16-sample image comparison |
-| Every drag movement launched orbit work | Reproject the cached image; restart tiles after release | Zero GPU tile draws during the recorded drag; frame timing record |
-| Copying tile images to the CPU added overhead | GPU-resident textures/framebuffers, scissored tiles, nonblocking completion waits | WebGL2/WebGPU output and export checks; no seam error in sampled WebGL2 image |
-| Cancelled GPU work could overlap replacement submission | Await the outstanding tile before a new frame starts | Cancellation and renderer-loss regressions |
-| The monochrome map did not support the requested visual experience | Three continuous ramps, observed fixed-point phase tint, optional hue flow, curated finite-coordinate views | Actual screenshots, all-palette reference pixels and motion/share checks |
-| CPU preview returned to the old camera while new Workers started | Bake the cached transform into the CPU seed image | Reproduced channel error 245 before the fix, at most 1 permitted after it with Worker replies intentionally withheld |
-| Export could change presentation state while capture was pending | Freeze camera, hue, grid and completion state before asynchronous capture | Completed and partial PNG checks across navigation |
-
-The antialiasing detector compares a native one-sample image with its neighbors. It only recomputes detected edges, so it is not exhaustive supersampling and can miss subpixel structures. The image-quality comparison covers one sampled camera, not every boundary. Palettes represent finite observations; no artificial detail or generated artwork is used for the map.
+| Finding (0.5.0) | Impact | Change in 1.0.0 | Evidence |
+| --- | --- | --- | --- |
+| Deep views (pixel spacing below 10⁻¹³) fell back to per-pixel BigInt at **at most 72 horizontal samples** | Zooming in destroyed sharpness; 10⁻¹⁵ and deeper looked like a mosaic | Perturbation: exact reference orbit plus FP32 offsets with an integer exponent on the GPU; FP64 offsets on the CPU fallback | Full display resolution at 5e−11, 7e−25, 7e−100 and 1e−200 (`browser-deep.json`) |
+| Medium depths (about 10⁻⁵ to 10⁻¹³) ran on CPU FP64 Workers | Slow; image capped at 2,048 px | Same GPU perturbation path, interactive | Live frames at 10²⁵ (`browser-perf.json`) |
+| No rendering while moving; only the previous image was reprojected | Panning revealed black edges; zooming showed stretched pixels until release | Live single-sample frames sized to the measured GPU speed, then progressive refinement | 39–60 live frames per 2 s drag on software WebGL2 |
+| Instant jumps on wheel/buttons; no inertia | Navigation felt abrupt | Glide towards the exact target, inertia after flicks; both off with reduced motion | `browser-quality.json` |
+| Fixed iteration limit (max 1,024) | Deep views turned uniformly unresolved (escape times grow ≈30 steps per decade) | Auto limit `320 + 34 × decades`, up to 16,384 | Escape statistics measured to 10⁻¹⁰⁴; auto limits checked in the deep suite |
+| Log-only colour mapping | Deep views collapsed into one or two dark shades | Log + linear band cycling, identical on CPU and GPU | Distinct-colour unit test; deep screenshots |
+| WebGPU re-rendered each view once ready; two shader dialects | Double work at startup, more code paths, no precision benefit (also FP32) | Single WebGL2 backend | Bundle checks |
+| Workers recreated for every render; whole view recomputed after each tab switch | Startup cost per view; wasted work | Persistent pool; completed views are kept | Code review, release suite |
+| `atan(-0., x)` returns π on ANGLE/SwiftShader | Mirrored real fixed points could be recoloured | Real-axis angle resolved explicitly in the palette | Found by the GPU-vs-FP64 harness; covered by symmetry checks |
+| Texture ownership by set membership | Overlapping cancelled and new jobs could recycle a texture still read as an adaptive seed | Reference-counted pins and job-held frame sets | Sixty-action leak check: 4 live textures |
+| Resize waited 90 ms while still reporting the old render as complete | Stale state; tests could read the wrong size | Resize invalidates at once and refines live | Focus-mode resolution check |
+| `preserveDrawingBuffer: false` attempt during the rewrite | Black canvas while tiles were drawn offscreen in Chromium | Kept `true` | Deep display check |
 
 ## Engineering review
 
-- Explicit frame ownership retains the native image for the adaptive pass and releases superseded textures. A cancelled incomplete frame cannot replace a newer camera.
-- WebGPU qualification, WebGL2 context loss and Worker fallback are exercised in actual browsers using software graphics drivers.
-- Display work is bounded to 8,294,400 pixels, device density at most 2 and each GPU dimension at most 8,192. FP64 is bounded to 1.6 million samples / 2,048 across. This bounds work, not device memory availability or completion time.
-- The map and controls are English. Keyboard commands, modal focus, primary target sizes, exact links, local saved views and blocked-storage behavior are tested.
-- The production CSP remains enabled, with exact script/style hashes and no unsafe-eval or unsafe-inline allowance. No analytics or network computation service was added.
-- Flow is optional, pauses while hidden and stops on a reduced-motion preference change. A copied URL does not turn it on.
+- **Numerics.** The reference orbit equals an independent decimal BigInt orbit to double rounding at 6 locations (including the branch cut, large and tiny moduli and a 224-digit point). FP64 perturbation agrees with exact per-pixel orbits on every short orbit in 13 views; disagreements occur only in long chaotic orbits (≤5% of pixels), where FP64 *direct* computation disagrees 10–16% of the time. The full value is always formed as `V·exp(ε)`, never `V + d`, which removed a cancellation found during review (78 → 40 mismatches over 3,000 sampled pixels).
+- **GPU perturbation.** Structured views match FP64 perturbation pixel for pixel on the GPU; exact 95-digit orbits match sampled GPU pixels at 1e−55. Chaotic views keep the FP64 structure and class statistics (block-average colour difference ≤18/255). Both FP32 reference storage and FP32 offset arithmetic would each need double-float emulation to reproduce FP64 noise pixel for pixel; the visual result was judged equivalent and FP64 remains available as an engine.
+- **Scheduling.** GPU work is split into tile batches of about 14 ms with a per-draw orbit-work cap, so no draw approaches driver watchdog limits. Interactive frames drop to coarser resolution on slow GPUs instead of stalling the compositor (deep-view frame-gap p95 66 ms on SwiftShader).
+- **State.** Every camera or setting change goes through one invalidation path (`changed`), with a logical camera (exact, shared, rendered) and a visual camera (displayed during glides). Final renders start only when the camera rests and no pointer is down.
+- **Security.** CSP with exact hashes, no unsafe-inline/eval, no network access from the page; Workers from `blob:` and the same-origin service worker only. Saved-view names are rendered as text; links and storage are validated and bounded.
+- **Resilience.** WebGL context loss falls back to FP64 Workers (including deep perturbation) and recovers on restoration; missing WebGL2, OffscreenCanvas, `scheduler.yield`, Worker quota or Workers entirely all keep the app usable.
+- **Accessibility.** Native dialogs with focus management, 44 px targets, keyboard paths for every action, reduced-motion support; axe-core finds no violations in 7 states (colour-contrast over the map is reported as incomplete, as before).
 
 ## Numerical and performance limits
 
-Threshold crossing is not a divergence proof; fixed points and periods are candidates. Minimum span remains `1e-200`, high-precision orbit arithmetic at most 240 decimal places, and deep final images at most 72 horizontal samples. BigInt arithmetic is truncated rather than interval-certified. Smooth interpolation cannot restore uncomputed deep detail.
-
-The updated full-resolution antialiased frame takes longer to finish than the old smaller single-sample frame on the measured software GPU. Interaction becomes smoother because dragging reuses the image. The exact comparison, environment and bundle hash are in [VALIDATION.md](VALIDATION.md). Neither continuous real-time rendering at every coordinate nor a five-hour session is certified.
+Threshold crossing is not a divergence proof; fixed points and periods are candidates. Minimum span `1e-200`; reference precision at most 256 digits; iteration limit at most 16,384. BigInt arithmetic truncates and is not interval-certified. FP32 GPU offsets reproduce structure but not the exact noise inside chaotic regions. Very deep views at high iteration limits need seconds to refine on weak GPUs.
 
 ## Release conditions
 
-| Area | Current status |
+| Area | Status |
 | --- | --- |
-| Local units, browser interactions, software GPU, quality checks | Passed; see current evidence |
-| Remote GitHub CI, including Linux WebKit | Passed: Chromium 87 checks, Linux WebKit 10, plus Node test/build |
-| Public Vercel HTTPS | Not yet verified; current team-scope lookup returns HTTP 403 |
-| Physical iPhone/Safari and hardware GPU | Not tested |
-| Five-hour sustained memory, battery and thermal behavior | Not tested |
+| Unit tests, build, Chromium browser suites (review, release, deep, quality, explorer, perf) | Passed locally; see [VALIDATION.md](VALIDATION.md) |
+| Linux WebKit suite | Runs in GitHub Actions (the local network policy blocks WebKit downloads) |
+| Public Vercel HTTPS | Not verified (see [PUBLISHING.md](PUBLISHING.md)) |
+| Physical iPhone/Safari, hardware GPUs, five-hour thermal soak | Not tested |
 
-Public HTTPS review must confirm deployed bytes, security headers, Worker execution, shared-view restoration and PNG export. Physical Safari review must cover actual pinch input, OS sharing, downloads, safe areas and background recovery. Linux WebKit and touch emulation do not replace these checks.
+Public HTTPS review must confirm deployed bytes, headers, Worker execution, the service worker and offline reload, shared-view restoration and PNG export. Physical Safari review must cover pinch input, the share sheet with images, downloads, safe areas, background recovery and installation.

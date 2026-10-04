@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.0.0
+
+Infinite zoom at full resolution, live interaction and an installable app.
+
+- **Perturbation deep zoom.** One exact reference orbit per view (binary fixed-point BigInt in a Worker, about 3× faster than the previous decimal arithmetic) and per-pixel FP32 offsets on the GPU with a mantissa/exponent representation, series for small arguments, exact threshold differences, rebasing and conjugate mirroring across the branch cut. Every depth down to 1e−200 now renders at full display resolution; the previous deep path stopped at 72 horizontal samples.
+- **Auto iterations** grow with depth (`320 + 34 × decades`, up to 16,384); fixed limits now reach 16,384.
+- **Live interaction.** Dragging, pinching and wheel zoom show freshly computed single-sample frames sized to the GPU's measured speed; wheel and button zooms glide, drags carry inertia (both disabled by reduced motion). The final render no longer recomputes after tab switches when it was complete, and window resizes refine immediately.
+- **Ultra quality** (default on precise pointers) adds adaptive 16-sample edges after the 4-sample pass, with a rotated-grid 4-sample pattern. Measured error against 64-sample references fell by 78% versus one sample in the overview.
+- **Speed.** Adaptive tile batches (~14 ms each) with a texture pool, persistent Worker pool (up to 8), reference reuse while panning and zooming, and a fast fence-polling path.
+- **Colour at depth.** Escape bands combine the logarithmic mapping with a linear cycle so deep views no longer collapse into one shade. A driver bug (`atan(-0., x)` returning π on ANGLE/SwiftShader) that recoloured mirrored fixed points is avoided.
+- **Discover** (D) jumps to a new detailed place; three deep starting points (Plume 10¹¹, Abyss 10²⁵, Horizon 10¹⁰⁰) join the presets.
+- **Sharing.** Save image opens the native share sheet with the PNG on supporting touch devices.
+- **Installable offline shell.** Manifest, icons rendered from the fractal and a network-first service worker.
+- **Robustness.** GPU context restoration returns to the GPU; the main thread computes references when Workers are blocked; reference-counted frame ownership prevents texture reuse while a stage still reads it.
+- **Security headers.** HSTS, Cross-Origin-Opener-Policy and Cross-Origin-Resource-Policy; the CSP allows the same-origin service worker and manifest only.
+- WebGPU was removed. It used the same FP32 arithmetic, doubled the shader code paths and re-rendered every view once it became ready; WebGL2 is available in every supported browser.
+- Test suites rewritten: 96 unit tests and seven browser suites, including GPU-versus-exact pixel comparisons at every depth, performance budgets and leak checks.
+
+Finite classifiers keep their thresholds; GPU rules (−80 underflow, |b| > 10⁶, tolerance 2·10⁻⁶) now also govern GPU perturbation, so the image does not change when the camera crosses between direct and perturbation rendering.
+
 ## 0.5.0
 
 - Added Aurora, Ember and Tidal palettes, finite fixed-point phase shading, an optional slow color cycle, and more visually useful starting points. Mono remains available.

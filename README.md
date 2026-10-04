@@ -1,33 +1,32 @@
 # TETRA
 
-A browser-native tetration explorer. Move through the complex plane, inspect its boundaries, save coordinates and share what you find.
+A browser-native tetration explorer. Dive from the whole complex plane to 10²⁰⁰ magnification at full display resolution, discover new places, save coordinates and share exact views.
 
-![TETRA explorer](docs/review/v0.5.0/desktop.png)
+![TETRA explorer](docs/review/v1.0.0/desktop.png)
 
 [![Validate](https://github.com/MongLong0214/Tetration/actions/workflows/ci.yml/badge.svg)](https://github.com/MongLong0214/Tetration/actions)
 
-**0.5.0 · beta release candidate.** Public deployment and device qualification are tracked in the [production review](docs/PRODUCTION_REVIEW.md). The app observes finite iterations; it does not prove convergence or divergence.
+**1.0.0.** Public deployment and device qualification are tracked in the [production review](docs/PRODUCTION_REVIEW.md). The app observes finite iterations; it does not prove convergence or divergence.
 
 ## Explore
 
-The map fills the workspace. Open **Explore** for starting points, render settings, precise coordinates and saved views. **Focus** hides the interface. **Share** copies the exact current view, or opens native sharing on supported touch devices. **Export PNG** saves the displayed result and labels incomplete previews.
+The map fills the workspace. Drag, scroll or pinch anywhere: the image follows immediately and keeps refining while you move. When you pause, it resolves at full display resolution and then smooths edges with up to 16 orbit samples per pixel.
 
 | Action | Input |
 | --- | --- |
-| Pan | Drag / arrow keys; Shift + arrow for larger steps |
+| Pan | Drag (with inertia) / arrow keys; Shift + arrow for larger steps |
 | Zoom | Scroll / pinch / + and − |
 | Zoom into a point | Double-click |
-| Overview / starting points | Home / 1–4 |
+| Discover a new detailed place | D or the ✦ button |
+| Overview / starting points | Home / 1–7 |
 | Previous / next view | Alt + Left / Right |
 | Focus / controls | F / C |
-| Saved views / share / PNG | B / S / E |
+| Saved views / share / save image | B / S / E |
 | Grid / guide | G / ? |
 
-The fractal has three continuous color palettes: **Aurora**, **Ember** and **Tidal**, plus **Mono**. Controls remain neutral. **Detail** resolves the display grid and adds adaptive antialiasing; **Fast** skips the extra edge pass. Try **Bloom**, **Filaments** or **Feather**, then hide the interface with **Focus**.
+Seven starting points range from the overview to **Plume** (10¹¹), **Abyss** (10²⁵) and **Horizon** (10¹⁰⁰). Palettes: **Aurora**, **Ember**, **Tidal** and **Mono**. Escape bands keep cycling through the palette at depth, where every pixel needs thousands of steps. Optional **Color flow** rotates hues without recomputing; it starts off, pauses in a hidden tab and stops when reduced motion is requested.
 
-Optional **Color flow** slowly rotates the displayed hues without moving the camera or recomputing orbits. It starts off, pauses in a hidden tab and stops when the reduced-motion preference changes. Shared links preserve the captured hue and quality setting, but never start animation automatically. Color is an artistic encoding of finite observations, not a proof.
-
-Save up to 24 named views on the current device. Storage is optional: the app remains usable when it is blocked. A shared URL is a separate, portable copy of your coordinates. There is no account or cloud synchronization.
+**Share** copies the exact view link (or opens the native share sheet on touch devices). **Save image** downloads a PNG at the rendered resolution; on touch devices that support file sharing it opens the share sheet with the image. Up to 24 named views can be saved on the device. TETRA installs as an app and reopens offline.
 
 ## Run
 
@@ -35,16 +34,12 @@ Node.js 22 or 24; `.nvmrc` selects 24. No npm installation is required to build 
 
 ```bash
 npm test
-npm run dev
-# http://localhost:4173
+npm run dev        # builds, then serves http://localhost:4173
+npm run build      # dist/: index.html, sw.js, manifest.webmanifest, icons
+npm start          # serve the build
 ```
 
-```bash
-npm run build       # dist/index.html
-npm start          # serve the build locally
-```
-
-The development server binds to loopback. Use `HOST=0.0.0.0` only for intentional LAN testing. It is not a public hosting server. There is no file watcher: rebuild after editing. HTTPS hosting is recommended for sharing and graphics features.
+The development server binds to loopback; use `HOST=0.0.0.0` only for intentional LAN testing. There is no file watcher: rebuild after editing. Service workers and clipboard sharing need HTTPS (or localhost).
 
 ## Computation
 
@@ -56,42 +51,49 @@ wₙ₊₁ = exp(wₙ · Log(z))
 Arg(z) ∈ (−π, π]; the negative real axis uses +π
 ```
 
-Zero is excluded. This is finite, integer-height power-tower iteration, not an analytic extension to arbitrary real or complex heights.
+Zero is excluded. This is finite, integer-height iteration, not an analytic extension to arbitrary heights.
 
 | Observation | Interpretation |
 | --- | --- |
 | Fixed-point candidate | Consecutive values repeatedly approach within a tolerance |
 | Period-2 candidate | Values repeatedly approach the value two steps earlier |
 | Unresolved | No other stopping condition within the iteration limit |
-| Threshold crossed | A condition corresponding to magnitude above 10¹⁰ was observed |
-| Numerical limit | Undefined input, overflow, underflow or precision/range constraints |
+| Threshold crossed | Re(w · Log z) exceeded ln 10¹⁰, i.e. the next |w| would pass 10¹⁰ |
+| Numerical limit | Undefined input, underflow, or a phase too large to resolve |
 
-**No shade proves convergence, periodicity or divergence.** Engines use different numerical tolerances, so boundaries can change between modes.
+**No shade proves convergence, periodicity or divergence.** Engines differ in numerical tolerance, so boundaries and chaotic regions can change between engines.
+
+### Deep zoom by perturbation
+
+Shallow views are iterated directly in FP32 on the GPU. Below a pixel spacing of 2⁻¹⁶ of the coordinate scale, TETRA switches to perturbation:
+
+1. One **reference orbit** `V[k]` is computed in a Worker with binary fixed-point BigInt arithmetic at the view's precision (depth + 40 digits, up to 256).
+2. Every pixel iterates only its offset `d = w − V` on the GPU: `ε = V·δL + d·L`, `w' = V'·exp(ε)`, `d' = V'·expm1(ε)`, with `δL = log1p((z − z₀)/z₀)`.
+3. Offsets are stored as an FP32 mantissa with an integer exponent, so spans far below the FP32 range keep full relative precision. Small arguments use series instead of GPU built-ins.
+4. Threshold crossing compares against the exact difference `ln 10¹⁰ − Re(L₀V[k])`, so boundaries near the reference stay exact.
+5. A pixel rebases to the virtual start `V[0] = 0` when `|w| < |d|` or when the reference ends; lower-half pixels use the conjugate orbit of their mirror image, which handles the branch cut with one reference.
+
+The reference is reused while panning and zooming (within 64 spans and 16 decades of extra depth). With **Auto** iterations the limit grows as `320 + 34 × decades` (quantised to 256 … 16,384), because escape times grow by about 30 steps per decade of zoom.
 
 | Limit | Implementation |
 | --- | --- |
 | Camera coordinates | 256 decimal places, fixed point |
-| Orbit precision | 40–240 decimal places |
+| Reference precision | 30–256 decimal places |
 | Horizontal span | 1e−200 to 1e12 |
 | Each coordinate component | −1e12 to 1e12 |
-| Iteration limit | 64, 128, 256, 512 or 1,024 |
-| Final deep-view resolution | At most 72 horizontal samples |
+| Iteration limit | Auto, or 64 … 16,384 |
+| Display resolution | Every depth: display pixels up to 2× density, 8.3 MP and 8,192 px per side |
 
-Deep views can be slow and visibly coarse. BigInt arithmetic uses truncation, not certified error intervals. Preserving a coordinate is not the same as proving its computed boundary. Infinite precision, unlimited resolution and real-time rendering are not promised.
+FP32 perturbation reproduces FP64 perturbation pixel for pixel in structured regions and keeps the same structure and class statistics in chaotic regions, where any finite precision changes individual pixels. **CPU · FP64** renders the same deep views with FP64 offsets (slower, higher numerical fidelity). **Exact · slow** evaluates each pixel with decimal BigInt orbits at up to 72 horizontal samples, as a check.
 
-## Rendering and privacy
+## Rendering, speed and privacy
 
-- Qualified **WebGPU / WGSL**, then **WebGL2 / GLSL**, provide FP32 images. Five stable reference pixels gate WebGPU initialization.
-- GPU images stay in GPU memory. Center-first tiles progressively show a small preview, the display-resolution image, then adaptive four-sample edges. A native one-sample texture is the immutable edge-detection source; flat areas retain their original sample.
-- GPU resolution is capped at **8,294,400 pixels**, **2× device density** and **8,192 pixels per dimension**. This can reach a 4K pixel budget; it is not an unlimited-resolution or frame-rate guarantee.
-- Dragging repositions the cached image immediately. Orbit work resumes after release; changing views cancels stale results and waits for outstanding GPU work before starting replacement tiles. Reprojection does not create new mathematical detail.
-- A pool of **1–4 Workers** handles FP64 and high precision. FP64 final grids use at most 1.6 million samples / 2,048 across. Deep-view limits remain unchanged: at most 72 across, with smooth display interpolation rather than invented detail.
-- **OffscreenCanvas / ImageBitmap** transfers Worker tiles where supported; transferable pixel buffers remain the fallback. PNG export snapshots the GPU once and preserves the captured camera, hue, grid and completion label.
-- No framework, runtime npm dependency, external computation API, analytics script or login. Saved views are written only after an explicit save/remove action. Hosting access logs are separate from the app.
+- **WebGL2 / GLSL ES 3.0** renders everything on the GPU. Frames are drawn in GPU-resident tiles whose batch size adapts to the measured speed (about 14 ms per batch), so input stays responsive and drivers are never asked for multi-second draws.
+- While the camera moves, single-sample frames are rendered at the resolution the GPU can finish within about 12 ms and displayed immediately; wheel zoom glides and drags carry inertia. After a pause the view refines: full-resolution single sample, then adaptive 4× and 16× samples where edges are detected.
+- Without WebGL2, or after a GPU loss, a persistent pool of 1–8 Workers renders FP64 (direct or perturbation); OffscreenCanvas/ImageBitmap tiles are used where available. A restored GPU context is used again automatically.
+- No framework, runtime dependency, external computation API, analytics or login. Saved views are written only after an explicit save/remove action. The service worker only caches the app's own files (network first).
 
-A controlled software-GPU run found smoother drag response, but the larger antialiased image takes longer to finish than 0.4.0. See [measured results and limitations](docs/VALIDATION.md). Five-hour sessions, physical GPU performance and mobile thermal behavior have not been qualified.
-
-The build hashes exact script and stylesheet bytes into its CSP. It does not permit `unsafe-inline` or `unsafe-eval`. `connect-src 'none'` blocks app fetches; Workers are limited to blob URLs. Do not modify the built inline code without rebuilding.
+The build hashes the exact script and stylesheet bytes into its CSP: no `unsafe-inline` or `unsafe-eval`, `connect-src 'none'`, Workers from `blob:` and the same-origin service worker only. Do not modify the built inline code without rebuilding.
 
 ## Deploy
 
@@ -105,9 +107,7 @@ Import **MongLong0214/Tetration** into Vercel with the committed configuration:
 | Install command | `echo No dependencies` |
 | Environment variables | None |
 
-`vercel.json` includes anti-framing, MIME sniffing, referrer, permissions and cache headers. The HTML contains the script/style CSP. Other hosts must supply equivalent response headers. URL fragments carry the view; no server route rewrite is needed.
-
-The connected Vercel account currently rejects the intended team scope with HTTP 403. See [publication status](docs/PUBLISHING.md) for the actual deployment result. No live URL is claimed until HTTPS verification succeeds.
+`vercel.json` adds anti-framing, MIME sniffing, referrer, permissions, HSTS, cross-origin opener/resource policies and revalidation headers. Other hosts must supply equivalent headers and serve `sw.js` as JavaScript. URL fragments carry the view; no route rewrite is needed. See [publication status](docs/PUBLISHING.md): no live URL is claimed until HTTPS verification succeeds.
 
 ## Verify
 
@@ -117,31 +117,39 @@ npm run build
 python3 -m pip install -r tests/requirements.txt
 npm install --no-save --package-lock=false --ignore-scripts axe-core@4.11.0
 python3 -m playwright install --with-deps chromium webkit
-# Start npm start in another terminal, then:
-TETRA_BASE_URL=http://127.0.0.1:4173 npm run test:browser
-TETRA_BASE_URL=http://127.0.0.1:4173 npm run test:release
-TETRA_BASE_URL=http://127.0.0.1:4173 npm run test:modern
-TETRA_BASE_URL=http://127.0.0.1:4173 npm run test:quality
-TETRA_BASE_URL=http://127.0.0.1:4173 npm run test:explorer
-TETRA_BASE_URL=http://127.0.0.1:4173 npm run test:webkit
+npm start &                      # serves dist on http://127.0.0.1:4173
+export TETRA_BASE_URL=http://127.0.0.1:4173
+npm run test:e2e                 # review, release, deep, quality, explorer, perf
+npm run test:webkit
 ```
 
-`CHROMIUM_PATH` selects an existing Chromium executable. `AXE_CORE_PATH` selects an existing axe-core script. These are test-only tools. The app does not ship them. GitHub Actions runs the checks on a served origin and preserves browser evidence for seven days.
+| Suite | Scope |
+| --- | --- |
+| `npm test` | Reference orbits vs decimal BigInt, FP64 perturbation vs exact orbits, Workers, discovery, CSP/build/server/offline shell, saved views, rendering utilities |
+| `test:browser` | Core flows, CSP enforcement, exact links, limits, mobile focus and touch |
+| `test:release` | Served headers and bytes, reference pixels, engine switching, GPU loss/restore, degraded features, offline reload |
+| `test:deep` | GPU perturbation vs FP64 and exact orbits, full resolution at every depth, symmetry, seams, reference reuse, deep zoom session |
+| `test:quality` | Antialiasing error vs 64-sample references, live frames, glide, inertia, reduced motion, colour flow |
+| `test:explorer` | Saved views, history, shortcuts, discovery, sharing, fallbacks, viewports, axe-core |
+| `test:perf` | First frame, live-frame cadence, main-thread long tasks, reference speed, resource leaks |
+| `test:webkit` | Linux WebKit flows (CI) |
 
-See [validation evidence](docs/VALIDATION.md), [production review](docs/PRODUCTION_REVIEW.md) and [changelog](CHANGELOG.md). Linux software graphics, mobile emulation and Playwright WebKit are not physical GPU or iPhone/Safari qualification.
+`CHROMIUM_PATH` selects a Chromium executable and `AXE_CORE_PATH` an axe-core script. GitHub Actions runs every suite in parallel on a served origin and keeps the reports for 14 days. Software graphics, emulated touch and Linux WebKit are not physical GPU or iPhone/Safari qualification. See [validation evidence](docs/VALIDATION.md) and the [changelog](CHANGELOG.md).
 
 ## Structure
 
 | Path | Purpose |
 | --- | --- |
-| `src/main.js` | Camera, input, navigation, orchestration and export |
-| `src/core.js`, `src/precision.js` | Finite orbit classification and numerical arithmetic |
-| `src/gpu.js`, `src/webgpu.js`, `src/render.js` | GPU frames, progressive sampling and display utilities |
-| `src/worker.js`, `src/saved.js` | Parallel tiles and validated local saved views |
-| `src/index.html`, `src/style.css` | English neutral interface around the colored map |
-| `tests/` | Numerical references and browser regression suites |
-| `docs/review/v0.5.0/` | Current review evidence |
+| `src/main.js` | Camera, gestures and motion, render orchestration, references, export, UI |
+| `src/reference.js` | Binary fixed-point reference orbits for perturbation |
+| `src/core.js`, `src/precision.js` | Orbit classification (FP64, perturbation, exact), palettes, discovery, decimal arithmetic |
+| `src/gpu.js`, `src/render.js` | WebGL2 direct and perturbation shaders, frames and tiles; resolution and scene utilities |
+| `src/worker.js`, `src/saved.js` | Reference/tile/discovery Worker and validated local saved views |
+| `src/sw.js`, `src/manifest.webmanifest`, `src/assets/` | Offline shell and app icons |
+| `src/index.html`, `src/style.css` | Interface around the map |
+| `tests/` | Numerical references, unit tests and browser suites |
+| `docs/review/v1.0.0/` | Current review evidence |
 
-Report bugs with a shared view URL, device/browser, iteration limit and precision mode. Numerical changes should include a reproducible case and independent reference values.
+Report bugs with a shared view URL, device/browser, iteration limit and engine. Numerical changes should include a reproducible case and independent reference values.
 
 No license has been added or changed. The repository owner selects the license. `private: true` prevents npm publication; it does not make this GitHub repository private.

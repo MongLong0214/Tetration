@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 if (require.main === module) require('./build.cjs');
 const headers = Object.fromEntries(require('./vercel.json').headers[0].headers.map(({key, value}) => [key, value]));
+const types = {'.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.webmanifest': 'application/manifest+json', '.png': 'image/png', '.json': 'application/json'};
 function createServer(directory = path.resolve(__dirname, 'dist')) {
   const root = fs.realpathSync(directory);
   return http.createServer(async (req, res) => {
@@ -19,7 +20,7 @@ function createServer(directory = path.resolve(__dirname, 'dist')) {
       const stat = await fs.promises.stat(file);
       if (!stat.isFile()) return send(404, 'Not found');
       const data = await fs.promises.readFile(file);
-      send(200, data, {'Content-Type':file.endsWith('.html')?'text/html; charset=utf-8':'application/octet-stream','Content-Length':data.length});
+      send(200, data, {'Content-Type':types[path.extname(file)]||'application/octet-stream','Content-Length':data.length});
     } catch (error) {
       send(error instanceof URIError ? 400 : 404, 'Not found');
     }

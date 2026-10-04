@@ -2,23 +2,14 @@
 
 Target: [MongLong0214/Tetration](https://github.com/MongLong0214/Tetration), public, default branch `main`.
 
-## 0.5.0 delivery
+## 1.0.0 delivery
 
-Baseline: `4b16c005c635ac73ee0f11019524e8e1d68f5f4c`. Existing commits are preserved.
+Developed on branch `claude/hopeful-newton-sdzsh3` from `main` at `2cfce5b` (0.5.0 with recorded CI evidence). Existing commits are preserved. The build output is `dist/index.html` plus the offline shell (`sw.js`, `manifest.webmanifest`, three PNG icons); its hash and sizes are recorded in [VALIDATION.md](VALIDATION.md).
 
-- [Source commit 88e6806](https://github.com/MongLong0214/Tetration/commit/88e680673b2e07c3a90c9ce13faa42e1883e2571)
-- [PR #3](https://github.com/MongLong0214/Tetration/pull/3), merged after the actual workflow passed
-- [Merge commit cebb6c2](https://github.com/MongLong0214/Tetration/commit/cebb6c2b3ab4af768913ae7db85c7b51ee6ff918)
-- [Successful source CI](https://github.com/MongLong0214/Tetration/actions/runs/37182647231)
-
-All 94 source-publication paths, file modes and Git blob hashes matched a fresh remote fetch, including 12 PNGs and the workflow. The follow-up documentation commit preserves six remote browser reports and the WebKit screenshot. The app remains unchanged: 110,075 HTML bytes, SHA-256 `df4815f01272ee8181e458d5875e3f2cd77a53c80181c9fc5727b931a1eeb677`.
-
-Only this repository is in scope. README images, regression scripts and the GitHub workflow are included. No license or repository visibility change is made.
+Only this repository is in scope. No license or repository visibility change is made.
 
 ## Vercel access
 
-A fresh project lookup for this repository under `monglong0214s-projects` returned **403 Forbidden** on 2026-10-04. The response requires re-authentication to the intended team scope. The cloud browser opened Vercel but had no signed-in session. The secure browser sign-in flow was not completed; it did not establish authenticated deployment access.
+The 0.5.0 review recorded that a project lookup for this repository under `monglong0214s-projects` returned **403 Forbidden** and that the execution workspace had no Vercel CLI login or token. The 1.0.0 workspace also has no Vercel credentials, so no deployment was attempted.
 
-The user reported installing Vercel CLI on their local machine. The separate execution workspace still has no `vercel` executable on PATH or common install paths, no Vercel CLI login file, and no `VERCEL_TOKEN` environment value. This does not say whether the user's own installation is working; that machine is not available to the executor.
-
-`vercel.json` contains the static deployment settings. No existing Vercel project or domain has been changed. No successful deployment or public HTTPS verification is claimed while authenticated access is unavailable. Credentials and private tokens must not be placed in chat or committed.
+`vercel.json` contains the static deployment settings and headers; the service worker needs no extra configuration on Vercel, which serves `.js` and `.webmanifest` with the correct types. No existing Vercel project or domain has been changed. No successful deployment or public HTTPS verification is claimed. Credentials and private tokens must not be placed in chat or committed.

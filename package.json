@@ -1,8 +1,8 @@
 {
   "name": "tetra-atlas",
-  "version": "0.5.0",
+  "version": "1.0.0",
   "private": true,
-  "description": "A browser-native, multi-precision complex power-tower explorer.",
+  "description": "A browser-native tetration explorer with full-resolution perturbation deep zoom.",
   "scripts": {
     "build": "node build.cjs",
     "dev": "node serve.cjs",
@@ -10,10 +10,12 @@
     "test": "node --test tests/*.test.cjs",
     "test:browser": "python3 tests/browser_review.py",
     "test:release": "python3 tests/browser_release.py",
-    "test:modern": "python3 tests/browser_modern.py",
+    "test:deep": "python3 tests/browser_deep.py",
+    "test:quality": "python3 tests/browser_quality.py",
     "test:explorer": "python3 tests/browser_explorer.py",
+    "test:perf": "python3 tests/browser_perf.py",
     "test:webkit": "python3 tests/browser_webkit.py",
-    "test:quality": "python3 tests/browser_quality.py"
+    "test:e2e": "python3 tests/browser_review.py && python3 tests/browser_release.py && python3 tests/browser_deep.py && python3 tests/browser_quality.py && python3 tests/browser_explorer.py && python3 tests/browser_perf.py"
   },
   "engines": {
     "node": "22.x || 24.x"

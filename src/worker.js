@@ -1,59 +1,99 @@
 'use strict';
+/* Worker roles: exact reference orbits, and CPU image tiles (FP64 direct, FP64
+ * perturbation or exact BigInt per pixel). One persistent pool is reused across
+ * views; a newer job supersedes an older one at the next yield. */
 let current = 0;
-self.onmessage = async function ({ data: job }) {
-  const token = ++current;
-  if (job.cancel) return;
+async function pause() {
+  if (self.scheduler?.yield) await self.scheduler.yield();
+  else await new Promise(resolve => setTimeout(resolve, 0));
+}
+function referenceJob(job) {
   try {
-    const camera = createFixed(256);
-    const cx = camera.parse(job.x), cy = camera.parse(job.y), span = camera.parse(job.span);
-    const calculate = job.mode === 'big' ? TetraCore.makePreciseOrbit(job.digits) : null;
-    const [w, h] = [job.width, job.height];
-    const nx = Number(job.x), ny = Number(job.y), ns = Number(job.span);
-    const xr = Array.from({ length: w }, (_, x) => job.mode === 'big' ? camera.text(cx + span * BigInt(2 * x + 1 - w) / BigInt(2 * w)) : nx + (x + 0.5 - w / 2) * ns / w);
-    const yr = Array.from({ length: h }, (_, y) => job.mode === 'big' ? camera.text(cy + span * BigInt(h - 2 * y - 1) / BigInt(2 * w)) : ny + (h / 2 - y - 0.5) * ns / w);
-    const tile = job.mode === 'big' ? 4 : 24;
-    // Center-out tile order delivers a useful preview before completing a pass.
-    const tiles = [];
-    for (let y = 0; y < h; y += tile) for (let x = 0; x < w; x += tile) tiles.push({ x, y, width: Math.min(tile, w-x), height: Math.min(tile, h-y) });
-    tiles.sort((a,b) => (a.x-w/2)**2+(a.y-h/2)**2 - ((b.x-w/2)**2+(b.y-h/2)**2));
-    const assigned = tiles.filter((_, i) => i % (job.workers || 1) === (job.index || 0));
-    const total = assigned.reduce((n, t) => n + t.width*t.height, 0);
-    let surface = null, surfaceContext = null;
-    if (job.bitmap && typeof OffscreenCanvas === 'function') {
-      try { surface = new OffscreenCanvas(tile, tile); surfaceContext = surface.getContext('2d', {alpha:false}); } catch {}
+    const ref = TetraReference.compute(job.options);
+    self.postMessage({type: 'reference', id: job.id, ref}, [ref.V.buffer, ref.T.buffer, ref.ReA.buffer, ref.ImA.buffer]);
+  } catch (error) {
+    self.postMessage({type: 'reference', id: job.id, error: String(error.message)});
+  }
+}
+async function tileJob(job, token) {
+  const camera = createFixed(256);
+  const [w, h] = [job.width, job.height], mode = job.mode;
+  const cx = camera.parse(job.x), cy = camera.parse(job.y), span = camera.parse(job.span);
+  const nx = Number(job.x), ny = Number(job.y), ns = Number(job.span);
+  const exact = mode === 'exact' ? TetraCore.makePreciseOrbit(job.digits) : null;
+  const rules = TetraCore.RULES.cpu, ref = job.ref || null;
+  // Pixel centres; the exact mode keeps every coordinate as a decimal string.
+  const xr = Array.from({length: w}, (_, x) => exact ? camera.text(cx + span * BigInt(2 * x + 1 - w) / BigInt(2 * w)) : (x + 0.5 - w / 2) * ns / w);
+  const yr = Array.from({length: h}, (_, y) => exact ? camera.text(cy + span * BigInt(h - 2 * y - 1) / BigInt(2 * w)) : (h / 2 - y - 0.5) * ns / w);
+  const sample = ref ? (x, y) => {
+    // Lower-half pixels use the conjugate orbit of their mirror image.
+    const mirrored = job.imCenter + yr[y] < 0;
+    const r = TetraCore.perturb64(ref, job.deltaRe + xr[x], mirrored ? job.deltaMirror - yr[y] : job.deltaIm + yr[y], job.iterations, rules);
+    if (mirrored && r.im !== undefined) r.im = -r.im;
+    return r;
+  } : exact ? (x, y) => exact(xr[x], yr[y], job.iterations) : (x, y) => TetraCore.orbit64(nx + xr[x], ny + yr[y], job.iterations);
+  const edge = exact ? 4 : 24;
+  const tiles = [];
+  for (let y = 0; y < h; y += edge) for (let x = 0; x < w; x += edge) tiles.push({x, y, width: Math.min(edge, w - x), height: Math.min(edge, h - y)});
+  tiles.sort((a, b) => (a.x + a.width / 2 - w / 2) ** 2 + (a.y + a.height / 2 - h / 2) ** 2 - ((b.x + b.width / 2 - w / 2) ** 2 + (b.y + b.height / 2 - h / 2) ** 2));
+  const assigned = tiles.filter((_, i) => i % (job.workers || 1) === (job.index || 0));
+  const total = assigned.reduce((n, t) => n + t.width * t.height, 0);
+  if (!total) { self.postMessage({id: job.id, done: 0, counts: [0, 0, 0, 0, 0], complete: true}); return; }
+  let surface = null, surfaceContext = null;
+  if (job.bitmap && typeof OffscreenCanvas === 'function') {
+    try { surface = new OffscreenCanvas(edge, edge); surfaceContext = surface.getContext('2d', {alpha: false}); } catch { surfaceContext = null; }
+  }
+  let done = 0, lastYield = performance.now();
+  const counts = [0, 0, 0, 0, 0];
+  for (const t of assigned) {
+    if (token !== current) return;
+    const pixels = new Uint8ClampedArray(t.width * t.height * 4);
+    let p = 0;
+    for (let y = t.y; y < t.y + t.height; y++) {
+      for (let x = t.x; x < t.x + t.width; x++) {
+        const result = sample(x, y);
+        counts[result.kind]++;
+        const rgb = TetraCore.color(result.kind, result.steps, job.palette, result.re, result.im);
+        pixels[p++] = rgb[0]; pixels[p++] = rgb[1]; pixels[p++] = rgb[2]; pixels[p++] = 255;
+      }
+      // Exact pixels are slow; let a newer job in between rows.
+      if (exact && performance.now() - lastYield > 12) {
+        await pause(); lastYield = performance.now();
+        if (token !== current) return;
+      }
     }
-    if (!total) { self.postMessage({id:job.id, done:0, counts:[0,0,0,0,0], complete:true}); return; }
-    let done = 0, lastYield = performance.now(); const counts = [0,0,0,0,0];
-    for (const t of assigned) {
-      if (token !== current) return;
-      const pixels = new Uint8ClampedArray(t.width * t.height * 4);
-      let p = 0;
-      for (let y = t.y; y < t.y + t.height; y++) {
-        for (let x = t.x; x < t.x + t.width; x++) {
-          const result = calculate ? calculate(xr[x], yr[y], job.iterations) : TetraCore.orbit64(xr[x], yr[y], job.iterations);
-          counts[result.kind]++;
-          const rgb = TetraCore.color(result.kind, result.steps, job.palette, result.re, result.im);
-          pixels[p++] = rgb[0]; pixels[p++] = rgb[1]; pixels[p++] = rgb[2]; pixels[p++] = 255;
-        }
-      }
-      done += t.width * t.height;
-      const message = { id:job.id, tile:t, done, progress:done/total, counts, complete:done===total };
-      let bitmap = null;
-      if (surfaceContext) {
-        try {
-          surface.width=t.width; surface.height=t.height;
-          surfaceContext.putImageData(new ImageData(pixels,t.width,t.height),0,0);
-          bitmap=surface.transferToImageBitmap();
-        } catch { surfaceContext=null; }
-      }
-      if (bitmap) self.postMessage({...message, bitmap},[bitmap]);
-      else self.postMessage({...message, pixels},[pixels.buffer]);
-      // Yield so cancellation can be processed even without terminating the worker.
-      if (performance.now() - lastYield > 12) {
-        if (self.scheduler?.yield) await self.scheduler.yield();
-        else await new Promise(resolve => setTimeout(resolve, 0));
-        lastYield = performance.now();
-      }
+    done += t.width * t.height;
+    const message = {id: job.id, tile: t, done, progress: done / total, counts, complete: done === total};
+    let bitmap = null;
+    if (surfaceContext) {
+      try {
+        surface.width = t.width; surface.height = t.height;
+        surfaceContext.putImageData(new ImageData(pixels, t.width, t.height), 0, 0);
+        bitmap = surface.transferToImageBitmap();
+      } catch { surfaceContext = null; }
     }
-  } catch (error) { self.postMessage({ id: job.id, error: String(error.message) }); }
+    if (bitmap) self.postMessage({...message, bitmap}, [bitmap]);
+    else self.postMessage({...message, pixels}, [pixels.buffer]);
+    // Yield so a newer job can be received without terminating the worker.
+    if (performance.now() - lastYield > 12) { await pause(); lastYield = performance.now(); }
+  }
+}
+function discoverJob(job) {
+  // Deterministic, well-mixed generator (mulberry32) so a seed reproduces the same place.
+  let seed = job.seed >>> 0;
+  const random = () => {
+    seed = (seed + 0x6D2B79F5) >>> 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  try { self.postMessage({type: 'discover', id: job.id, place: TetraCore.discover(random)}); }
+  catch (error) { self.postMessage({type: 'discover', id: job.id, error: String(error.message)}); }
+}
+self.onmessage = async function ({data: job}) {
+  if (job.type === 'reference') { referenceJob(job); return; }
+  if (job.type === 'discover') { discoverJob(job); return; }
+  const token = ++current;
+  if (job.type === 'cancel') return;
+  try { await tileJob(job, token); } catch (error) { self.postMessage({id: job.id, error: String(error.message)}); }
 };

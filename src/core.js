@@ -59,21 +59,141 @@
       }
     };
   }
+  /* Classification limits. GPU rules match the FP32 shaders so the direct and
+   * perturbation renderers agree when the camera crosses between them; CPU rules
+   * match orbit64. Each mode stays internally consistent at every zoom depth. */
+  const RULES = {
+    gpu: { lowA: -80, maxB: 1e6, tol: 2e-6 },
+    cpu: { lowA: -700, maxB: 1e12, tol: 1e-10 },
+  };
+  const LOG_R = Math.log(1e10);
+  // Smith's complex division; avoids squaring tiny or huge components.
+  function cdiv(ar, ai, br, bi) {
+    if (Math.abs(br) >= Math.abs(bi)) {
+      const r = bi / br, d = br + bi * r;
+      return [(ar + ai * r) / d, (ai - ar * r) / d];
+    }
+    const r = br / bi, d = bi + br * r;
+    return [(ar * r + ai) / d, (ai * r - ar) / d];
+  }
+  /* FP64 perturbation from an exact reference orbit (TetraReference.compute).
+   * (dcr, dci) is c - c0 for a pixel in the closed upper half plane; callers mirror
+   * lower-half pixels (the orbit of conj(c) is the conjugate orbit) and conjugate
+   * the returned value. With V = reference value and d = w - V:
+   *   eps = V dL + d L, where L = L0 + dL and dL = log1p((c - c0) / c0)
+   *   w'  = V' exp(eps),  d' = V' expm1(eps)
+   * Threshold crossing uses the exact difference T = ln(1e10) - Re(L0 V).
+   * The full value is formed from exp(eps), never as V + d, so an orbit falling
+   * towards zero keeps its relative precision. When |w| < |d| the pixel rebases to
+   * the virtual start V[0] = 0; it also rebases when the reference ends. */
+  function perturb64(ref, dcr, dci, iterations, rules = RULES.cpu) {
+    const V = ref.V, T = ref.T, ReA = ref.ReA, ImA = ref.ImA, length = ref.length, values = ref.values;
+    const [xr, xi] = cdiv(dcr, dci, ref.c0[0], ref.c0[1]);
+    const dLr = 0.5 * Math.log1p(2 * xr + xr * xr + xi * xi), dLi = Math.atan2(xi + 0, 1 + xr);
+    if (!Number.isFinite(dLr) || !Number.isFinite(dLi)) return { kind: 4, steps: 0, re: NaN, im: NaN };
+    const Lr = ref.L0[0] + dLr, Li = ref.L0[1] + dLi, lowA = rules.lowA, maxB = rules.maxB, tolerance = rules.tol;
+    let k = 1, dr = 0, di = 0, wr = 1, wi = 0, oldr = 0, oldi = 0, fixed = 0, periodic = 0;
+    for (let n = 1; n <= iterations; n++) {
+      if (k >= length) { dr = wr; di = wi; k = 0; }
+      const vr = V[2 * k], vi = V[2 * k + 1];
+      const er = vr * dLr - vi * dLi + dr * Lr - di * Li, ei = vr * dLi + vi * dLr + dr * Li + di * Lr;
+      if (er > T[k]) return { kind: 3, steps: n + Math.min(1, (er - T[k]) / LOG_R), re: wr, im: wi };
+      const a = ReA[k] + er, b = ImA[k] + ei;
+      if (!(a >= lowA) || !(Math.abs(b) <= maxB)) return { kind: 4, steps: n, re: wr, im: wi };
+      let nr, ni;
+      if (k + 1 >= values) {
+        const r = Math.exp(a);
+        nr = r * Math.cos(b); ni = r * Math.sin(b); dr = nr; di = ni; k = 0;
+      } else {
+        const Wr = V[2 * k + 2], Wi = V[2 * k + 3], ex = Math.exp(er), c = Math.cos(ei), s = Math.sin(ei), h = Math.sin(ei / 2);
+        const mr = Math.expm1(er) * c - 2 * h * h, mi = ex * s;
+        dr = Wr * mr - Wi * mi; di = Wr * mi + Wi * mr;
+        nr = ex * (Wr * c - Wi * s); ni = ex * (Wr * s + Wi * c);
+        k++;
+      }
+      const r = Math.hypot(nr, ni), tol = tolerance * (1 + r);
+      fixed = Math.hypot(nr - wr, ni - wi) < tol ? fixed + 1 : 0;
+      periodic = n > 2 && Math.hypot(nr - oldr, ni - oldi) < tol ? periodic + 1 : 0;
+      oldr = wr; oldi = wi; wr = nr; wi = ni;
+      if (fixed >= 8) return { kind: 1, steps: n, re: wr, im: wi };
+      if (periodic >= 12) return { kind: 2, steps: n, re: wr, im: wi };
+      if (k && nr * nr + ni * ni < dr * dr + di * di) { dr = nr; di = ni; k = 0; }
+    }
+    return { kind: 0, steps: iterations, re: wr, im: wi };
+  }
+  // Direct FP64 orbit using arbitrary rules; the GPU rule set mirrors the FP32 shader exactly.
+  function orbitRules(cr, ci, iterations, rules) {
+    if (!Number.isFinite(cr + ci) || (cr === 0 && ci === 0)) return { kind: 4, steps: 0, re: NaN, im: NaN };
+    const lr = Math.log(Math.hypot(cr, ci)), li = ci === 0 && cr < 0 ? Math.PI : Math.atan2(ci, cr);
+    let wr = 1, wi = 0, oldr = 0, oldi = 0, fixed = 0, periodic = 0;
+    for (let n = 1; n <= iterations; n++) {
+      const a = wr * lr - wi * li, b = wr * li + wi * lr;
+      if (!Number.isFinite(a + b)) return { kind: 4, steps: n, re: wr, im: wi };
+      if (a > LOG_R) return { kind: 3, steps: n + Math.min(1, (a - LOG_R) / LOG_R), re: wr, im: wi };
+      if (a < rules.lowA || Math.abs(b) > rules.maxB) return { kind: 4, steps: n, re: wr, im: wi };
+      const r = Math.exp(a), nr = r * Math.cos(b), ni = r * Math.sin(b), tol = rules.tol * (1 + r);
+      fixed = Math.hypot(nr - wr, ni - wi) < tol ? fixed + 1 : 0;
+      periodic = n > 2 && Math.hypot(nr - oldr, ni - oldi) < tol ? periodic + 1 : 0;
+      oldr = wr; oldi = wi; wr = nr; wi = ni;
+      if (fixed >= 8) return { kind: 1, steps: n, re: wr, im: wi };
+      if (periodic >= 12) return { kind: 2, steps: n, re: wr, im: wi };
+    }
+    return { kind: 0, steps: iterations, re: wr, im: wi };
+  }
+  /* Find a detailed place to show: start from a random structured region, then
+   * repeatedly zoom into the most varied cell of a coarse FP64 grid. `random`
+   * returns numbers in [0, 1). Stays above FP64 precision; deeper zoom is manual. */
+  function discover(random, options = {}) {
+    const rules = RULES.gpu, iterations = options.iterations || 384, W = 32, H = 20, cells = 4;
+    const regions = [[-2.5, 0.2, 2.4], [-1.84, 0.09, 0.9], [-0.72, 0.36, 1.2], [-0.2, 0.9, 1.6], [0.2, 1.4, 1.6], [1.3, 1.6, 1.4], [-1.2, 1.2, 1.4]];
+    const levels = options.levels ?? 4 + Math.floor(random() * 9);
+    const pick = regions[Math.floor(random() * regions.length)];
+    let x = pick[0] + (random() - 0.5) * pick[2] * 0.5, y = pick[1] + (random() - 0.5) * pick[2] * 0.5, span = pick[2];
+    const visited = [];
+    for (let level = 0; level <= levels; level++) {
+      const grid = new Array(W * H);
+      for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
+        const r = orbitRules(x + (i + 0.5 - W / 2) / W * span, y + (H / 2 - j - 0.5) / W * span, iterations, rules);
+        grid[j * W + i] = r.kind * 100000 + Math.floor(r.steps);
+      }
+      const scored = [];
+      for (let cj = 0; cj < cells; cj++) for (let ci = 0; ci < cells; ci++) {
+        const set = new Set();
+        for (let j = cj * H / cells; j < (cj + 1) * H / cells; j++) for (let i = ci * W / cells; i < (ci + 1) * W / cells; i++) set.add(grid[j * W + i]);
+        scored.push({ci, cj, score: set.size - 0.4 * (Math.abs(ci - 1.5) + Math.abs(cj - 1.5)) + random()});
+      }
+      visited.push({x, y, span, distinct: new Set(grid).size});
+      if (level === levels || span < 1e-11) break;
+      scored.sort((a, b) => b.score - a.score);
+      const cell = scored[Math.floor(random() * Math.min(3, scored.length))];
+      x += ((cell.ci + 0.5) / cells - 0.5) * span;
+      y += (0.5 - (cell.cj + 0.5) / cells) * H / W * span;
+      span /= 3 + random() * 5;
+    }
+    // The deepest level that still shows most of the detail found on the way down.
+    const most = Math.max(...visited.map(v => v.distinct));
+    const best = visited.filter(v => v.distinct >= Math.max(40, most * 0.6)).at(-1) || visited[0];
+    return {x: best.x, y: best.y, span: best.span, distinct: best.distinct};
+  }
   // Cyclic, smoothly interpolated palettes shared by the CPU and both shaders.
   const ramps = [
     [[10,8,35],[51,25,122],[138,38,197],[240,76,148],[255,172,104],[138,239,220],[42,154,211],[24,50,133]],
     [[24,5,27],[86,11,78],[189,35,103],[250,92,55],[255,203,116],[174,216,200],[67,96,165],[60,24,110]],
     [[3,13,32],[13,40,100],[18,90,185],[22,178,204],[157,235,202],[227,245,210],[101,148,209],[45,37,139]]
   ];
+  /* Escape bands: the log term separates the first bands near the overview; the
+   * linear term keeps colours cycling at depth, where every pixel needs thousands
+   * of steps and a pure logarithm would compress the whole view into one shade. */
   function color(kind, steps, palette = 0, re = 0, im = 0) {
+    const s = Math.max(steps, 1);
     if (palette === 3) {
-      const v = Math.round(kind===3?48+184*(.5-.5*Math.cos(Math.log2(Math.max(steps,1)+1)*1.76)):[6,18,32,0,86][kind]);
+      const v = Math.round(kind===3?48+184*(.5-.5*Math.cos((Math.log2(s+1)*.2801+s/160)*2*Math.PI)):[6,18,32,0,86][kind]);
       return [v,v,v];
     }
     if(kind===4)return [42,31,47];
     if(kind===0)return [10,9,24];
     let t,light=1;
-    if(kind===3)t=Math.log2(Math.max(steps,1)+1)*.42+.08;
+    if(kind===3)t=Math.log2(s+1)*.42+s/160+.08;
     else if(kind===2){t=.27;light=.22;}
     else{const magnitude=Math.min(Math.log2(1+Math.hypot(Number(re)||0,Number(im)||0)),3);t=.59+Math.atan2(Number(im)||0,Number(re)||0)/(2*Math.PI)*.5+magnitude*.12;light=.14+magnitude*.07;}
     const position=((t%1+1)%1)*8,index=Math.floor(position),f=position-index,k=f*f*(3-2*f),ramp=ramps[palette]||ramps[0];
@@ -89,31 +209,16 @@
     return mix(stops[i],stops[(i+1)%8],k)/255.;
   }
   vec3 palette(int kind,float steps,vec2 w){
-    if(uPalette==3){float v=kind==3?48.+184.*(.5-.5*cos(log2(max(steps,1.)+1.)*1.76)):kind==1?18.:kind==2?32.:kind==4?86.:6.;return vec3(v/255.);}
+    float s=max(steps,1.);
+    if(uPalette==3){float v=kind==3?48.+184.*(.5-.5*cos(fract(log2(s+1.)*.2801+s/160.)*6.28318530718)):kind==1?18.:kind==2?32.:kind==4?86.:6.;return vec3(v/255.);}
     if(kind==4)return vec3(42.,31.,47.)/255.;
     if(kind==0)return vec3(10.,9.,24.)/255.;
-    if(kind==3)return ramp(log2(max(steps,1.)+1.)*.42+.08);
+    if(kind==3)return ramp(log2(s+1.)*.42+s/160.+.08);
     if(kind==2)return ramp(.27)*.22;
-    float m=min(log2(1.+length(w)),3.);float angle=length(w)==0.?0.:atan(w.y,w.x);
+    // Some GPU drivers return pi for atan(-0., x > 0.); resolve the real axis explicitly.
+    float m=min(log2(1.+length(w)),3.);float angle=abs(w.y)>1e-37?atan(w.y,w.x):(w.x<0.?3.14159265359:0.);
     return ramp(.59+angle/6.28318530718*.5+m*.12)*(.14+m*.07);
   }`;
-  const paletteWGSL=`
-  fn ramp(t:f32)->vec3f{
-    var stops=array<vec3f,8>(${vectors('vec3f',0)});
-    if(u.palette==1u){stops=array<vec3f,8>(${vectors('vec3f',1)});}
-    if(u.palette==2u){stops=array<vec3f,8>(${vectors('vec3f',2)});}
-    let p=fract(t)*8.;let i=u32(floor(p));let f=fract(p);let k=f*f*(3.-2.*f);
-    return mix(stops[i],stops[(i+1u)%8u],k)/255.;
-  }
-  fn color(kind:u32,steps:f32,w:vec2f)->vec3f{
-    if(u.palette==3u){var v=select(select(select(6.,18.,kind==1u),32.,kind==2u),86.,kind==4u);if(kind==3u){v=48.+184.*(.5-.5*cos(log2(max(steps,1.)+1.)*1.76));}return vec3f(v/255.);}
-    if(kind==4u){return vec3f(42.,31.,47.)/255.;}
-    if(kind==0u){return vec3f(10.,9.,24.)/255.;}
-    if(kind==3u){return ramp(log2(max(steps,1.)+1.)*.42+.08);}
-    if(kind==2u){return ramp(.27)*.22;}
-    let m=min(log2(1.+length(w)),3.);var angle=0.;if(length(w)>0.){angle=atan2(w.y,w.x);}
-    return ramp(.59+angle/6.28318530718*.5+m*.12)*(.14+m*.07);
-  }`;
-  root.TetraCore = { STATUS, orbit64, makePreciseOrbit, color, paletteGLSL, paletteWGSL };
+  root.TetraCore = { STATUS, RULES, LOG_R, orbit64, orbitRules, perturb64, cdiv, discover, makePreciseOrbit, color, paletteGLSL };
   if (typeof module !== 'undefined') module.exports = root.TetraCore;
 })(globalThis);

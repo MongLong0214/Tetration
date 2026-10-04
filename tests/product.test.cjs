@@ -2,7 +2,7 @@
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
 const root=path.resolve(__dirname,'..');
 test('the product remains English and uses only neutral CSS colors',()=>{
- const source=fs.readdirSync(path.join(root,'src')).map(p=>fs.readFileSync(path.join(root,'src',p),'utf8')).join('\n');
+ const source=fs.readdirSync(path.join(root,'src'),{withFileTypes:true}).filter(e=>e.isFile()).map(e=>fs.readFileSync(path.join(root,'src',e.name),'utf8')).join('\n');
  assert.doesNotMatch(source,/[\uac00-\ud7a3]/);assert.match(fs.readFileSync(path.join(root,'src/index.html'),'utf8'),/<html lang="en">/);
  const css=fs.readFileSync(path.join(root,'src/style.css'),'utf8');
  for(const [,hex] of css.matchAll(/#([a-f0-9]{8}|[a-f0-9]{6}|[a-f0-9]{4}|[a-f0-9]{3})(?![a-z0-9-])/gi)){

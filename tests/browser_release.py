@@ -1,170 +1,165 @@
-"""Served-origin release checks. Production CSP remains enabled.
-
-Requires an actual WebGL2 browser context, including a software-backed context.
-This is not a hardware-GPU or physical Safari qualification.
-"""
-from pathlib import Path
-from importlib.metadata import version
-import hashlib
+"""Served-origin release checks: security headers and exact served bytes, GPU reference pixels,
+engine transitions, GPU loss and restoration, and degraded-feature fallbacks. CSP stays enabled.
+Software graphics only; not hardware GPU or physical Safari qualification."""
 import json
-import os
-from urllib.parse import urlparse
+from browser_common import *
 from playwright.sync_api import sync_playwright
 
-ROOT = Path(__file__).resolve().parents[1]
-OUT = ROOT / 'tests' / 'review-output'
-OUT.mkdir(exist_ok=True)
-BASE = os.environ.get('TETRA_BASE_URL', 'http://127.0.0.1:4173').rstrip('/')
-checks = []
-errors = []
-report = {
-    'origin': BASE,
-    'transport': urlparse(BASE).scheme,
-    'playwright': version('playwright'),
-    'bundle_sha256': hashlib.sha256((ROOT / 'dist/index.html').read_bytes()).hexdigest(),
-    'limitations': ['No physical iPhone/Safari test.', 'Software graphics is not hardware GPU qualification.'],
-}
+suite = Suite('release', ['No physical iPhone/Safari test.', 'Software graphics is not hardware GPU qualification.'])
+SHALLOW_BIG = 'v=1&x=0.5&y=0&s=1e-30&n=256&q=1'
 
 
-def record(name, detail=None):
-    checks.append({'name': name, 'passed': True, 'detail': detail})
-    print('PASS', name, detail or '', flush=True)
-
-
-def ready(page, mode=None):
-    selector = 'body[data-complete="true"]'
-    if mode:
-        selector += '[data-mode="' + mode + '"]'
-    page.wait_for_selector(selector, state='attached', timeout=90000)
-
-
-def controls(page):
-    if not page.locator('#sidebar').is_visible():
-        page.locator('#settingsBtn').click()
-
-def coordinates(page, x, y, span):
-    controls(page)
-    page.locator('details.coordinates').evaluate('(el) => el.open = true')
-    for name, value in [('xInput', x), ('yInput', y), ('spanInput', span)]:
-        page.locator('#' + name).fill(value)
-    page.locator('#coordinateForm button').click()
-
-
-try:
-    with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(
-            executable_path=os.environ.get('CHROMIUM_PATH'), headless=True,
-            args=['--no-sandbox', '--enable-unsafe-swiftshader'])
-        report['browser_version'] = browser.version
-        context = browser.new_context(viewport={'width': 1100, 'height': 800},
-                                      permissions=['clipboard-read', 'clipboard-write'])
-        context.add_init_script("Object.defineProperty(navigator,'gpu',{get:()=>undefined})")
-        page = context.new_page()
-        page.on('pageerror', lambda error: errors.append(str(error)))
-        response = page.goto(BASE)
+def body():
+    with sync_playwright() as p:
+        browser = launch(p)
+        suite.report['browser_version'] = browser.version
+        context = browser.new_context(viewport={'width': 960, 'height': 700}, permissions=['clipboard-read', 'clipboard-write'])
+        context.add_init_script(NO_WEBGPU)
+        page = suite.watch(context.new_page())
+        response = page.goto(BASE + '/#v=1&x=-2.5&y=0&s=1.8&q=1')
         assert response.status == 200
         expected = json.loads((ROOT / 'vercel.json').read_text())['headers'][0]['headers']
         headers = response.all_headers()
         for header in expected:
             assert headers.get(header['key'].lower()) == header['value'], header['key']
-        assert hashlib.sha256(response.body()).hexdigest() == report['bundle_sha256']
-        record('HTTP security headers and served bytes match the production build')
+        assert hashlib.sha256(response.body()).hexdigest() == suite.report['bundle_sha256']
+        suite.record('HTTP security headers and served bytes match the production build')
         ready(page, 'gpu')
-        report['graphics'] = page.evaluate('''() => {
-            const gl = document.querySelector('#gpuCanvas').getContext('webgl2');
-            const info = gl.getExtension('WEBGL_debug_renderer_info');
-            return {renderer: gl.getParameter(info ? info.UNMASKED_RENDERER_WEBGL : gl.RENDERER),
-                    version: gl.getParameter(gl.VERSION),
-                    precision: gl.getShaderPrecisionFormat(gl.FRAGMENT_SHADER, gl.HIGH_FLOAT).precision};
+        suite.report['graphics'] = page.evaluate('''() => {
+            const gl = document.createElement('canvas').getContext('webgl2'), info = gl.getExtension('WEBGL_debug_renderer_info');
+            return {renderer: gl.getParameter(info ? info.UNMASKED_RENDERER_WEBGL : gl.RENDERER), version: gl.getParameter(gl.VERSION),
+                    precision: gl.getShaderPrecisionFormat(gl.FRAGMENT_SHADER, gl.HIGH_FLOAT).precision, maxTexture: gl.getParameter(gl.MAX_TEXTURE_SIZE)};
         }''')
-        record('Application enters actual browser WebGL2', report['graphics'])
+        suite.record('Application renders through browser WebGL2', suite.report['graphics'])
 
         pixels = page.evaluate('''() => {
-            const renderer = new TetraGPU(document.createElement('canvas'));
-            const gl = renderer.gl;
-            const cases = [['fixed', .5, 0], ['period2', .01, 0], ['threshold', 2, 0],
-                           ['origin', 0, 0], ['complex', .5, .25]];
-            const results = cases.map(([name, x, y]) => {
-                renderer.render({x: String(x), y: String(y), span: '1'}, 1, 1, 512, 0, false);
-                const actual = new Uint8Array(4);
-                gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, actual);
-                const orbit = TetraCore.orbit64(x, y, 512);
-                return {name, actual: [...actual], expected: TetraCore.color(orbit.kind, orbit.steps, 0, orbit.re, orbit.im)};
-            });
-            gl.deleteProgram(renderer.program);
-            gl.getExtension('WEBGL_lose_context')?.loseContext();
-            return results;
+            const r = new TetraGPU(document.createElement('canvas')), out = [];
+            for (let palette = 0; palette < 4; palette++) for (const [name, x, y] of [['fixed', .5, 0], ['period2', .01, 0], ['threshold', 2, 0], ['origin', 0, 0], ['complex', .5, .25], ['negative axis', -1.2, 0]]) {
+              const frame = r.beginFrame(1, 1);
+              r.draw(frame, {x: 0, y: 0, width: 1, height: 1}, {mode: 'direct', center: [x, y], span: 1, iterations: 512, palette, rules: TetraCore.RULES.gpu}, 1);
+              const actual = [...r.readFrame(frame)]; r.releaseFrame(frame);
+              const o = TetraCore.orbitRules(x, y, 512, TetraCore.RULES.gpu);
+              out.push({name, palette, actual, expected: TetraCore.color(o.kind, o.steps, palette, o.re, o.im)});
+            }
+            r.destroy(); return out;
         }''')
         for pixel in pixels:
-            assert pixel['actual'][3] == 255
-            assert max(abs(a-b) for a, b in zip(pixel['actual'], pixel['expected'])) <= 1, pixel
-            record('Browser WebGL2 pixel vs FP64: ' + pixel['name'], pixel)
+            assert pixel['actual'][3] == 255 and max(abs(a - b) for a, b in zip(pixel['actual'], pixel['expected'])) <= 1, pixel
+        suite.record('24 direct-shader reference pixels match FP64 across all palettes', len(pixels))
+        pert = page.evaluate('''() => {
+            const F = createFixed(256), r = new TetraGPU(document.createElement('canvas')), out = [];
+            for (const [x, y] of [['0.5', '0'], ['0.5', '0.25'], ['-0.2', '0.7'], ['2', '0.3'], ['-1.2', '0.0000001']]) {
+              const ref = TetraReference.compute({x, y, digits: 40, iterations: 512, maxRe: 80}); ref.point = {x: F.parse(x), y: F.parse(y)};
+              const view = {x: F.parse(x), y: F.parse(y), span: F.parse('1e-20')}, frame = r.beginFrame(1, 1);
+              r.draw(frame, {x: 0, y: 0, width: 1, height: 1}, {...TetraRender.perturbScene(F, view, ref.point.x, ref.point.y), ref, iterations: 512, palette: 0, rules: TetraCore.RULES.gpu}, 1);
+              const actual = [...r.readFrame(frame)]; r.releaseFrame(frame);
+              const o = TetraCore.perturb64(ref, 0, 0, 512, TetraCore.RULES.gpu);
+              out.push({x, y, actual, expected: TetraCore.color(o.kind, o.steps, 0, o.re, o.im)});
+            }
+            r.destroy(); return out;
+        }''')
+        for pixel in pert:
+            assert max(abs(a - b) for a, b in zip(pixel['actual'], pixel['expected'])) <= 1, pixel
+        suite.record('Perturbation-shader reference pixels match the exact reference orbit', pert)
 
         page.locator('#shareBtn').click()
         page.wait_for_function('() => navigator.clipboard.readText().then(text => text === location.href)')
         shared = page.evaluate('navigator.clipboard.readText()')
         assert '#v=1&x=' in shared
-        record('Clipboard contains the exact shared URL on a secure loopback origin')
-        restored = context.new_page()
+        restored = suite.watch(context.new_page())
         restored.goto(shared)
         ready(restored)
         assert restored.evaluate('tetraDiagnostics.view') == page.evaluate('tetraDiagnostics.view')
         restored.close()
-        record('Copied URL reopens the same coordinates')
+        suite.record('Copied URL reopens the same coordinates on a loopback origin')
 
-        controls(page)
-        page.locator('#iterations').select_option('64')
-        coordinates(page, '0.5', '0', '0.001')
-        ready(page, 'cpu')
-        record('Auto engine switches WebGL2 to FP64 at finer pixel spacing')
-        coordinates(page, '0.5', '0', '1e-30')
-        ready(page, 'big')
-        record('Auto engine switches FP64 to BigInt at deep spacing')
+        # Automatic engine: direct GPU -> GPU perturbation -> back.
+        # Direct FP32 until the pixel spacing falls below 2^-16 of the coordinate scale (span 0.0147 at 960 px).
+        coordinates(page, '0.5', '0.3', '0.02')
+        ready(page, 'gpu')
+        coordinates(page, '0.5', '0.3', '0.01')
+        ready(page, 'perturb')
+        coordinates(page, '0.5', '0.3', '1e-60')
+        ready(page, 'perturb')
         page.locator('#homeBtn').click()
         ready(page, 'gpu')
-        record('Returning home restores the WebGL2 path')
+        suite.record('Automatic engine switches direct GPU, perturbation and back by depth')
 
-        page.evaluate('''() => {
-            const gl = document.querySelector('#gpuCanvas').getContext('webgl2');
-            window.__tetraLossTest = gl.getExtension('WEBGL_lose_context');
-            if (!window.__tetraLossTest) throw new Error('WEBGL_lose_context unavailable');
-            window.__tetraLossTest.loseContext();
-        }''')
+        # Real context loss falls back to CPU (direct or perturbation), restoration brings the GPU back.
+        page.evaluate('''() => { window.__loss = document.querySelector('#gpuCanvas').getContext('webgl2').getExtension('WEBGL_lose_context'); window.__loss.loseContext(); }''')
         ready(page, 'cpu')
-        record('Real WebGL context loss completes an FP64 fallback render')
-        page.evaluate('window.__tetraLossTest.restoreContext()')
-        page.locator('#viewport').focus()
-        before = page.evaluate('tetraDiagnostics.view.x')
-        page.keyboard.press('ArrowRight')
-        ready(page, 'cpu')
-        assert page.evaluate('tetraDiagnostics.view.x') != before
-        record('Navigation works after loss and context restoration using CPU')
+        assert not state(page)['gpu']
+        suite.record('Real WebGL context loss completes an FP64 Worker render')
+        page.evaluate(f"location.hash='{SHALLOW_BIG}'")
+        ready(page, 'cpu-perturb')
+        assert state(page)['lastCompleted']['width'] == 960
+        suite.record('Deep view during GPU loss uses full-resolution FP64 perturbation')
+        page.evaluate('window.__loss.restoreContext()')
+        ready(page, 'perturb')
+        assert state(page)['gpu']
+        page.locator('#homeBtn').click()
+        ready(page, 'gpu')
+        suite.record('Context restoration recompiles shaders and returns to the GPU')
         context.close()
 
-        fallback = browser.new_context(viewport={'width': 960, 'height': 720})
-        fallback.add_init_script('''(() => {
-            Object.defineProperty(navigator,'gpu',{get:()=>undefined});
-            const original = HTMLCanvasElement.prototype.getContext;
-            HTMLCanvasElement.prototype.getContext = function(type, ...args) {
-                return type === 'webgl2' ? null : original.call(this, type, ...args);
-            };
-        })()''')
-        page = fallback.new_page()
-        page.on('pageerror', lambda error: errors.append(str(error)))
-        page.goto(BASE + '#v=1&x=0.5&y=0&s=0.1&n=64')
-        ready(page, 'cpu')
-        record('WebGL2 unavailable at startup uses the real Worker FP64 path')
+        # WebGL2 unavailable at startup.
+        fallback = browser.new_context(viewport={'width': 800, 'height': 600})
+        fallback.add_init_script(NO_WEBGPU + ''';(() => { const original = HTMLCanvasElement.prototype.getContext;
+            HTMLCanvasElement.prototype.getContext = function(type, ...args) { return type === 'webgl2' ? null : original.call(this, type, ...args); }; })()''')
+        pg = suite.watch(fallback.new_page())
+        info = open_app(pg, 'v=1&x=0.5&y=0&s=0.1&n=64', 'cpu')
+        assert not info['gpu'] and info['workers'] >= 1
+        suite.record('WebGL2 unavailable at startup uses the Worker FP64 path')
+        info = open_app(pg, SHALLOW_BIG, 'cpu-perturb')
+        assert info['lastCompleted']['width'] == 800 and info['reference']['digits'] >= 54
+        suite.record('Without WebGL2, deep views still render at full resolution (FP64 perturbation)')
         fallback.close()
-        assert not errors, errors
-        record('No uncaught browser exceptions')
+
+        # Worker feature fallbacks: no OffscreenCanvas / scheduler, and a single-Worker quota.
+        for name, init in [
+            ('No OffscreenCanvas or scheduler', ''),
+            ('Single active Worker quota', "const Old=Worker;let active=0;window.Worker=class extends Old{constructor(...a){if(active>=2)throw Error('quota');super(...a);active++;}terminate(){active--;super.terminate();}};"),
+        ]:
+            ctx = browser.new_context(viewport={'width': 800, 'height': 600})
+            ctx.add_init_script(NO_WEBGPU + ';' + init + '''const OriginalBlob=Blob;window.Blob=class extends OriginalBlob{constructor(parts,options){super(options?.type==='text/javascript'?['self.OffscreenCanvas=undefined;self.scheduler=undefined;\\n',...parts]:parts,options)}};''')
+            pg = suite.watch(ctx.new_page())
+            info = open_app(pg, 'v=1&x=0.5&y=0&s=0.1&n=64&e=cpu', 'cpu')
+            assert info['workerTransfer'] == 'pixels', info
+            assert sum(info['lastCompleted']['counts']) == info['lastCompleted']['width'] * info['lastCompleted']['height']
+            suite.record(name + ' uses transferable pixel buffers and timer yields', info['workers'])
+            ctx.close()
+
+        # Installable offline shell: the service worker caches the app and serves it without a network.
+        ctx = browser.new_context(viewport={'width': 800, 'height': 600})
+        ctx.add_init_script(NO_WEBGPU)
+        pg = suite.watch(ctx.new_page())
+        open_app(pg, 'v=1&x=-2.5&y=0&s=1.8&q=1')
+        scope = pg.evaluate('navigator.serviceWorker.ready.then(r => r.scope)')
+        manifest = pg.evaluate("fetch === undefined ? null : document.querySelector('link[rel=manifest]').href")
+        assert scope.startswith(BASE) and manifest.endswith('manifest.webmanifest')
+        pg.reload()
+        ready(pg)
+        assert pg.evaluate('!!navigator.serviceWorker.controller')
+        ctx.set_offline(True)
+        pg.reload()
+        ready(pg, 'gpu')
+        assert pg.evaluate("document.querySelector('#coordinatesReadout').textContent").startswith('Re')
+        icon = pg.evaluate("caches.keys().then(k => caches.open(k.find(n => n.startsWith('tetra-')))).then(c => c.match('icon-512.png')).then(r => r ? r.headers.get('content-type') : null)")
+        assert icon == 'image/png', icon
+        ctx.set_offline(False)
+        suite.record('Service worker installs the app shell and reloads it offline', {'scope': scope})
+        ctx.close()
+
+        # No Workers at all: GPU rendering and deep zoom still work (reference on the main thread).
+        ctx = browser.new_context(viewport={'width': 800, 'height': 600})
+        ctx.add_init_script(NO_WEBGPU + ";window.Worker=class{constructor(){throw Error('blocked')}};")
+        pg = suite.watch(ctx.new_page())
+        info = open_app(pg, SHALLOW_BIG, 'perturb')
+        assert info['workers'] == 0 and info['lastCompleted']['width'] == 800
+        suite.record('Without Workers, the GPU still renders deep views (main-thread reference)')
+        ctx.close()
+        suite.no_errors()
         browser.close()
-    report['passed'] = True
-except Exception as error:
-    report['passed'] = False
-    report['failure'] = str(error)
-    raise
-finally:
-    report['checks'] = checks
-    report['count'] = len(checks)
-    report['uncaught_errors'] = errors
-    (OUT / 'browser-release.json').write_text(json.dumps(report, indent=2, ensure_ascii=False) + '\n')
+
+
+run(suite, body)
