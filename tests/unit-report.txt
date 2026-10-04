@@ -1,0 +1,254 @@
+
+> tetra-atlas@1.0.0 test
+> node --test tests/core.test.cjs
+
+TAP version 13
+# Subtest: decimal camera preserves differences invisible to Number
+ok 1 - decimal camera preserves differences invisible to Number
+  ---
+  duration_ms: 2.850971
+  type: 'test'
+  ...
+# Subtest: decimal notation, round trips, truncation and signed zero
+ok 2 - decimal notation, round trips, truncation and signed zero
+  ---
+  duration_ms: 1.426461
+  type: 'test'
+  ...
+# Subtest: invalid decimal and excessive exponents are rejected
+ok 3 - invalid decimal and excessive exponents are rejected
+  ---
+  duration_ms: 0.404293
+  type: 'test'
+  ...
+# Subtest: Machin pi agrees with mpmath reference to 90 decimal places
+ok 4 - Machin pi agrees with mpmath reference to 90 decimal places
+  ---
+  duration_ms: 1.008321
+  type: 'test'
+  ...
+# Subtest: log(2) agrees with mpmath
+ok 5 - log(2) agrees with mpmath
+  ---
+  duration_ms: 0.376414
+  type: 'test'
+  ...
+# Subtest: log(0.00000000000000000000000000000000000000000000000000000000000000000000000000000001) agrees with mpmath
+ok 6 - log(0.00000000000000000000000000000000000000000000000000000000000000000000000000000001) agrees with mpmath
+  ---
+  duration_ms: 0.145935
+  type: 'test'
+  ...
+# Subtest: log(0.01) agrees with mpmath
+ok 7 - log(0.01) agrees with mpmath
+  ---
+  duration_ms: 0.173015
+  type: 'test'
+  ...
+# Subtest: log(0.5) agrees with mpmath
+ok 8 - log(0.5) agrees with mpmath
+  ---
+  duration_ms: 1.346397
+  type: 'test'
+  ...
+# Subtest: log(10000000000) agrees with mpmath
+ok 9 - log(10000000000) agrees with mpmath
+  ---
+  duration_ms: 0.33618
+  type: 'test'
+  ...
+# Subtest: exp(0) agrees with mpmath
+ok 10 - exp(0) agrees with mpmath
+  ---
+  duration_ms: 1.761163
+  type: 'test'
+  ...
+# Subtest: exp(1) agrees with mpmath
+ok 11 - exp(1) agrees with mpmath
+  ---
+  duration_ms: 0.183192
+  type: 'test'
+  ...
+# Subtest: exp(20) agrees with mpmath
+ok 12 - exp(20) agrees with mpmath
+  ---
+  duration_ms: 0.163885
+  type: 'test'
+  ...
+# Subtest: exp(-20) agrees with mpmath
+ok 13 - exp(-20) agrees with mpmath
+  ---
+  duration_ms: 0.274156
+  type: 'test'
+  ...
+# Subtest: exp(-1) agrees with mpmath
+ok 14 - exp(-1) agrees with mpmath
+  ---
+  duration_ms: 0.099963
+  type: 'test'
+  ...
+# Subtest: sincos(0) agrees with mpmath
+ok 15 - sincos(0) agrees with mpmath
+  ---
+  duration_ms: 0.442143
+  type: 'test'
+  ...
+# Subtest: sincos(123456789) agrees with mpmath
+ok 16 - sincos(123456789) agrees with mpmath
+  ---
+  duration_ms: 0.214621
+  type: 'test'
+  ...
+# Subtest: sincos(-123456789) agrees with mpmath
+ok 17 - sincos(-123456789) agrees with mpmath
+  ---
+  duration_ms: 0.116252
+  type: 'test'
+  ...
+# Subtest: sincos(-3.14159) agrees with mpmath
+ok 18 - sincos(-3.14159) agrees with mpmath
+  ---
+  duration_ms: 0.067894
+  type: 'test'
+  ...
+# Subtest: sincos(-1) agrees with mpmath
+ok 19 - sincos(-1) agrees with mpmath
+  ---
+  duration_ms: 0.10751
+  type: 'test'
+  ...
+# Subtest: sincos(0.37) agrees with mpmath
+ok 20 - sincos(0.37) agrees with mpmath
+  ---
+  duration_ms: 0.092512
+  type: 'test'
+  ...
+# Subtest: sincos(1.57) agrees with mpmath
+ok 21 - sincos(1.57) agrees with mpmath
+  ---
+  duration_ms: 0.106953
+  type: 'test'
+  ...
+# Subtest: sincos(3.5) agrees with mpmath
+ok 22 - sincos(3.5) agrees with mpmath
+  ---
+  duration_ms: 0.098259
+  type: 'test'
+  ...
+# Subtest: sqrt(2) agrees with mpmath
+ok 23 - sqrt(2) agrees with mpmath
+  ---
+  duration_ms: 0.187274
+  type: 'test'
+  ...
+# Subtest: sqrt(5) agrees with mpmath
+ok 24 - sqrt(5) agrees with mpmath
+  ---
+  duration_ms: 0.063201
+  type: 'test'
+  ...
+# Subtest: sqrt(100000) agrees with mpmath
+ok 25 - sqrt(100000) agrees with mpmath
+  ---
+  duration_ms: 0.056607
+  type: 'test'
+  ...
+# Subtest: sqrt(0.00001) agrees with mpmath
+ok 26 - sqrt(0.00001) agrees with mpmath
+  ---
+  duration_ms: 0.269638
+  type: 'test'
+  ...
+# Subtest: atan2(1,1) agrees with mpmath
+ok 27 - atan2(1,1) agrees with mpmath
+  ---
+  duration_ms: 0.227939
+  type: 'test'
+  ...
+# Subtest: atan2(1,-1) agrees with mpmath
+ok 28 - atan2(1,-1) agrees with mpmath
+  ---
+  duration_ms: 0.126122
+  type: 'test'
+  ...
+# Subtest: atan2(-1,-1) agrees with mpmath
+ok 29 - atan2(-1,-1) agrees with mpmath
+  ---
+  duration_ms: 0.178898
+  type: 'test'
+  ...
+# Subtest: atan2(-1,1) agrees with mpmath
+ok 30 - atan2(-1,1) agrees with mpmath
+  ---
+  duration_ms: 0.344943
+  type: 'test'
+  ...
+# Subtest: atan2(1,0) agrees with mpmath
+ok 31 - atan2(1,0) agrees with mpmath
+  ---
+  duration_ms: 0.209656
+  type: 'test'
+  ...
+# Subtest: atan2(0,-2) agrees with mpmath
+ok 32 - atan2(0,-2) agrees with mpmath
+  ---
+  duration_ms: 0.082711
+  type: 'test'
+  ...
+# Subtest: atan2(50,0.00001) agrees with mpmath
+ok 33 - atan2(50,0.00001) agrees with mpmath
+  ---
+  duration_ms: 0.076241
+  type: 'test'
+  ...
+# Subtest: arithmetic domain errors are explicit
+ok 34 - arithmetic domain errors are explicit
+  ---
+  duration_ms: 0.99017
+  type: 'test'
+  ...
+# Subtest: known real orbits: fixed point, period two, threshold, undefined origin
+ok 35 - known real orbits: fixed point, period two, threshold, undefined origin
+  ---
+  duration_ms: 0.769741
+  type: 'test'
+  ...
+# Subtest: FP64 respects conjugation away from branch cut
+ok 36 - FP64 respects conjugation away from branch cut
+  ---
+  duration_ms: 0.491463
+  type: 'test'
+  ...
+# Subtest: BigInt orbit matches known stable and threshold classifications
+ok 37 - BigInt orbit matches known stable and threshold classifications
+  ---
+  duration_ms: 8.356897
+  type: 'test'
+  ...
+# Subtest: complex BigInt orbit agrees with FP64 on selected non-boundary inputs
+ok 38 - complex BigInt orbit agrees with FP64 on selected non-boundary inputs
+  ---
+  duration_ms: 106.385376
+  type: 'test'
+  ...
+# Subtest: all palettes return finite RGB bytes
+ok 39 - all palettes return finite RGB bytes
+  ---
+  duration_ms: 0.610486
+  type: 'test'
+  ...
+# Subtest: finite classification can differ with convergence tolerance
+ok 40 - finite classification can differ with convergence tolerance
+  ---
+  duration_ms: 16.053884
+  type: 'test'
+  ...
+1..40
+# tests 40
+# suites 0
+# pass 40
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 234.978446

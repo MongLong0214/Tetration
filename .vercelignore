@@ -1,0 +1,9 @@
+.git/
+.vercel/
+node_modules/
+tests/
+docs/
+scripts/
+*.zip
+README.md
+.github/

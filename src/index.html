@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#11191c">
+<meta name="description" content="단순한 거듭제곱에서 펼쳐지는 복소수의 풍경. 테트레이션 프랙탈을 이동하고 확대하며 직접 탐험하세요.">
+<title>TETRA — 테트레이션 아틀라스</title>
+<style>__STYLES__</style>
+</head>
+<body>
+<header class="topbar">
+ <a class="brand" href="#" id="brand" aria-label="TETRA 처음으로"><svg viewBox="0 0 32 32" width="30" height="30" aria-hidden="true"><path d="M3 26 16 4l13 22ZM10 26l6-10 6 10M9 15h14" fill="none" stroke="currentColor" stroke-width="1.5"/></svg><span>TETRA<span class="brand-sub">POWER TOWER ATLAS</span></span></a>
+ <div class="header-center"><span class="live-dot"></span> A NUMERICAL EXPLORATION</div>
+ <nav class="header-actions" aria-label="주요 메뉴"><button id="helpBtn" class="text-button">이 세계에 대하여 <span aria-hidden="true">↗</span></button><button id="shareBtn" class="primary-button"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M8 12 12 8M7 13l-1 1a3 3 0 0 1-4-4l3-3a3 3 0 0 1 4 0m2 6a3 3 0 0 0 4 0l3-3a3 3 0 0 0-4-4l-1 1"/></svg><span>위치 공유</span></button><button id="settingsBtn" class="icon-button mobile-only" aria-label="탐색 설정 열기">☰</button></nav>
+</header>
+<div class="workspace">
+ <div id="scrim" hidden></div>
+ <aside class="sidebar" id="sidebar" aria-label="탐색 설정">
+  <div class="sidebar-heading"><span class="eyebrow">THE FOURTH OPERATION</span><button id="closeSettings" class="icon-button mobile-only" aria-label="탐색 설정 닫기">×</button></div>
+  <h1>단순한 규칙.<br><span>끝없는 풍경.</span></h1>
+  <p class="intro">거듭제곱을 반복하면,<br>어떤 세계가 펼쳐질까.</p>
+  <div class="formula" aria-label="w 0은 1, w n 더하기 1은 z의 w n 제곱"><span>w<sub>n+1</sub> = z<sup>w<sub>n</sub></sup></span><small>w₀ = 1 · principal Log</small></div>
+  <section class="section destinations"><div class="section-title"><h2>탐험 시작점</h2><span>LOCATIONS</span></div><div id="presets"></div></section>
+  <section class="section"><div class="section-title"><h2>관측 설정</h2><span>OBSERVATORY</span></div>
+   <div class="control-row"><label for="iterations">반복 횟수</label><select id="iterations"><option value="64">64</option><option value="128">128</option><option value="256" selected>256</option><option value="512">512</option><option value="1024">1,024</option></select></div>
+   <div class="control-row"><label for="engine">계산 방식</label><select id="engine"><option value="auto">자동 전환</option><option value="cpu">CPU · 64-bit</option><option value="big">고정밀 · BigInt</option></select></div>
+   <div class="control-row"><span id="paletteLabel">빛과 색</span><div class="palettes" role="group" aria-labelledby="paletteLabel"><button class="swatch active" data-palette="0" aria-label="황혼 팔레트" aria-pressed="true"><i class="swatch-dusk"></i></button><button class="swatch" data-palette="1" aria-label="심해 팔레트" aria-pressed="false"><i class="swatch-blue"></i></button><button class="swatch" data-palette="2" aria-label="흑백 팔레트" aria-pressed="false"><i class="swatch-mono"></i></button></div></div>
+   <label class="switch-row" for="grid"><span>좌표 격자</span><input id="grid" type="checkbox"><span class="switch" aria-hidden="true"></span></label>
+  </section>
+  <details class="coordinates"><summary>좌표로 이동 <span>＋</span></summary><form id="coordinateForm"><label>실수부 Re(z)<input id="xInput" spellcheck="false" inputmode="text" autocomplete="off" required></label><label>허수부 Im(z)<input id="yInput" spellcheck="false" inputmode="text" autocomplete="off" required></label><label>화면의 가로 범위<input id="spanInput" spellcheck="false" inputmode="text" autocomplete="off" required></label><button class="outline-button" type="submit">이 위치 탐험하기 ↗</button><p class="field-note">범위 10⁻²⁰⁰–10¹² · 좌표 ±10¹²</p></form></details>
+  <div class="sidebar-bottom"><button id="mobileHelpBtn" class="text-button mobile-only">이 세계에 대하여 ↗</button><p>현재 좌표의 풍경을 직접 계산합니다.<br>미리 저장된 이미지가 아닙니다.</p><span class="edition">EXPERIMENT № 001 <span>v0.3</span></span></div>
+ </aside>
+ <main id="viewport" tabindex="0" aria-label="테트레이션 탐험 지도. 드래그로 이동, 휠이나 두 손가락으로 확대, 방향키로 이동합니다.">
+  <canvas id="gpuCanvas" aria-hidden="true"></canvas><canvas id="webgpuCanvas" aria-hidden="true"></canvas><canvas id="cpuCanvas" aria-hidden="true"></canvas><canvas id="gridCanvas" aria-hidden="true"></canvas>
+  <div class="map-top"><div><span class="eyebrow map-eyebrow" id="locationTag">01 / 전체 지형</span><p id="viewSubtitle">THE COMPLEX PLANE</p></div><div class="engine-pill"><span class="live-dot" id="engineDot"></span><span id="engineTag">INITIALIZING</span></div></div>
+  <div id="loading" class="render-banner"><span class="spinner"></span><span id="loadingText">첫 번째 풍경을 계산하고 있어요</span></div>
+  <div class="crosshair" aria-hidden="true"></div>
+  <div id="precisionNote" class="precision-note" hidden></div>
+  <div class="legend" id="legend"><span><i class="legend-interior"></i>고정점 후보</span><span><i class="legend-period"></i>2주기 후보</span><span><i class="legend-unresolved"></i>미판정</span><span><i class="legend-escape"></i>임계값 통과</span><span><i class="legend-numeric"></i>수치 한계</span></div>
+  <div class="map-bottom"><div class="scale-area"><span id="zoomLabel">1.00×</span><div class="scale-line"></div><span id="scaleLabel">1.00 units</span></div><div class="navigation" aria-label="지도 조작"><button id="backBtn" title="이전 위치 (Alt+←)" aria-label="이전 위치">↶</button><span class="divider"></span><button id="zoomOut" title="축소 (−)" aria-label="축소">−</button><button id="zoomIn" title="확대 (+)" aria-label="확대">＋</button><span class="divider"></span><button id="homeBtn" title="처음 위치 (Home)" aria-label="처음 위치"><svg viewBox="0 0 20 20"><path d="m3 9 7-6 7 6M5 8v9h10V8M8 17v-6h4v6"/></svg></button><button id="exportBtn" title="현재 화면 PNG 저장" aria-label="현재 화면 PNG 저장"><svg viewBox="0 0 20 20"><path d="M10 2v10m-4-4 4 4 4-4M3 13v4h14v-4"/></svg></button><button id="fullscreenBtn" title="전체 화면" aria-label="전체 화면"><svg viewBox="0 0 20 20"><path d="M3 7V3h4m6 0h4v4M3 13v4h4m6 0h4v-4"/></svg></button></div></div>
+  <div class="gesture-hint" id="gestureHint">드래그로 이동 <span>·</span> 스크롤 / 핀치로 확대</div>
+  <div id="progressTrack"><div id="progressBar"></div></div>
+ </main>
+</div>
+<footer class="statusbar"><span id="coordinatesReadout">Re 0.000000 · Im 0.000000</span><span class="status-center" id="statusText">준비 중</span><span id="resolutionReadout">FINITE COMPUTATION / OPEN EXPLORATION</span></footer>
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+<dialog id="helpDialog" aria-label="테트레이션 탐험 안내"><div class="dialog-top"><span class="eyebrow">A NOTE FROM THE OBSERVATORY</span><button class="icon-button close-dialog" aria-label="설명 닫기">×</button></div><h2>보이는 풍경 뒤에 있는,<br>하나의 규칙.</h2><p>복소평면의 점 <b>z</b>마다 <b>w₀ = 1</b>에서 시작해 <b>wₙ₊₁ = exp(wₙ Log z)</b>를 반복합니다. 이 앱은 로그의 주값을 사용하며, 음의 실수축에서 편각은 +π입니다. 원점은 정의하지 않습니다.</p><p>색은 유한한 반복 계산의 결과입니다. <b>임계값 |w| &gt; 10¹⁰을 통과했다고 발산이 증명된 것은 아닙니다.</b> 고정점·2주기는 근접한 값이 반복 관측된 후보이며, 미판정에는 더 긴 주기와 느린 수렴 등이 섞일 수 있습니다.</p><h3>확대는 어디까지 가능할까?</h3><p>일반 탐색에는 지원·기준점 검사를 통과한 WebGPU 또는 WebGL2 GPU, 더 깊은 확대에는 CPU 64-bit, 이후에는 BigInt 고정밀 계산으로 전환됩니다. 좌표는 256자리 고정소수점, 궤도 계산은 최대 240자리이며 가로 범위 10⁻²⁰⁰까지 이동할 수 있습니다. <b>수학적으로 무한한 확대나 결과의 정확성을 보증하지는 않습니다.</b></p><p>각 엔진의 허용 오차와 수치 처리 한계가 달라 경계 무늬가 바뀔 수 있습니다. 고정밀 계산도 오차 구간을 증명하는 방식이 아니며, 고정밀에서 처리 중인 타일은 점진적으로 채워집니다. 고정밀의 샘플 해상도는 최대 가로 72개로 제한되어 픽셀이 보일 수 있습니다.</p><h3>탐험 방법</h3><p>드래그·방향키로 이동, 휠·핀치·+/−로 확대합니다. 두 번 클릭하면 해당 위치를 확대하고, Home은 전체 지형으로 돌아갑니다. ‘위치 공유’는 좌표·반복 횟수·팔레트·계산 방식을 링크에 담습니다.</p><p class="field-note">브라우저 안에서만 계산합니다. 로그인, 분석 추적기, 외부 API를 사용하지 않습니다. 고정밀 계산은 기기에 따라 느릴 수 있습니다.</p><button class="outline-button close-dialog">탐험 계속하기 →</button></dialog>
+<dialog id="shareDialog" aria-label="발견한 위치 공유"><div class="dialog-top"><span class="eyebrow">SHARE YOUR DISCOVERY</span><button class="icon-button close-dialog" aria-label="공유 창 닫기">×</button></div><h2>발견한 풍경을 공유하세요.</h2><p id="shareMessage">아래 주소를 복사하면 같은 좌표로 돌아올 수 있어요.</p><textarea id="shareText" readonly rows="5" aria-label="공유 주소"></textarea><button class="outline-button close-dialog">닫기</button></dialog>
+<noscript>이 탐험기는 JavaScript가 필요합니다.</noscript>
+<script>__SCRIPT__</script>
+</body></html>
