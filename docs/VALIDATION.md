@@ -12,7 +12,7 @@ All suites ran sequentially against one production build served by `serve.cjs` w
 | `npm run lint` | 0 problems | ESLint correctness rules over every source and test script |
 | `test:browser` (review) | 29 passed | Core flows, CSP enforcement, exact links, limits, mobile focus and touch |
 | `test:release` | 16 passed | Served headers and bytes, reference pixels, engine switching, real context loss and restoration, degraded features, offline reload |
-| `test:deep` | 27 passed | GPU perturbation (plain and BLA) against FP64 and exact orbits, BLA speed, full resolution at every depth, symmetry, seams, reference reuse, deep zoom session |
+| `test:deep` | 28 passed | GPU perturbation (plain and BLA) against FP64 and exact orbits, BLA speed, full resolution at every depth, symmetry, seams, reference reuse, deep zoom session |
 | `test:quality` | 15 passed | Antialiasing error against 64-sample references, live frames, glide, inertia, reduced motion, colour flow |
 | `test:explorer` | 22 passed | Saved views, history, shortcuts, discovery, sharing, fallbacks, four viewports, axe-core |
 | `test:perf` | 11 passed | First image, when the BLA program compiles (never in shallow views, without long tasks at depth), live-frame cadence at the overview, 10²⁵ and 10¹⁰⁰, reference speed, resource bounds |
@@ -21,7 +21,7 @@ All suites ran sequentially against one production build served by `serve.cjs` w
 
 No check was skipped or disabled. Six axe-core scans found no violations; colour contrast over the fractal is reported as incomplete, as before, which is not full WCAG certification.
 
-The final build is **192,182 bytes**, SHA-256 **`4986c0248db2837079b21515deda49647efddcb8f8eb66d299512e40eb07c0c2`**. All six browser reports carry this hash.
+The final build is **195,960 bytes**, SHA-256 **`6704ca966b05b21e2676a5eac7aff389a4a814f9f83220bd9c6fbc822bbe25ce`**. All six browser reports carry this hash.
 
 ## Numerical checks
 

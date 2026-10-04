@@ -2,7 +2,8 @@
 const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
-if (require.main === module) require('./build.cjs');
+// Directly run without a directory: build first (npm run dev). With a directory: serve it as is.
+if (require.main === module && !process.argv[2]) require('./build.cjs');
 const headers = Object.fromEntries(require('./vercel.json').headers[0].headers.map(({key, value}) => [key, value]));
 const types = {'.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.webmanifest': 'application/manifest+json', '.png': 'image/png', '.json': 'application/json'};
 function createServer(directory = path.resolve(__dirname, 'dist')) {
@@ -30,7 +31,7 @@ module.exports = {createServer};
 if (require.main === module) {
   const port = Number(process.env.PORT || 4173), host = process.env.HOST || '127.0.0.1';
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw Error('PORT must be between 1 and 65535');
-  const server = createServer();
+  const server = createServer(process.argv[2] ? path.resolve(process.argv[2]) : undefined);
   server.listen(port, host, () => console.log(`TETRA: http://${host}:${port}`));
   server.on('error', error => {console.error(error.message);process.exitCode=1;});
 }

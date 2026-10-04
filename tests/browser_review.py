@@ -105,7 +105,13 @@ def body():
         assert data.startswith(b'\x89PNG\r\n\x1a\n')
         width = int.from_bytes(data[16:20], 'big')
         assert width == state(page)['displayWidth'], (width, state(page)['displayWidth'])
-        suite.record('PNG export has the rendered resolution', width)
+        # Decode it: the fractal must be there (many colours above the caption bar), not a blank canvas.
+        from PIL import Image
+        image = Image.open(OUT / 'review-export.png').convert('RGB')
+        assert image.size == (state(page)['displayWidth'], state(page)['displayHeight']), image.size
+        colours = len(set(image.crop((0, 0, image.width, int(image.height * 0.8))).resize((200, 120)).getdata()))
+        assert colours > 200, colours
+        suite.record('PNG export has the rendered resolution and the fractal pixels', {'width': width, 'colours': colours})
 
         before = state(page)['view']
         coordinates(page, '<script>', '0', '1')

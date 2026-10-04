@@ -6,733 +6,733 @@ TAP version 13
 # Subtest: every table entry equals the composition of its single linear steps
 ok 1 - every table entry equals the composition of its single linear steps
   ---
-  duration_ms: 122.787322
+  duration_ms: 138.472566
   type: 'test'
   ...
 # Subtest: inside the radius every covered step stays linear and the run matches exact steps
 ok 2 - inside the radius every covered step stays linear and the run matches exact steps
   ---
-  duration_ms: 37.959337
+  duration_ms: 54.145218
   type: 'test'
   ...
 # Subtest: steps near escape, near a fixed point and past the reference end are never skipped
 ok 3 - steps near escape, near a fixed point and past the reference end are never skipped
   ---
-  duration_ms: 32.302789
+  duration_ms: 41.820747
   type: 'test'
   ...
 # Subtest: tables are refused for views too wide to linearise and for |L0| near zero
 ok 4 - tables are refused for views too wide to linearise and for |L0| near zero
   ---
-  duration_ms: 12.055672
+  duration_ms: 20.923334
   type: 'test'
   ...
 # Subtest: BLA perturbation equals plain perturbation pixel for pixel: threshold
 ok 5 - BLA perturbation equals plain perturbation pixel for pixel: threshold
   ---
-  duration_ms: 71.839979
+  duration_ms: 84.813117
   type: 'test'
   ...
 # Subtest: BLA perturbation equals plain perturbation pixel for pixel: fixed
 ok 6 - BLA perturbation equals plain perturbation pixel for pixel: fixed
   ---
-  duration_ms: 39.021267
+  duration_ms: 50.240412
   type: 'test'
   ...
 # Subtest: BLA perturbation equals plain perturbation pixel for pixel: lower
 ok 7 - BLA perturbation equals plain perturbation pixel for pixel: lower
   ---
-  duration_ms: 25.579558
+  duration_ms: 30.707792
   type: 'test'
   ...
 # Subtest: BLA perturbation equals plain perturbation pixel for pixel: axis
 ok 8 - BLA perturbation equals plain perturbation pixel for pixel: axis
   ---
-  duration_ms: 10.769058
+  duration_ms: 20.963465
   type: 'test'
   ...
 # Subtest: BLA perturbation equals plain perturbation pixel for pixel: above
 ok 9 - BLA perturbation equals plain perturbation pixel for pixel: above
   ---
-  duration_ms: 21.67741
+  duration_ms: 34.557143
   type: 'test'
   ...
 # Subtest: in a chaotic view BLA is as faithful to exact orbits as plain FP64 perturbation
 ok 10 - in a chaotic view BLA is as faithful to exact orbits as plain FP64 perturbation
   ---
-  duration_ms: 1619.108493
+  duration_ms: 1993.386252
   type: 'test'
   ...
 # Subtest: at 1e-100 BLA skips most of the approach and renders several times faster
 ok 11 - at 1e-100 BLA skips most of the approach and renders several times faster
   ---
-  duration_ms: 200.513055
+  duration_ms: 250.903455
   type: 'test'
   ...
 # Subtest: the offset bound covers every pixel, mirrored ones included
 ok 12 - the offset bound covers every pixel, mirrored ones included
   ---
-  duration_ms: 10.444054
+  duration_ms: 10.740328
   type: 'test'
   ...
 # Subtest: decimal camera preserves differences invisible to Number
 ok 13 - decimal camera preserves differences invisible to Number
   ---
-  duration_ms: 1.854098
+  duration_ms: 1.996563
   type: 'test'
   ...
 # Subtest: decimal notation, round trips, truncation and signed zero
 ok 14 - decimal notation, round trips, truncation and signed zero
   ---
-  duration_ms: 0.31968
+  duration_ms: 0.395465
   type: 'test'
   ...
 # Subtest: invalid decimal and excessive exponents are rejected
 ok 15 - invalid decimal and excessive exponents are rejected
   ---
-  duration_ms: 0.395819
+  duration_ms: 0.388333
   type: 'test'
   ...
 # Subtest: Machin pi agrees with mpmath reference to 90 decimal places
 ok 16 - Machin pi agrees with mpmath reference to 90 decimal places
   ---
-  duration_ms: 0.367543
+  duration_ms: 0.424822
   type: 'test'
   ...
 # Subtest: log(2) agrees with mpmath
 ok 17 - log(2) agrees with mpmath
   ---
-  duration_ms: 0.306882
+  duration_ms: 0.332934
   type: 'test'
   ...
 # Subtest: log(0.00000000000000000000000000000000000000000000000000000000000000000000000000000001) agrees with mpmath
 ok 18 - log(0.00000000000000000000000000000000000000000000000000000000000000000000000000000001) agrees with mpmath
   ---
-  duration_ms: 0.143506
+  duration_ms: 0.153592
   type: 'test'
   ...
 # Subtest: log(0.01) agrees with mpmath
 ok 19 - log(0.01) agrees with mpmath
   ---
-  duration_ms: 1.035474
+  duration_ms: 0.241077
   type: 'test'
   ...
 # Subtest: log(0.5) agrees with mpmath
 ok 20 - log(0.5) agrees with mpmath
   ---
-  duration_ms: 0.138024
+  duration_ms: 1.345592
   type: 'test'
   ...
 # Subtest: log(10000000000) agrees with mpmath
 ok 21 - log(10000000000) agrees with mpmath
   ---
-  duration_ms: 0.272171
+  duration_ms: 0.37287
   type: 'test'
   ...
 # Subtest: exp(0) agrees with mpmath
 ok 22 - exp(0) agrees with mpmath
   ---
-  duration_ms: 0.441055
+  duration_ms: 0.445299
   type: 'test'
   ...
 # Subtest: exp(1) agrees with mpmath
 ok 23 - exp(1) agrees with mpmath
   ---
-  duration_ms: 0.169308
+  duration_ms: 0.192438
   type: 'test'
   ...
 # Subtest: exp(20) agrees with mpmath
 ok 24 - exp(20) agrees with mpmath
   ---
-  duration_ms: 0.089904
+  duration_ms: 0.154397
   type: 'test'
   ...
 # Subtest: exp(-20) agrees with mpmath
 ok 25 - exp(-20) agrees with mpmath
   ---
-  duration_ms: 0.078401
+  duration_ms: 0.122219
   type: 'test'
   ...
 # Subtest: exp(-1) agrees with mpmath
 ok 26 - exp(-1) agrees with mpmath
   ---
-  duration_ms: 0.066527
+  duration_ms: 0.094526
   type: 'test'
   ...
 # Subtest: sincos(0) agrees with mpmath
 ok 27 - sincos(0) agrees with mpmath
   ---
-  duration_ms: 0.176003
+  duration_ms: 0.156636
   type: 'test'
   ...
 # Subtest: sincos(123456789) agrees with mpmath
 ok 28 - sincos(123456789) agrees with mpmath
   ---
-  duration_ms: 0.169927
+  duration_ms: 0.207731
   type: 'test'
   ...
 # Subtest: sincos(-123456789) agrees with mpmath
 ok 29 - sincos(-123456789) agrees with mpmath
   ---
-  duration_ms: 0.095031
+  duration_ms: 0.121575
   type: 'test'
   ...
 # Subtest: sincos(-3.14159) agrees with mpmath
 ok 30 - sincos(-3.14159) agrees with mpmath
   ---
-  duration_ms: 0.053646
+  duration_ms: 0.070176
   type: 'test'
   ...
 # Subtest: sincos(-1) agrees with mpmath
 ok 31 - sincos(-1) agrees with mpmath
   ---
-  duration_ms: 0.081252
+  duration_ms: 0.214614
   type: 'test'
   ...
 # Subtest: sincos(0.37) agrees with mpmath
 ok 32 - sincos(0.37) agrees with mpmath
   ---
-  duration_ms: 0.08465
+  duration_ms: 0.117194
   type: 'test'
   ...
 # Subtest: sincos(1.57) agrees with mpmath
 ok 33 - sincos(1.57) agrees with mpmath
   ---
-  duration_ms: 0.08739
+  duration_ms: 0.120411
   type: 'test'
   ...
 # Subtest: sincos(3.5) agrees with mpmath
 ok 34 - sincos(3.5) agrees with mpmath
   ---
-  duration_ms: 0.075255
+  duration_ms: 0.101628
   type: 'test'
   ...
 # Subtest: sqrt(2) agrees with mpmath
 ok 35 - sqrt(2) agrees with mpmath
   ---
-  duration_ms: 0.1059
+  duration_ms: 0.134359
   type: 'test'
   ...
 # Subtest: sqrt(5) agrees with mpmath
 ok 36 - sqrt(5) agrees with mpmath
   ---
-  duration_ms: 0.043254
+  duration_ms: 0.068747
   type: 'test'
   ...
 # Subtest: sqrt(100000) agrees with mpmath
 ok 37 - sqrt(100000) agrees with mpmath
   ---
-  duration_ms: 0.057409
+  duration_ms: 0.062068
   type: 'test'
   ...
 # Subtest: sqrt(0.00001) agrees with mpmath
 ok 38 - sqrt(0.00001) agrees with mpmath
   ---
-  duration_ms: 0.057672
+  duration_ms: 0.067662
   type: 'test'
   ...
 # Subtest: atan2(1,1) agrees with mpmath
 ok 39 - atan2(1,1) agrees with mpmath
   ---
-  duration_ms: 0.247753
+  duration_ms: 0.278544
   type: 'test'
   ...
 # Subtest: atan2(1,-1) agrees with mpmath
 ok 40 - atan2(1,-1) agrees with mpmath
   ---
-  duration_ms: 0.113343
+  duration_ms: 0.147123
   type: 'test'
   ...
 # Subtest: atan2(-1,-1) agrees with mpmath
 ok 41 - atan2(-1,-1) agrees with mpmath
   ---
-  duration_ms: 0.777345
+  duration_ms: 0.125442
   type: 'test'
   ...
 # Subtest: atan2(-1,1) agrees with mpmath
 ok 42 - atan2(-1,1) agrees with mpmath
   ---
-  duration_ms: 0.132569
+  duration_ms: 0.174375
   type: 'test'
   ...
 # Subtest: atan2(1,0) agrees with mpmath
 ok 43 - atan2(1,0) agrees with mpmath
   ---
-  duration_ms: 0.046127
+  duration_ms: 0.059394
   type: 'test'
   ...
 # Subtest: atan2(0,-2) agrees with mpmath
 ok 44 - atan2(0,-2) agrees with mpmath
   ---
-  duration_ms: 0.070954
+  duration_ms: 0.068496
   type: 'test'
   ...
 # Subtest: atan2(50,0.00001) agrees with mpmath
 ok 45 - atan2(50,0.00001) agrees with mpmath
   ---
-  duration_ms: 0.062704
+  duration_ms: 0.075914
   type: 'test'
   ...
 # Subtest: arithmetic domain errors are explicit
 ok 46 - arithmetic domain errors are explicit
   ---
-  duration_ms: 0.166558
+  duration_ms: 0.186632
   type: 'test'
   ...
 # Subtest: known real orbits: fixed point, period two, threshold, undefined origin
 ok 47 - known real orbits: fixed point, period two, threshold, undefined origin
   ---
-  duration_ms: 0.425682
+  duration_ms: 0.418996
   type: 'test'
   ...
 # Subtest: FP64 respects conjugation away from branch cut
 ok 48 - FP64 respects conjugation away from branch cut
   ---
-  duration_ms: 0.449626
+  duration_ms: 0.447259
   type: 'test'
   ...
 # Subtest: BigInt orbit matches known stable and threshold classifications
 ok 49 - BigInt orbit matches known stable and threshold classifications
   ---
-  duration_ms: 12.488148
+  duration_ms: 12.710411
   type: 'test'
   ...
 # Subtest: complex BigInt orbit agrees with FP64 on selected non-boundary inputs
 ok 50 - complex BigInt orbit agrees with FP64 on selected non-boundary inputs
   ---
-  duration_ms: 120.290177
+  duration_ms: 106.844352
   type: 'test'
   ...
 # Subtest: all palettes return finite RGB bytes
 ok 51 - all palettes return finite RGB bytes
   ---
-  duration_ms: 0.58205
+  duration_ms: 0.578803
   type: 'test'
   ...
 # Subtest: finite classification can differ with convergence tolerance
 ok 52 - finite classification can differ with convergence tolerance
   ---
-  duration_ms: 12.22772
+  duration_ms: 15.992129
   type: 'test'
   ...
 # Subtest: numeric failures identify the actual failing step
 ok 53 - numeric failures identify the actual failing step
   ---
-  duration_ms: 4.912454
+  duration_ms: 3.922621
   type: 'test'
   ...
 # Subtest: build is deterministic and CSP authorizes exact script and CSS bytes
 ok 54 - build is deterministic and CSP authorizes exact script and CSS bytes
   ---
-  duration_ms: 99.921468
+  duration_ms: 110.641298
   type: 'test'
   ...
 # Subtest: production headers block framing and revalidate unversioned bundles
 ok 55 - production headers block framing and revalidate unversioned bundles
   ---
-  duration_ms: 0.320809
+  duration_ms: 0.367231
   type: 'test'
   ...
 # Subtest: local server handles methods, HEAD, malformed paths, symlinks and missing files
 ok 56 - local server handles methods, HEAD, malformed paths, symlinks and missing files
   ---
-  duration_ms: 34.886748
+  duration_ms: 68.975567
   type: 'test'
   ...
 # Subtest: bundle carries the perturbation engine, one GPU backend and a complete Worker source
 ok 57 - bundle carries the perturbation engine, one GPU backend and a complete Worker source
   ---
-  duration_ms: 52.298878
+  duration_ms: 62.939435
   type: 'test'
   ...
 # Subtest: production headers add transport, isolation and resource policies
 ok 58 - production headers add transport, isolation and resource policies
   ---
-  duration_ms: 0.349415
+  duration_ms: 0.370849
   type: 'test'
   ...
 # Subtest: shader sources compile-time constants match the shared classification rules
 ok 59 - shader sources compile-time constants match the shared classification rules
   ---
-  duration_ms: 1.04042
+  duration_ms: 1.141832
   type: 'test'
   ...
 # Subtest: offline shell: service worker, manifest and icons are emitted and versioned
 ok 60 - offline shell: service worker, manifest and icons are emitted and versioned
   ---
-  duration_ms: 103.549461
+  duration_ms: 102.941839
   type: 'test'
   ...
 # Subtest: local server sends the right MIME types for the offline shell
 ok 61 - local server sends the right MIME types for the offline shell
   ---
-  duration_ms: 64.408784
+  duration_ms: 84.981374
   type: 'test'
   ...
 # Subtest: FP64 perturbation equals exact orbits: deep feather 1e-11
 ok 62 - FP64 perturbation equals exact orbits: deep feather 1e-11
   ---
-  duration_ms: 415.853356
+  duration_ms: 528.657958
   type: 'test'
   ...
 # Subtest: FP64 perturbation equals exact orbits: deep feather 1e-24
 ok 63 - FP64 perturbation equals exact orbits: deep feather 1e-24
   ---
-  duration_ms: 921.53375
+  duration_ms: 1005.407886
   type: 'test'
   ...
 # Subtest: FP64 perturbation equals exact orbits: coral plume 1e-10
 ok 64 - FP64 perturbation equals exact orbits: coral plume 1e-10
   ---
-  duration_ms: 363.573002
+  duration_ms: 420.410931
   type: 'test'
   ...
 # Subtest: FP64 perturbation equals exact orbits: negative real axis straddle
 ok 65 - FP64 perturbation equals exact orbits: negative real axis straddle
   ---
-  duration_ms: 14.599247
+  duration_ms: 13.961723
   type: 'test'
   ...
 # Subtest: FP64 perturbation equals exact orbits: straddle with reference above axis
 ok 66 - FP64 perturbation equals exact orbits: straddle with reference above axis
   ---
-  duration_ms: 83.955706
+  duration_ms: 91.057033
   type: 'test'
   ...
 # Subtest: FP64 perturbation equals exact orbits: view containing the origin
 ok 67 - FP64 perturbation equals exact orbits: view containing the origin
   ---
-  duration_ms: 38.805987
+  duration_ms: 33.209732
   type: 'test'
   ...
 # Subtest: FP64 perturbation equals exact orbits: lower half plane only
 ok 68 - FP64 perturbation equals exact orbits: lower half plane only
   ---
-  duration_ms: 72.329426
+  duration_ms: 62.765565
   type: 'test'
   ...
 # Subtest: FP64 perturbation equals exact orbits: threshold boundary at 1e-55
 ok 69 - FP64 perturbation equals exact orbits: threshold boundary at 1e-55
   ---
-  duration_ms: 1494.068218
+  duration_ms: 1707.752682
   type: 'test'
   ...
 # Subtest: FP64 perturbation equals exact orbits: fixed-point interior at 1e-150
 ok 70 - FP64 perturbation equals exact orbits: fixed-point interior at 1e-150
   ---
-  duration_ms: 140.820068
+  duration_ms: 157.309571
   type: 'test'
   ...
 # Subtest: an off-centre reference (rebasing and reference exhaustion) gives the same image
 ok 71 - an off-centre reference (rebasing and reference exhaustion) gives the same image
   ---
-  duration_ms: 464.559446
+  duration_ms: 421.790491
   type: 'test'
   ...
 # Subtest: CPU classification rules (underflow to -700) also agree at depth
 ok 72 - CPU classification rules (underflow to -700) also agree at depth
   ---
-  duration_ms: 259.983127
+  duration_ms: 211.968164
   type: 'test'
   ...
 # Subtest: a reference that escapes early still renders surviving pixels correctly
 ok 73 - a reference that escapes early still renders surviving pixels correctly
   ---
-  duration_ms: 13.405595
+  duration_ms: 8.661944
   type: 'test'
   ...
 # Subtest: pixel at the reference follows the reference orbit; pixel at the origin is a numerical limit
 ok 74 - pixel at the reference follows the reference orbit; pixel at the origin is a numerical limit
   ---
-  duration_ms: 3.387991
+  duration_ms: 2.302073
   type: 'test'
   ...
 # Subtest: perturbation agrees with direct FP64 in smooth regions at shallow depth
 ok 75 - perturbation agrees with direct FP64 in smooth regions at shallow depth
   ---
-  duration_ms: 30.278084
+  duration_ms: 22.171358
   type: 'test'
   ...
 # Subtest: conjugate symmetry: mirrored pixels give conjugate fixed points and identical escapes
 ok 76 - conjugate symmetry: mirrored pixels give conjugate fixed points and identical escapes
   ---
-  duration_ms: 7.982754
+  duration_ms: 7.468554
   type: 'test'
   ...
 # Subtest: GPU scene offsets keep FP32-sized mantissas at any depth
 ok 77 - GPU scene offsets keep FP32-sized mantissas at any depth
   ---
-  duration_ms: 0.771999
+  duration_ms: 1.004043
   type: 'test'
   ...
 # Subtest: escape-band colours keep cycling at depth and stay bounded
 ok 78 - escape-band colours keep cycling at depth and stay bounded
   ---
-  duration_ms: 0.501965
+  duration_ms: 0.536445
   type: 'test'
   ...
 # Subtest: the product remains English and uses only neutral CSS colors
 ok 79 - the product remains English and uses only neutral CSS colors
   ---
-  duration_ms: 4.012009
+  duration_ms: 4.911352
   type: 'test'
   ...
 # Subtest: current project documentation contains no video-platform reference URLs
 ok 80 - current project documentation contains no video-platform reference URLs
   ---
-  duration_ms: 0.568798
+  duration_ms: 0.663818
   type: 'test'
   ...
 # Subtest: binary constants agree with the decimal library to 240 digits
 ok 81 - binary constants agree with the decimal library to 240 digits
   ---
-  duration_ms: 4.53061
+  duration_ms: 4.299616
   type: 'test'
   ...
 # Subtest: toNumber rounds binary fixed point to the nearest double, including tiny and huge values
 ok 82 - toNumber rounds binary fixed point to the nearest double, including tiny and huge values
   ---
-  duration_ms: 0.444542
+  duration_ms: 0.46237
   type: 'test'
   ...
 # Subtest: complex exp matches the decimal exp, sin and cos to the working precision
 ok 83 - complex exp matches the decimal exp, sin and cos to the working precision
   ---
-  duration_ms: 2.412459
+  duration_ms: 2.593028
   type: 'test'
   ...
 # Subtest: reference orbit equals decimal BigInt orbit to double rounding: complex boundary
 ok 84 - reference orbit equals decimal BigInt orbit to double rounding: complex boundary
   ---
-  duration_ms: 3.443663
+  duration_ms: 3.616034
   type: 'test'
   ...
 # Subtest: reference orbit equals decimal BigInt orbit to double rounding: negative real axis
 ok 85 - reference orbit equals decimal BigInt orbit to double rounding: negative real axis
   ---
-  duration_ms: 1.249505
+  duration_ms: 1.118839
   type: 'test'
   ...
 # Subtest: reference orbit equals decimal BigInt orbit to double rounding: positive real fixed point
 ok 86 - reference orbit equals decimal BigInt orbit to double rounding: positive real fixed point
   ---
-  duration_ms: 0.92179
+  duration_ms: 1.090778
   type: 'test'
   ...
 # Subtest: reference orbit equals decimal BigInt orbit to double rounding: large modulus
 ok 87 - reference orbit equals decimal BigInt orbit to double rounding: large modulus
   ---
-  duration_ms: 0.460569
+  duration_ms: 0.498869
   type: 'test'
   ...
 # Subtest: reference orbit equals decimal BigInt orbit to double rounding: tiny modulus
 ok 88 - reference orbit equals decimal BigInt orbit to double rounding: tiny modulus
   ---
-  duration_ms: 2.22964
+  duration_ms: 2.457046
   type: 'test'
   ...
 # Subtest: reference orbit equals decimal BigInt orbit to double rounding: deep 200 digit point
 ok 89 - reference orbit equals decimal BigInt orbit to double rounding: deep 200 digit point
   ---
-  duration_ms: 10.993466
+  duration_ms: 13.24986
   type: 'test'
   ...
 # Subtest: threshold differences stay exact when the reference crosses exactly at the threshold
 ok 90 - threshold differences stay exact when the reference crosses exactly at the threshold
   ---
-  duration_ms: 3.100499
+  duration_ms: 3.489597
   type: 'test'
   ...
 # Subtest: reference continues past its own threshold crossing until exp leaves the representable range
 ok 91 - reference continues past its own threshold crossing until exp leaves the representable range
   ---
-  duration_ms: 0.334832
+  duration_ms: 0.46133
   type: 'test'
   ...
 # Subtest: underflowing values keep floating magnitude and phase instead of becoming zero
 ok 92 - underflowing values keep floating magnitude and phase instead of becoming zero
   ---
-  duration_ms: 0.841634
+  duration_ms: 0.936568
   type: 'test'
   ...
 # Subtest: invalid reference points are rejected
 ok 93 - invalid reference points are rejected
   ---
-  duration_ms: 0.471707
+  duration_ms: 0.565684
   type: 'test'
   ...
 # Subtest: reference orbit computation is fast enough for interactive deep zoom
 ok 94 - reference orbit computation is fast enough for interactive deep zoom
   ---
-  duration_ms: 192.499398
+  duration_ms: 230.700651
   type: 'test'
   ...
 # Subtest: reference orbits agree with the independent 300-digit mpmath fixtures
 ok 95 - reference orbits agree with the independent 300-digit mpmath fixtures
   ---
-  duration_ms: 15.827233
+  duration_ms: 14.901645
   type: 'test'
   ...
 # Subtest: 240-digit orbit vs independent 300-digit reference: positive-real
 ok 96 - 240-digit orbit vs independent 300-digit reference: positive-real
   ---
-  duration_ms: 4.112972
+  duration_ms: 4.845079
   type: 'test'
   ...
 # Subtest: 240-digit orbit vs independent 300-digit reference: tiny-complex
 ok 97 - 240-digit orbit vs independent 300-digit reference: tiny-complex
   ---
-  duration_ms: 4.376197
+  duration_ms: 4.411143
   type: 'test'
   ...
 # Subtest: 240-digit orbit vs independent 300-digit reference: upper-half
 ok 98 - 240-digit orbit vs independent 300-digit reference: upper-half
   ---
-  duration_ms: 3.404023
+  duration_ms: 3.993257
   type: 'test'
   ...
 # Subtest: 240-digit orbit vs independent 300-digit reference: lower-half
 ok 99 - 240-digit orbit vs independent 300-digit reference: lower-half
   ---
-  duration_ms: 2.744052
+  duration_ms: 3.242829
   type: 'test'
   ...
 # Subtest: 240-digit orbit vs independent 300-digit reference: negative-axis
 ok 100 - 240-digit orbit vs independent 300-digit reference: negative-axis
   ---
-  duration_ms: 2.51448
+  duration_ms: 2.931842
   type: 'test'
   ...
 # Subtest: 240-digit orbit vs independent 300-digit reference: upper-cut
 ok 101 - 240-digit orbit vs independent 300-digit reference: upper-cut
   ---
-  duration_ms: 2.220408
+  duration_ms: 2.527588
   type: 'test'
   ...
 # Subtest: 240-digit orbit vs independent 300-digit reference: lower-cut
 ok 102 - 240-digit orbit vs independent 300-digit reference: lower-cut
   ---
-  duration_ms: 2.509399
+  duration_ms: 3.040722
   type: 'test'
   ...
 # Subtest: 240-digit orbit vs independent 300-digit reference: stable-complex
 ok 103 - 240-digit orbit vs independent 300-digit reference: stable-complex
   ---
-  duration_ms: 3.046921
+  duration_ms: 3.076415
   type: 'test'
   ...
 # Subtest: 240-digit orbit vs independent 300-digit reference: near-one
 ok 104 - 240-digit orbit vs independent 300-digit reference: near-one
   ---
-  duration_ms: 1.391164
+  duration_ms: 1.486352
   type: 'test'
   ...
 # Subtest: 240-digit orbit vs independent 300-digit reference: deep-center
 ok 105 - 240-digit orbit vs independent 300-digit reference: deep-center
   ---
-  duration_ms: 1.973
+  duration_ms: 1.90279
   type: 'test'
   ...
 # Subtest: 240-digit orbit vs independent 300-digit reference: deep-displaced
 ok 106 - 240-digit orbit vs independent 300-digit reference: deep-displaced
   ---
-  duration_ms: 1.576461
+  duration_ms: 1.631009
   type: 'test'
   ...
 # Subtest: 240-digit orbit vs independent 300-digit reference: tiny-positive
 ok 107 - 240-digit orbit vs independent 300-digit reference: tiny-positive
   ---
-  duration_ms: 1.689311
+  duration_ms: 1.838991
   type: 'test'
   ...
 # Subtest: 240-digit orbits distinguish coordinates separated below Number precision
 ok 108 - 240-digit orbits distinguish coordinates separated below Number precision
   ---
-  duration_ms: 2.234566
+  duration_ms: 2.491542
   type: 'test'
   ...
 # Subtest: display resolution respects density, pixel and dimension limits
 ok 109 - display resolution respects density, pixel and dimension limits
   ---
-  duration_ms: 3.04568
+  duration_ms: 3.105471
   type: 'test'
   ...
 # Subtest: center-first partial tiles cover every destination pixel exactly once
 ok 110 - center-first partial tiles cover every destination pixel exactly once
   ---
-  duration_ms: 6.1626
+  duration_ms: 3.517901
   type: 'test'
   ...
 # Subtest: PNG hue fallback preserves alpha and neutral tones and changes chromatic tones
 ok 111 - PNG hue fallback preserves alpha and neutral tones and changes chromatic tones
   ---
-  duration_ms: 0.431828
+  duration_ms: 0.380764
   type: 'test'
   ...
 # Subtest: saved coordinates survive an exact decimal round trip
 ok 112 - saved coordinates survive an exact decimal round trip
   ---
-  duration_ms: 2.423158
+  duration_ms: 2.340735
   type: 'test'
   ...
 # Subtest: saved view input rejects corrupt schemas and out-of-bounds coordinates
 ok 113 - saved view input rejects corrupt schemas and out-of-bounds coordinates
   ---
-  duration_ms: 0.456589
+  duration_ms: 0.424645
   type: 'test'
   ...
 # Subtest: saved view bounds prevent unbounded growth and duplicate identities
 ok 114 - saved view bounds prevent unbounded growth and duplicate identities
   ---
-  duration_ms: 0.558227
+  duration_ms: 0.643029
   type: 'test'
   ...
 # Subtest: art palettes are bounded, distinct and leave a neutral option
 ok 115 - art palettes are bounded, distinct and leave a neutral option
   ---
-  duration_ms: 2.780452
+  duration_ms: 2.74609
   type: 'test'
   ...
 # Subtest: cpu worker pool matches serial pixels and counts across partial edge tiles
 ok 116 - cpu worker pool matches serial pixels and counts across partial edge tiles
   ---
-  duration_ms: 104.593928
+  duration_ms: 78.24919
   type: 'test'
   ...
 # Subtest: exact worker pool matches serial pixels and counts across partial edge tiles
 ok 117 - exact worker pool matches serial pixels and counts across partial edge tiles
   ---
-  duration_ms: 1553.671888
+  duration_ms: 1851.312199
   type: 'test'
   ...
 # Subtest: exact mode really evaluates decimal BigInt orbits, not FP64
 ok 118 - exact mode really evaluates decimal BigInt orbits, not FP64
   ---
-  duration_ms: 37.36778
+  duration_ms: 42.263075
   type: 'test'
   ...
 # Subtest: FP64 perturbation tiles agree with exact per-pixel orbits at 1e-20
 ok 119 - FP64 perturbation tiles agree with exact per-pixel orbits at 1e-20
   ---
-  duration_ms: 1604.28103
+  duration_ms: 1855.277794
   type: 'test'
   ...
 # Subtest: a newer job supersedes a running one at the next yield
 ok 120 - a newer job supersedes a running one at the next yield
   ---
-  duration_ms: 14.241312
+  duration_ms: 10.194819
   type: 'test'
   ...
 # Subtest: reference requests transfer exact orbit arrays
 ok 121 - reference requests transfer exact orbit arrays
   ---
-  duration_ms: 7.870808
+  duration_ms: 5.332511
   type: 'test'
   ...
 # Subtest: discover returns a detailed, reproducible place within FP64 range
 ok 122 - discover returns a detailed, reproducible place within FP64 range
   ---
-  duration_ms: 6145.757901
+  duration_ms: 7470.01725
   type: 'test'
   ...
 1..122
@@ -743,4 +743,4 @@ ok 122 - discover returns a detailed, reproducible place within FP64 range
 # cancelled 0
 # skipped 0
 # todo 0
-# duration_ms 10697.016954
+# duration_ms 12679.302087

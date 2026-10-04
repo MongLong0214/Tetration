@@ -1,7 +1,7 @@
 {
   "suite": "quality",
   "origin": "http://127.0.0.1:4173",
-  "bundle_sha256": "4986c0248db2837079b21515deda49647efddcb8f8eb66d299512e40eb07c0c2",
+  "bundle_sha256": "6704ca966b05b21e2676a5eac7aff389a4a814f9f83220bd9c6fbc822bbe25ce",
   "playwright": "1.56.0",
   "limitations": [
     "Software WebGL2; antialiasing error measured on sampled cameras.",
@@ -23,12 +23,12 @@
         "iterations": 384,
         "palette": 0,
         "width": 1000,
-        "height": 590,
+        "height": 592,
         "counts": null,
-        "elapsed": 12160,
+        "elapsed": 11591.79999999993,
         "samples": 16
       },
-      "seconds": 13.05
+      "seconds": 12.33
     },
     {
       "name": "Adaptive 4x and 16x antialiasing reduce error against a 64-sample reference: direct overview",
@@ -42,7 +42,7 @@
         "pixels": 25600,
         "reference": "64 samples per pixel"
       },
-      "seconds": 17.01
+      "seconds": 16.41
     },
     {
       "name": "Adaptive 4x and 16x antialiasing reduce error against a 64-sample reference: direct filaments",
@@ -56,7 +56,7 @@
         "pixels": 25600,
         "reference": "64 samples per pixel"
       },
-      "seconds": 19.9
+      "seconds": 19.29
     },
     {
       "name": "Adaptive 4x and 16x antialiasing reduce error against a 64-sample reference: perturbation plume",
@@ -70,13 +70,13 @@
         "pixels": 14400,
         "reference": "64 samples per pixel"
       },
-      "seconds": 54.59
+      "seconds": 48.61
     },
     {
       "name": "Direct tiles with adaptive samples equal one full-frame draw",
       "passed": true,
       "detail": 0,
-      "seconds": 55.04
+      "seconds": 49.02
     },
     {
       "name": "Dragging shows live single-sample frames, then refines on release",
@@ -89,7 +89,7 @@
           "16": 0
         }
       },
-      "seconds": 63.69
+      "seconds": 56.9
     },
     {
       "name": "Wheel zoom eases the visible camera onto the exact target",
@@ -97,58 +97,58 @@
       "detail": {
         "target_span": "0.237716252204793110"
       },
-      "seconds": 66.08
+      "seconds": 59.34
     },
     {
       "name": "A flick keeps gliding with decaying inertia, then renders",
       "passed": true,
       "detail": null,
-      "seconds": 70.49
+      "seconds": 63.57
     },
     {
       "name": "Colour flow changes only presentation, without recomputing",
       "passed": true,
       "detail": null,
-      "seconds": 71.12
+      "seconds": 64.22
     },
     {
       "name": "A shared view keeps quality and hue and opens without motion",
       "passed": true,
       "detail": null,
-      "seconds": 73.51
+      "seconds": 66.49
     },
     {
       "name": "Reduced-motion preference stops colour flow",
       "passed": true,
       "detail": null,
-      "seconds": 73.54
+      "seconds": 66.52
     },
     {
       "name": "Reduced motion jumps directly and disables inertia",
       "passed": true,
       "detail": null,
-      "seconds": 79.73
+      "seconds": 72.41
     },
     {
       "name": "CPU keeps the reprojected image while replacement Workers are pending",
       "passed": true,
       "detail": 0,
-      "seconds": 84.63
+      "seconds": 77.78
     },
     {
       "name": "Palette changes recolour the rendered view",
       "passed": true,
       "detail": null,
-      "seconds": 88.1
+      "seconds": 81.11
     },
     {
       "name": "No uncaught browser exceptions",
       "passed": true,
       "detail": null,
-      "seconds": 88.1
+      "seconds": 81.11
     }
   ],
   "count": 15,
   "uncaught_errors": [],
-  "seconds": 88.2
+  "seconds": 81.2
 }

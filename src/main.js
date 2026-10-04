@@ -98,10 +98,10 @@
   }
   function setProgress(value) { $('progressBar').style.width = value + '%'; $('progressTrack').setAttribute('aria-valuenow', Math.round(value)); }
   function showLoading(text) { $('retryBtn').hidden = true; $('loading').hidden = false; $('loadingText').textContent = text; }
-  function saveHistory() {
+  function saveHistory(base = view) {
     future = [];
     const prev = history.at(-1);
-    if (!prev || !same(prev, view)) { if (history.length >= 80) history.shift(); history.push(clone(view)); }
+    if (!prev || !same(prev, base)) { if (history.length >= 80) history.shift(); history.push(clone(base)); }
     $('backBtn').disabled = !history.length; $('forwardBtn').disabled = !future.length;
   }
 
@@ -246,7 +246,7 @@
   }
 
   // ---------- References (exact orbits for perturbation) ----------
-  const references = {worker: null, cache: [], inflight: new Map(), nextId: 1, waiters: new Map(), discover: new Map(), computed: 0, active: null};
+  const references = {live: null, worker: null, cache: [], inflight: new Map(), nextId: 1, waiters: new Map(), discover: new Map(), computed: 0, active: null};
   function referenceWorker() {
     if (references.worker) return references.worker;
     try {
@@ -258,8 +258,10 @@
       };
       worker.onerror = event => {
         event.preventDefault?.();
+        const pending = [...references.discover.values()]; references.discover.clear();
         for (const waiter of references.waiters.values()) waiter.reject(Error('Reference worker interrupted'));
         references.waiters.clear(); references.inflight.clear(); references.worker = null; worker.terminate();
+        for (const done of pending) done({type: 'discover', error: 'Reference worker interrupted'});
       };
       references.worker = worker;
     } catch { references.worker = null; }
@@ -335,9 +337,14 @@
     let ref = null;
     if (mode === 'perturb') {
       ref = findReference(v, mode);
-      if (!ref) { ensureReference(v, mode).then(() => requestInteractive(), () => {}); return; }
+      // One outstanding request from live frames; later frames reuse it instead of queueing stale orbits.
+      if (!ref) {
+        if (!references.live) references.live = ensureReference(v, mode).finally(() => { references.live = null; requestInteractive(); }).catch(() => {});
+        return;
+      }
     }
     const renderer = gpu, scene = buildScene(v, mode, ref), key = sceneKey(scene, v);
+    if (mode === 'perturb') scheduleWarm();
     if (display.frame && display.key === key) return;
     const size = interactiveSize(renderer, scene);
     setGPUBusy(true);
@@ -345,7 +352,7 @@
     let frame = null;
     try {
       frame = renderer.beginFrame(size.width, size.height);
-      renderer.prepare(frame, scene, 1);
+      renderer.prepare(frame, scene, 1, undefined, false);
       renderer.drawTile(frame, {x: 0, y: 0, width: size.width, height: size.height});
       await renderer.fence();
       const ms = Math.max(0.5, performance.now() - t0);
@@ -611,7 +618,13 @@
   }
 
   // ---------- Motion: smooth zoom, inertia ----------
-  const motion = {raf: 0, last: 0, vx: 0, vy: 0, samples: []};
+  const motion = {raf: 0, last: 0, vx: 0, vy: 0, samples: [], frames: 0};
+  // BigInt times a double with a 53-bit mantissa (ratio() rounds factors to 1e-6).
+  function scaleBig(a, f) {
+    if (!f || !a) return 0n;
+    const e = Math.floor(Math.log2(Math.abs(f))), m = BigInt(Math.round(f * 2 ** (52 - e)));
+    return e >= 52 ? a * m << BigInt(e - 52) : a * m / (1n << BigInt(52 - e));
+  }
   function easeVisual(dt) {
     if (same(visual, view)) return false;
     const k = 1 - Math.exp(-dt / 55);
@@ -620,18 +633,20 @@
     const nextSpan = s0 * ratioSpan ** k;
     let next;
     if (Math.abs(ratioSpan - 1) < 1e-9) {
-      next = {span: to.span, x: from.x + ratio(to.x - from.x, k), y: from.y + ratio(to.y - from.y, k)};
+      next = {span: to.span, x: from.x + scaleBig(to.x - from.x, k), y: from.y + scaleBig(to.y - from.y, k)};
     } else {
       // Keep the fixed point of the similarity between both cameras in place.
-      const d = to.span - from.span, px = F.div(F.mul(from.x, to.span) - F.mul(to.x, from.span), d), py = F.div(F.mul(from.y, to.span) - F.mul(to.y, from.span), d);
-      const spanBig = ratio(from.span, nextSpan / s0);
-      next = {span: spanBig, x: px + ratio(from.x - px, nextSpan / s0), y: py + ratio(from.y - py, nextSpan / s0)};
+      // Exact rational (one rounding), so the fixed point stays exact down to 1e-200 spans.
+      const d = to.span - from.span, px = (from.x * to.span - to.x * from.span) / d, py = (from.y * to.span - to.y * from.span) / d, f = nextSpan / s0;
+      next = {span: scaleBig(from.span, f), x: px + scaleBig(from.x - px, f), y: py + scaleBig(from.y - py, f)};
     }
     const remaining = Math.abs(Math.log(s1 / num(next.span))) + Math.hypot(num(F.div(to.x - next.x, to.span)), num(F.div(to.y - next.y, to.span)));
-    visual = remaining < 2e-3 ? clone(view) : next;
+    // Snap when close, or if a glide ever stops converging, so the final render always starts.
+    motion.frames++;
+    visual = remaining < 2e-3 || !Number.isFinite(remaining) || motion.frames > 240 ? clone(view) : next;
     return true;
   }
-  function startMotion() { if (!motion.raf) { motion.last = performance.now(); motion.raf = requestAnimationFrame(stepMotion); } }
+  function startMotion() { motion.frames = 0; if (!motion.raf) { motion.last = performance.now(); motion.raf = requestAnimationFrame(stepMotion); } }
   function stepMotion(now) {
     const dt = Math.min(48, Math.max(1, now - motion.last)); motion.last = now;
     let moved = easeVisual(dt);
@@ -654,7 +669,11 @@
     const zoom = num(a.span) / num(b.span), larger = a.span > b.span ? a.span : b.span;
     return zoom < 64 && zoom > 1 / 64 && num(F.div(F.abs(a.x - b.x) + F.abs(a.y - b.y), larger)) < 4;
   }
-  function goTo(next, index = -1) { stopMotion(); view = next; locationIndex = index; changed({animate: near(next, visual)}); }
+  function goTo(next, index = -1) {
+    stopMotion();
+    if (same(next, view) && same(visual, view) && lastRenderComplete) { locationIndex = index; syncControls(); updateReadout(); return; }
+    view = next; locationIndex = index; changed({animate: near(next, visual)});
+  }
   function jump(next, index = -1) { saveHistory(); goTo(next, index); }
   function loadPreset(index) { closeSettings(); viewport.focus({preventScroll: true}); jump(parseView(presets[index]), index); }
   function zoomButton(factor, point) { stopMotion(); saveHistory(); if (zoomAt(factor, point)) { locationIndex = -1; changed({animate: true}); } }
@@ -668,7 +687,7 @@
 
   // ---------- Pointer, wheel and keyboard ----------
   const pointerMap = new Map();
-  let pinch = null, drag = null, gestureSaved = false;
+  let pinch = null, drag = null, gestureSaved = false, gestureBase = null;
   function touchSetup() {
     const values = [...pointerMap.values()];
     if (values.length >= 2) {
@@ -681,8 +700,11 @@
   viewport.addEventListener('pointerdown', e => {
     if (e.target.closest('button') || e.button > 0) return;
     viewport.focus({preventScroll: true}); viewport.setPointerCapture(e.pointerId);
-    stopMotion(); visual = clone(view);
-    if (!gestureSaved) { saveHistory(); gestureSaved = true; }
+    // Grabbing during a glide freezes the camera where it is on screen.
+    stopMotion();
+    if (!same(visual, view)) { view = clone(visual); locationIndex = -1; invalidate(); syncControls(); updateReadout(); }
+    visual = clone(view);
+    if (!pointerMap.size && !gestureSaved) gestureBase = clone(view);
     pointerMap.set(e.pointerId, relative(e.clientX, e.clientY)); touchSetup();
   });
   viewport.addEventListener('pointermove', e => {
@@ -697,6 +719,8 @@
       view = bounded({...drag.view, x: drag.view.x - ratio(drag.view.span, p.x - drag.point.x, dims.w), y: drag.view.y + ratio(drag.view.span, p.y - drag.point.y, dims.w)});
       motion.samples.push({t: performance.now(), x: p.x, y: p.y}); if (motion.samples.length > 8) motion.samples.shift();
     } else return;
+    // History is saved only once a gesture actually moves the camera (a tap keeps Forward).
+    if (!gestureSaved && gestureBase && !same(gestureBase, view)) { saveHistory(gestureBase); gestureSaved = true; }
     locationIndex = -1; changed({interactive: true});
   });
   function pointerEnd(e) {
@@ -725,8 +749,21 @@
     lastWheel = performance.now();
     stopMotion();
     const dy = e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? dims.h : 1);
-    if (zoomAt(Math.exp(Math.max(-1.1, Math.min(1.1, dy * .0018))), relative(e.clientX, e.clientY))) { locationIndex = -1; changed({animate: !e.ctrlKey}); }
+    // Chromium/Firefox send trackpad pinch as ctrl+wheel with deltaY = -100 ln(scale): follow the fingers 1:1, live.
+    const pinchZoom = e.ctrlKey && e.deltaMode === 0;
+    const step = pinchZoom ? Math.max(-0.5, Math.min(0.5, dy * 0.01)) : Math.max(-1.1, Math.min(1.1, dy * .0018));
+    if (zoomAt(Math.exp(step), relative(e.clientX, e.clientY))) { locationIndex = -1; changed(pinchZoom ? {interactive: true} : {animate: true}); }
   }, {passive: false});
+  // Safari sends trackpad pinch as gesture events; without this the whole page magnifies.
+  let gestureScale = 1;
+  viewport.addEventListener('gesturestart', e => { e.preventDefault(); gestureScale = 1; if (!pointerMap.size) { stopMotion(); saveHistory(); } }, {passive: false});
+  viewport.addEventListener('gesturechange', e => {
+    e.preventDefault();
+    if (pointerMap.size || !e.scale) return;
+    if (zoomAt(gestureScale / e.scale, relative(e.clientX, e.clientY))) { locationIndex = -1; changed({interactive: true}); }
+    gestureScale = e.scale;
+  }, {passive: false});
+  viewport.addEventListener('gestureend', e => { e.preventDefault(); }, {passive: false});
   viewport.addEventListener('dblclick', e => { if (e.target.closest('button')) return; e.preventDefault(); zoomButton(.4, relative(e.clientX, e.clientY)); });
   $('zoomIn').onclick = () => zoomButton(.5); $('zoomOut').onclick = () => zoomButton(2);
   $('homeBtn').onclick = () => loadPreset(0); $('brand').onclick = e => { e.preventDefault(); loadPreset(0); };
@@ -740,7 +777,7 @@
     if (e.key === 'Home') { loadPreset(0); return; }
     if (e.key === '+' || e.key === '=') { zoomButton(.5); return; }
     if (e.key === '-' || e.key === '_') { zoomButton(2); return; }
-    stopMotion(); saveHistory();
+    stopMotion(); if (!e.repeat) saveHistory();
     const step = view.span / (e.shiftKey ? 3n : 10n);
     view = bounded({...view, x: view.x + (e.key === 'ArrowRight' ? step : e.key === 'ArrowLeft' ? -step : 0n), y: view.y + (e.key === 'ArrowUp' ? step : e.key === 'ArrowDown' ? -step : 0n)});
     locationIndex = -1; changed({animate: true});
@@ -937,7 +974,7 @@
   function measure() {
     const r = viewport.getBoundingClientRect();
     if (!r.width || !r.height) return;
-    const next = {w: r.width, h: r.height, dpr: Math.min(devicePixelRatio || 1, 2)};
+    const next = {w: r.width, h: r.height, dpr: Math.min(devicePixelRatio || 1, 3)};
     if (next.w === dims.w && next.h === dims.h && next.dpr === dims.dpr) return;
     const first = dims.w === 1;
     dims = next;

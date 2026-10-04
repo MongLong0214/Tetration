@@ -210,9 +210,9 @@
       if (this.bits < 23) throw Error('Insufficient fragment precision');
       this.maxTexture = gl.getParameter(gl.MAX_TEXTURE_SIZE);
       this.programs = {direct: this.link(direct, UNIFORMS.direct), perturb: this.link(perturb, UNIFORMS.perturb)};
-      // The BLA program (deep views) starts linking in the background where the driver allows.
+      // The BLA program (deep views) links in warm(), in the background where the driver allows.
       this.parallel = gl.getExtension('KHR_parallel_shader_compile');
-      this.pendingBla = this.parallel ? this.startLink(perturbBla) : null; this.warmed = false;
+      this.pendingBla = null; this.warmed = false;
       this.empty = gl.createTexture();
       gl.bindTexture(gl.TEXTURE_2D, this.empty);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 0, 255]));
@@ -269,8 +269,8 @@
       if (name === 'perturbBla') return this.blaProgram();
       return this.programs[name] || (this.programs[name] = this.link(SOURCES[name], UNIFORMS[name]));
     }
-    /* The BLA program. With KHR_parallel_shader_compile it links in the background from
-     * start-up and is used once ready (the plain program draws until then); otherwise it
+    /* The BLA program. With KHR_parallel_shader_compile it links in the background once
+     * warm() starts it at perturbation depth, and is used once ready (the plain program draws until then); otherwise it
      * links on first use. A driver that rejects it keeps the plain program. */
     blaProgram() {
       if (this.blaMode === 'off') return null;
@@ -340,11 +340,12 @@
     }
     // Expected plain steps per pixel, for sizing draws: BLA skips most of a deep approach.
     effectiveIterations(scene, width, height) {
-      if (scene.mode !== 'perturb' || !this.blaLevels({width, height}, scene)) return scene.iterations;
+      if (scene.mode !== 'perturb' || !this.blaLevels({width, height}, scene, false)) return scene.iterations;
       return Math.max(64, Math.round(scene.iterations - 0.75 * Math.min(this.bla.reach, scene.iterations)));
     }
     // BLA levels to use for a perturbation draw into this frame (0 = plain program).
-    blaLevels(frame, scene) {
+    // allowLink = false (live frames): never compile here; use BLA only once its program exists.
+    blaLevels(frame, scene, allowLink = true) {
       if (this.blaMode === 'off') return 0;
       // Largest |dL| over the frame plus 2% of the span for subpixel samples (half a pixel
       // at 25 px and wider), the same for every frame size so live frames share the table.
@@ -355,7 +356,7 @@
       const bla = this.useBla(scene.ref, scene.rules, dL);
       // Worth the larger program only when the edge pixel alone skips a quarter of a typical orbit.
       if (!bla.levels || (this.blaMode === 'auto' && bla.reach < Math.max(32, 0.25 * Math.min(scene.ref.length, scene.iterations)))) return 0;
-      return this.blaProgram() ? bla.levels : 0;
+      return this.programs.perturbBla || ((allowLink || this.pendingBla) && this.blaProgram()) ? bla.levels : 0;
     }
     beginFrame(width, height, seed = null, adaptive = false) {
       const gl = this.gl;
@@ -389,10 +390,10 @@
       this.drawTile(frame, tile);
     }
     // Bind a frame and set every uniform once; drawTile() then only moves the scissor.
-    prepare(frame, scene, samples, threshold = 0.035) {
+    prepare(frame, scene, samples, threshold = 0.035, allowLink = true) {
       const gl = this.gl;
       if (gl.isContextLost()) throw Error('GPU context lost');
-      const levels = scene.mode === 'perturb' ? this.blaLevels(frame, scene) : 0;
+      const levels = scene.mode === 'perturb' ? this.blaLevels(frame, scene, allowLink) : 0;
       const {program, uniforms: u} = this.program(levels ? 'perturbBla' : scene.mode);
       gl.bindFramebuffer(gl.FRAMEBUFFER, frame.buffer); gl.viewport(0, 0, frame.width, frame.height); gl.useProgram(program);
       gl.uniform2f(u.Size, frame.width, frame.height); gl.uniform2f(u.Offset, 0, 0);

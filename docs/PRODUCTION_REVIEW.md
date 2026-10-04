@@ -10,7 +10,7 @@ Review date: 2026-10-04. Scope: the complete source (`src/`), build, server, hea
 | Medium depths (about 10⁻⁵ to 10⁻¹³) ran on CPU FP64 Workers | Slow; image capped at 2,048 px | Same GPU perturbation path, interactive | Live frames at 10²⁵ (`browser-perf.json`) |
 | No rendering while moving; only the previous image was reprojected | Panning revealed black edges; zooming showed stretched pixels until release | Live single-sample frames sized to the measured GPU speed, then progressive refinement | 39–60 live frames per 2 s drag on software WebGL2 |
 | Instant jumps on wheel/buttons; no inertia | Navigation felt abrupt | Glide towards the exact target, inertia after flicks; both off with reduced motion | `browser-quality.json` |
-| Every deep pixel iterated its whole approach one step at a time (about 30 steps per decade, all pixels within 10⁻⁷ of the reference) | 10¹⁰⁰ views needed seconds per frame even on the GPU | Bilinear approximation: aligned runs of linear steps with validity radii applied in one operation; a separate GPU program used only where it saves a quarter of an orbit, prepared in a quiet moment at perturbation depth | 10¹⁰⁰ frame 4.2× faster, 10⁵⁵ boundary 14×; structured views identical pixel for pixel (`browser-deep.json`, `tests/bla.test.cjs`) |
+| Every deep pixel iterated its whole approach one step at a time (about 30 steps per decade, all pixels within 10⁻⁷ of the reference) | 10¹⁰⁰ views needed seconds per frame even on the GPU | Bilinear approximation: aligned runs of linear steps with validity radii applied in one operation; a separate GPU program used only where it saves a quarter of an orbit, prepared in a quiet moment at perturbation depth | 10¹⁰⁰ frame 4.3× faster, 10⁻⁵⁵ threshold view 11.8×; structured views identical pixel for pixel (`browser-deep.json`, `tests/bla.test.cjs`) |
 | Fixed iteration limit (max 1,024) | Deep views turned uniformly unresolved (escape times grow ≈30 steps per decade) | Auto limit `320 + 34 × decades`, up to 16,384 | Escape statistics measured to 10⁻¹⁰⁴; auto limits checked in the deep suite |
 | Log-only colour mapping | Deep views collapsed into one or two dark shades | Log + linear band cycling, identical on CPU and GPU | Distinct-colour unit test; deep screenshots |
 | WebGPU re-rendered each view once ready; two shader dialects | Double work at startup, more code paths, no precision benefit (also FP32) | Single WebGL2 backend | Bundle checks |
@@ -19,6 +19,25 @@ Review date: 2026-10-04. Scope: the complete source (`src/`), build, server, hea
 | Texture ownership by set membership | Overlapping cancelled and new jobs could recycle a texture still read as an adaptive seed | Reference-counted pins and job-held frame sets | Sixty-action leak check: 4 live textures |
 | Resize waited 90 ms while still reporting the old render as complete | Stale state; tests could read the wrong size | Resize invalidates at once and refines live | Focus-mode resolution check |
 | `preserveDrawingBuffer: false` attempt during the rewrite | Black canvas while tiles were drawn offscreen in Chromium | Kept `true` | Deep display check |
+
+## Final review before release
+
+A second, independent review (six reviewers, each finding checked by two or three skeptics) confirmed and fixed:
+
+| Finding | Fix |
+| --- | --- |
+| Animated zoom below 1e−128 jumped up to 10⁴² spans and never finished (256-digit truncation in the glide fixed point, 10⁻⁶ scale rounding) | Exact rational fixed point, 53-bit scale factors, glide snaps if it ever stops converging; deep-suite test at 1e−150 |
+| Trackpad pinch (ctrl+wheel) got no live frames and zoomed 5.5× slower than the fingers; Safari pinch magnified the page | Pinch is a live gesture with 1:1 gain; Safari gesture events zoom the fractal |
+| Without parallel shader compilation the BLA program could link inside a gesture (2 s freeze) | Live frames never link; it is prepared only in a quiet moment |
+| A missing reference during motion queued one stale orbit per frame in the Worker (final image seconds late) | One outstanding live-frame request |
+| Final image upscaled on DPR-3 phones and blurred at fractional scaling | Density up to 3× within the pixel budget, rounded backing sizes, bar heights on whole device pixels |
+| Grabbing during a glide made the camera jump; a tap erased Forward history; key repeat flooded history | Freeze at the displayed camera; history saved only when a gesture moves; repeats coalesced |
+| Service worker: any page opened in scope could replace the offline shell; no timeout or 5xx fallback; no navigation preload | Only the app page updates the shell; 3 s deadline and server-error fallback; preload enabled |
+| CPU Workers saw cancellation only between tiles | Per-row yield through a message-channel macrotask |
+| iOS zoomed into 12 px form fields; error banner overflowed phones; desktop panel dimmed the map | 16 px controls on touch, wrapping banner, transparent backdrop on wide screens |
+| Discover stayed busy after a Worker crash; export only checked the PNG header; `serve.cjs` ignored its directory | Fixed; the export is decoded and must contain the fractal; `npm start` serves `dist` as built |
+
+Not changed: GPU `sin`/`cos` precision on drivers with Vulkan-minimum trigonometry (a driver-gated polynomial is a possible follow-up); Open Graph image needs an absolute site URL once a domain exists.
 
 ## Engineering review
 

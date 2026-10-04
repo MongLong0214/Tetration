@@ -3,9 +3,17 @@
  * perturbation or exact BigInt per pixel). One persistent pool is reused across
  * views; a newer job supersedes an older one at the next yield. */
 let current = 0;
-async function pause() {
-  if (self.scheduler?.yield) await self.scheduler.yield();
-  else await new Promise(resolve => setTimeout(resolve, 0));
+// Yield one macrotask so a queued 'cancel' or newer job runs first (scheduler.yield
+// continuations can outrank incoming messages; nested timers are clamped to 4 ms).
+const yieldQueue = [];
+let yieldChannel = null;
+function pause() {
+  if (!yieldChannel && typeof MessageChannel === 'function') {
+    yieldChannel = new MessageChannel();
+    yieldChannel.port1.onmessage = () => yieldQueue.shift()?.();
+  }
+  if (!yieldChannel) return new Promise(resolve => setTimeout(resolve, 0));
+  return new Promise(resolve => { yieldQueue.push(resolve); yieldChannel.port2.postMessage(0); });
 }
 function referenceJob(job) {
   try {
@@ -59,8 +67,8 @@ async function tileJob(job, token) {
         const rgb = TetraCore.color(result.kind, result.steps, job.palette, result.re, result.im);
         pixels[p++] = rgb[0]; pixels[p++] = rgb[1]; pixels[p++] = rgb[2]; pixels[p++] = 255;
       }
-      // Exact pixels are slow; let a newer job in between rows.
-      if (exact && performance.now() - lastYield > 12) {
+      // Let a newer job or a cancel in between rows (deep FP64 rows can take long too).
+      if (performance.now() - lastYield > 12) {
         await pause(); lastYield = performance.now();
         if (token !== current) return;
       }

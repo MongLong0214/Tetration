@@ -124,6 +124,17 @@ def body():
             suite.record(f'Full display resolution at span {s}', {'size': [last['width'], last['height']], 'iterations': last['iterations'], 'ms': round(last['elapsed']), 'bla': info['bla']})
         page.screenshot(path=str(OUT / 'deep-1e-200.png'))
 
+        # 7b. Animated zoom stays exact below 1e-128 (glide fixed point and scale factors).
+        open_app(page, 'v=1&x=0.5&y=0.0000001&s=1e-150&n=256&q=1', 'perturb')
+        before = state(page)['view']
+        page.locator('#zoomIn').click()
+        page.wait_for_function('() => !tetraDiagnostics.animating', timeout=20000)
+        ready(page)
+        after = state(page)
+        assert Decimal(after['view']['span']) == Decimal(before['span']) / 2, after['view']
+        assert abs(Decimal(after['view']['x']) - Decimal(before['x'])) < Decimal(before['span']) and after['visual'] == after['view'], after
+        suite.record('Animated zoom at 1e-150 lands exactly on its target and completes', after['view']['span'][:12])
+
         # 8. Auto iterations deepen with zoom; fixed limits stay fixed.
         expected = {'7': 384, '5e-11': 768, '7e-25': 1536, '7e-100': 4096, '1e-200': 8192}
         for s, n in expected.items():

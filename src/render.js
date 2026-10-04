@@ -2,9 +2,9 @@
 (function(root){
  'use strict';
  function size(width,height,dpr=1,budget=8294400,maxWidth=8192){
-  let w=Math.max(1,width*Math.min(Math.max(dpr,1),2)),h=Math.max(1,height*Math.min(Math.max(dpr,1),2));
+  let w=Math.max(1,width*Math.min(Math.max(dpr,1),3)),h=Math.max(1,height*Math.min(Math.max(dpr,1),3));
   const shrink=Math.min(1,Math.sqrt(budget/(w*h)),maxWidth/w,8192/h);
-  return {width:Math.max(1,Math.floor(w*shrink)),height:Math.max(1,Math.floor(h*shrink))};
+  return {width:Math.max(1,Math.round(w*shrink-1e-6)),height:Math.max(1,Math.round(h*shrink-1e-6))};
  }
  function tiles(width,height,edge=128){
   const out=[];
