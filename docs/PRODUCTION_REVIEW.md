@@ -45,7 +45,7 @@ Finite observations only. Threshold crossing does not prove divergence. Fixed-po
 | Local numerical, CSP, graphics and interaction checks | See validation evidence |
 | Current GitHub source and CI | See [publication record](PUBLISHING.md) |
 | Public Vercel HTTPS | Blocked by team-scope HTTP 403 until the connection is authorized |
-| Linux WebKit | Added to remote CI; local runtime lacks required system libraries |
+| Linux WebKit | 10 checks passed in remote CI on WebKit 26.0; mobile viewport emulation, CPU path |
 | Physical iPhone/Safari | Not tested |
 | Hardware GPU and sustained mobile memory/thermal behavior | Not tested |
 

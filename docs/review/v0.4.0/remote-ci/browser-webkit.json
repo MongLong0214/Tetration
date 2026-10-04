@@ -1,0 +1,64 @@
+{
+  "origin": "http://127.0.0.1:4173",
+  "bundle_sha256": "11f2747dc69c7700d823d6b693d0bb4e54c472860e98e8901fb996ad4d86de2d",
+  "limitations": [
+    "Linux WebKit with mobile viewport emulation; not physical Safari/iPhone.",
+    "CPU rendering path; not hardware GPU qualification."
+  ],
+  "browser_version": "26.0",
+  "passed": true,
+  "checks": [
+    {
+      "name": "WebKit completes the production-CSP Worker render",
+      "passed": true,
+      "detail": "bitmap"
+    },
+    {
+      "name": "Mobile viewport has no horizontal overflow",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "Keyboard zoom and history restore the view",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "Native modal prevents background focus",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "A coordinate draft survives resize and enters high precision",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "Saved coordinates and URL state survive reload",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "Manual link sharing exposes the exact current URL",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "Focus mode preserves deep coordinates",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "WebKit exports a PNG",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "No uncaught WebKit exceptions",
+      "passed": true,
+      "detail": null
+    }
+  ],
+  "count": 10,
+  "uncaught_errors": []
+}

@@ -15,6 +15,14 @@ f0f4521792de730aa257004631d075bab3726fea21713df8fe6f4c541b611612  docs/review/v0
 e825af70b8b6c9edf0bbbc6805e1bb5895ce22267e0fbedad20bb91ad3db57f1  docs/review/v0.4.0/mobile-controls.png
 65e77856a06a665a266f97ae8fe4172f013c78f1bf4de8f87477c6439ad4108d  docs/review/v0.4.0/mobile-small.png
 4f243ba90ffe430feac9aff201f3c9fc426f1430d853dec696d987fa292b17db  docs/review/v0.4.0/mobile.png
+ce7df15a82cc6f91da2a5a8641ad30d50529e02546f041157dbb3101849a3d58  docs/review/v0.4.0/remote-ci/browser-explorer.json
+d247b9842ebffb59f35fba8470146e0ba32f5d09af16e746b49eadd2933513cb  docs/review/v0.4.0/remote-ci/browser-modern.json
+ca4989f7ee4dab73c9c94e1edc8fc766a4803826800cf55742b9394a46477ecf  docs/review/v0.4.0/remote-ci/browser-release.json
+98e767554149c94964f266cb68001c44595ad76be0784e02703e54c5072d2afd  docs/review/v0.4.0/remote-ci/browser-review.json
+48984313dd56157793e23e03f1cdf4f07e00a965713f0766cb38e6d47dc5ad88  docs/review/v0.4.0/remote-ci/browser-webkit.json
+a7f40620fabf83c726bae330620f458a434c3289751ca1fe059718231f0a2647  docs/review/v0.4.0/remote-ci/webkit-mobile.png
+9d43d58203e81f16b3dbd81a571b4ee05254da744337c2d9d447596c5a74b1c6  docs/review/v0.4.0/remote-ci-output.txt
+6374c6d4faa028dec1c098493d71a792382771cd94c51d9ca2198b85c6502468  docs/review/v0.4.0/remote-publication.json
 8377c029de4ee2e5851ff534fbe776aaefc851485c1d7cd8da32ffabc9a79c71  docs/review/v0.4.0/security-review.json
 4607cf40f8d97a9708257ee9705fdcc60b4320f313ae08593f0f4d8f208afd0b  docs/review/v0.4.0/unit-tests.txt
 93d0e014e46b5c01b339a8382f98e0c288bb8f120e3bb7c92912c1a2e5b1322a  docs/review/v0.4.0/webgpu-export.png

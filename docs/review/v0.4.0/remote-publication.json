@@ -1,0 +1,32 @@
+{
+  "repository": "https://github.com/MongLong0214/Tetration",
+  "visibility": "public",
+  "branch": "design/monochrome-explorer",
+  "source_commit": "21fcd2f01cd8457a29bac6cd18847e4392e40ea7",
+  "pull_request": "https://github.com/MongLong0214/Tetration/pull/2",
+  "verified_paths": 62,
+  "verified_binary_images": 9,
+  "verification": "Fetched remote tree and compared every path, mode and Git blob SHA against local reviewed files.",
+  "bundle_bytes": 88999,
+  "bundle_sha256": "11f2747dc69c7700d823d6b693d0bb4e54c472860e98e8901fb996ad4d86de2d",
+  "public_https": "not deployed: Vercel team-scope 403",
+  "physical_safari": "not tested",
+  "hardware_gpu": "not tested",
+  "merged": true,
+  "merge_commit": "0e7ced65cead4618d66bec6fe27f17bbfb3e4aad",
+  "source_ci": {
+    "url": "https://github.com/MongLong0214/Tetration/actions/runs/37177991962",
+    "conclusion": "success",
+    "chromium_version": "143.0.7499.4",
+    "chromium_checks": [
+      29,
+      16,
+      12,
+      21
+    ],
+    "webkit_version": "26.0",
+    "webkit_checks": 10,
+    "unit_tests": 65
+  },
+  "artifact_sha256": "7221b0be78b0752f3836999198dbdea08c43286846c7522d555cc3ad3140a3dd"
+}
