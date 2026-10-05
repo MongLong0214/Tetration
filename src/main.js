@@ -597,6 +597,7 @@
     // Keep plain/unseeded 4096 and every higher-cap request bounded.
     const ordinaryBlaAA = scene.iterations === 4096 && samples === 16 && frame.seed && scene.mode === 'perturb' && renderer.blaLevels(frame, scene, false) > 0;
     const partial = splitAA(scene.iterations, samples) && renderer.floatColor && !ordinaryBlaAA;
+    const atlas = scene.mode === 'perturb' && scene.iterations === 512 && samples === 16 && renderer.floatColor;
     // A partial pass evaluates one orbit per pixel. Use that per-pass work
     // when sizing its tile; charging all AA samples here quadruples fences.
     const edge = partial ? Math.min(highCap ? 32 : 64, tileEdge(effective, 1)) : highCap ? Math.min(16, tileEdge(effective, samples)) : tileEdge(effective, samples);
@@ -624,6 +625,9 @@
       try {
         if (partial) {
           for (const t of batch) if (!(await renderer.drawAATile(frame, t, scene, () => id !== serial || renderer !== gpu, work ? 0 : undefined, samples))) return false;
+        } else if (atlas) {
+          for (const t of batch) renderer.drawAtlasTile(frame, t, scene, work ? 0 : undefined);
+          await renderer.fence();
         } else {
           renderer.prepare(frame, scene, samples, work ? 0 : undefined);
           for (const t of batch) renderer.drawTile(frame, t);

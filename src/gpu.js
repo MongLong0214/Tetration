@@ -375,7 +375,47 @@ ${orbitLoop}` + perturbTail;
  ${adaptiveSeed}
  void main(){float contrast;adaptiveSeed(gl_FragCoord.xy,contrast);if(contrast<uThreshold)discard;pixel=vec4(1.);}`;
   UNIFORMS.adaptiveMask = ['Source', 'Threshold'];
-  const SOURCES = {direct, perturb, perturbBla, perturbCycle, perturbBlaCycle, present, copy, adaptiveMask};
+  // Evaluate each Ultra sample in its own fragment. A small vertical atlas
+  // keeps all samples parallel without a render-pass transition per sample.
+  // The sum pass retains the ordinary shader's exact FP32 addition order.
+  const atlasMain = `
+ uniform int uAtlasHeight;
+ void main(){
+  ivec2 p=ivec2(gl_FragCoord.xy);int s=p.y/uAtlasHeight;p.y-=s*uAtlasHeight;
+  vec2 point=vec2(p)+.5+uOffset;
+  int first=0;
+  if(uAdaptive==1){float contrast;vec4 seed=adaptiveSeed(point,contrast);
+   if(contrast<uThreshold){pixel=vec4(0.);return;}
+   if(abs(seed.a-64./255.)<.5/255.)first=4;
+  }
+  if(s<first){pixel=vec4(0.);return;}
+  pixel=vec4(orbitColor(point+cell(s)),1.);
+ }`;
+  const atlasSource = source => source.slice(0, source.lastIndexOf('void main(){')) + atlasMain;
+  const perturbAtlas = atlasSource(perturb), perturbBlaAtlas = atlasSource(perturbBla);
+  for (const name of ['perturb', 'perturbBla']) UNIFORMS[name + 'Atlas'] = [...UNIFORMS[name], 'AtlasHeight'];
+  const atlasSum = `#version 300 es
+ precision highp float;
+ precision highp int;
+ precision highp sampler2D;
+ uniform sampler2D uSource,uAtlas;
+ uniform int uAdaptive,uAtlasHeight;
+ uniform vec2 uOffset;
+ uniform float uThreshold;
+ out vec4 pixel;
+ ${adaptiveSeed}
+ void main(){
+  vec2 point=gl_FragCoord.xy;vec4 seed=vec4(0.);int first=0;
+  if(uAdaptive==1){float contrast;seed=adaptiveSeed(point,contrast);
+   if(contrast<uThreshold){pixel=seed;return;}
+   if(abs(seed.a-64./255.)<.5/255.)first=4;
+  }
+  vec3 rgb=first==4?seed.rgb*4.:vec3(0.);ivec2 p=ivec2(point-uOffset);
+  for(int s=first;s<16;s++)rgb+=texelFetch(uAtlas,ivec2(p.x,p.y+s*uAtlasHeight),0).rgb;
+  pixel=vec4(rgb*.0625,1.);
+ }`;
+  UNIFORMS.atlasSum = ['Source', 'Atlas', 'Adaptive', 'AtlasHeight', 'Offset', 'Threshold'];
+  const SOURCES = {direct, perturb, perturbBla, perturbCycle, perturbBlaCycle, perturbAtlas, perturbBlaAtlas, atlasSum, present, copy, adaptiveMask};
 
   class TetraGPU {
     constructor(canvas) {
@@ -644,7 +684,7 @@ ${orbitLoop}` + perturbTail;
       this.drawTile(frame, tile);
     }
     // Bind a frame and set every uniform once; drawTile() then only moves the scissor.
-    prepare(frame, scene, samples, threshold = 0.035, allowLink = true, partial = false) {
+    prepare(frame, scene, samples, threshold = 0.035, allowLink = true, partial = false, atlas = false) {
       const gl = this.gl;
       if (gl.isContextLost()) throw Error('GPU context lost');
       this.refreshFrame(frame);
@@ -654,6 +694,7 @@ ${orbitLoop}` + perturbTail;
         const cycleName = levels ? 'perturbBlaCycle' : 'perturbCycle';
         if (allowLink || this.programs[cycleName]) name = cycleName;
       }
+      if (atlas) name += 'Atlas';
       const {program, uniforms: u} = this.program(name);
       if (scene.mode === 'perturb') this.perturbWarm = true;
       gl.bindFramebuffer(gl.FRAMEBUFFER, frame.buffer); gl.viewport(0, 0, frame.width, frame.height); gl.useProgram(program);
@@ -702,10 +743,50 @@ ${orbitLoop}` + perturbTail;
       gl.drawArrays(gl.TRIANGLES, 0, 3); gl.disable(gl.SCISSOR_TEST);
     }
     clearUltraScratch() {
+      if (this.sampleAtlas) {
+        this.gl.deleteFramebuffer(this.sampleAtlas.buffer); this.gl.deleteTexture(this.sampleAtlas.texture);
+        this.sampleAtlas = null;
+      }
       if (!this.ultraScratch) return;
       const gl = this.gl;
       for (const frame of this.ultraScratch) { gl.deleteFramebuffer(frame.buffer); gl.deleteTexture(frame.texture); }
       this.ultraScratch = null;
+    }
+    atlasFrame(width, height) {
+      if (this.sampleAtlas?.width >= width && this.sampleAtlas.height >= height) return this.sampleAtlas;
+      const gl = this.gl;
+      if (width > this.maxTexture || height > this.maxTexture) throw Error('GPU atlas size limit');
+      const texture = gl.createTexture(), buffer = gl.createFramebuffer();
+      try {
+        if (!texture || !buffer) throw Error('GPU atlas allocation failed');
+        gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, texture);
+        gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA32F, width, height); this.setNearest();
+        gl.bindFramebuffer(gl.FRAMEBUFFER, buffer); gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
+        if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) throw Error('GPU atlas allocation failed');
+      } catch (error) {
+        gl.deleteFramebuffer(buffer); gl.deleteTexture(texture); throw error;
+      } finally { gl.bindFramebuffer(gl.FRAMEBUFFER, null); }
+      if (this.sampleAtlas) { gl.deleteFramebuffer(this.sampleAtlas.buffer); gl.deleteTexture(this.sampleAtlas.texture); }
+      return this.sampleAtlas = {texture, buffer, width, height};
+    }
+    drawAtlasTile(frame, tile, scene, threshold = 0.035) {
+      // A separately compiled direct kernel changes chaotic FP32 pixels on
+      // native Metal. Keep that kernel's original arithmetic and call site.
+      if (scene.mode !== 'perturb') { this.draw(frame, tile, scene, 16, threshold); return; }
+      const gl = this.gl, atlas = this.atlasFrame(tile.width, tile.height * 16);
+      this.refreshFrame(frame.seed);
+      const u = this.prepare(frame, scene, 16, threshold, true, false, true), y = frame.height - tile.y - tile.height;
+      gl.uniform1i(u.AtlasHeight, tile.height); gl.uniform2f(u.Offset, tile.x, y);
+      this.refreshFrame(atlas); gl.bindFramebuffer(gl.FRAMEBUFFER, atlas.buffer); gl.viewport(0, 0, tile.width, tile.height * 16);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      this.refreshFrame(atlas); this.refreshFrame(frame);
+      const {program, uniforms: sum} = this.program('atlasSum');
+      gl.bindFramebuffer(gl.FRAMEBUFFER, frame.buffer); gl.useProgram(program); gl.viewport(tile.x, y, tile.width, tile.height);
+      gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, frame.seed?.texture || this.empty); gl.uniform1i(sum.Source, 0);
+      gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D, atlas.texture); gl.uniform1i(sum.Atlas, 3); gl.activeTexture(gl.TEXTURE0);
+      gl.uniform1i(sum.Adaptive, frame.seed ? 1 : 0); gl.uniform1i(sum.AtlasHeight, tile.height);
+      gl.uniform2f(sum.Offset, tile.x, y); gl.uniform1f(sum.Threshold, threshold);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
     }
     ultraFrames(size) {
       if (this.ultraScratch?.[0].width >= size) return this.ultraScratch;

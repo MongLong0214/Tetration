@@ -108,6 +108,12 @@ def body():
         open_app(page, 'v=1&x=.5&y=0&s=.1&n=64&q=1&e=cpu')
         page.evaluate((ROOT / 'tests/browser_gpu_limits.js').read_text())
         with browser_deadline(240000):
+            atlas = page.evaluate('__gpuAtlasComparison()')
+        assert atlas['error'] == 0 and atlas['allocationRecovered'] and len(atlas['cases']) == 120, atlas
+        assert all(c['changed'] == c['priorChanged'] == c['max'] == 0 for c in atlas['cases']), atlas
+        suite.record('Parallel perturbation samples and direct fallback match every original Ultra RGBA byte across BLA modes, seed types and forced strips',
+                     {'cases': 120, 'pixel_pairs': 120 * 48 * 30, 'partial_tiles': True})
+        with browser_deadline(240000):
             mask = page.evaluate('__gpuAdaptiveMaskComparison()')
         assert mask['error'] == 0 and len(mask['rows']) == 2, mask
         assert all(all(row[key] for key in ['flat', 'cancelled', 'forced', 'edge', 'invalidComputed', 'failedComputed']) for row in mask['rows']), mask

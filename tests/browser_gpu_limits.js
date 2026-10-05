@@ -68,6 +68,39 @@ window.__gpuPartialComparison = async(samples=16)=>{
   }
   const error=r.gl.getError();r.destroy();return {cases,error};
  };
+window.__gpuAtlasComparison = async()=>{
+ const r=new TetraGPU(document.createElement('canvas')),cases=[],W=48,H=30;
+ const views=[['-2.2930579','0.3320804','0.00025'],['-1.8846698549996327','-0.23631621177562145','0.00008170440653544259'],['-2.2930579295624999999999991','0.33208044555625','5e-11'],['-0.605137938972379900971816986088586258864125','0.437740442074800562969426507709712806289976004723289995229','7e-25']];
+ for(const threshold of [0.035,0])for(const blaMode of ['off','on'])for(const n of [128,512,1024])for(const mode of ['direct','perturb'])for(const adaptive of [false,true])for(const coordinates of mode==='direct'?[null]:views){
+  r.blaMode=blaMode;
+  const scene={mode,iterations:n,palette:0,aspect:H/W,rules:TetraCore.RULES.gpu};
+  if(mode==='direct'){scene.center=[-1.84,.09];scene.span=.46;}
+  else{
+   const f=createFixed(256),v={x:f.parse(coordinates[0]),y:f.parse(coordinates[1]),span:f.parse(coordinates[2])},point=TetraRender.referencePoint(f,v);
+   Object.assign(scene,TetraRender.perturbScene(f,v,point.x,point.y));
+   scene.ref=TetraReference.compute({x:f.text(point.x),y:f.text(point.y),digits:Math.ceil(-Math.log10(Number(coordinates[2])))+40,iterations:n,maxRe:80});
+  }
+  let seed=null;
+  if(adaptive){seed=r.beginFrame(W,H);r.draw(seed,{x:0,y:0,width:W,height:H},scene,4);await r.fence();}
+  const a=r.beginFrame(W,H,seed,adaptive),b=r.beginFrame(W,H,seed,adaptive);
+  for(let y=0;y<H;y+=8)for(let x=0;x<W;x+=8){r.draw(a,{x,y,width:Math.min(8,W-x),height:Math.min(8,H-y)},scene,16,threshold);await r.fence();}
+  const original=r.readFrame(a);
+  // Odd tiles and partial rows exercise atlas reuse with a changing row stride.
+  for(let y=0;y<H;y+=17)for(let x=0;x<W;x+=17){r.drawAtlasTile(b,{x,y,width:Math.min(17,W-x),height:Math.min(17,H-y)},scene,threshold);await r.fence();}
+  const before=r.readFrame(a),after=r.readFrame(b);let changed=0,priorChanged=0,max=0;
+  for(let i=0;i<before.length;i++){if(before[i]!==original[i])priorChanged++;const d=Math.abs(before[i]-after[i]);if(d)changed++;max=Math.max(max,d);}
+  cases.push({threshold,blaMode,n,mode,adaptive,coordinates,changed,priorChanged,max});
+  r.releaseFrame(a);r.releaseFrame(b);r.releaseFrame(seed);
+ }
+ const g=r.gl,kept=r.sampleAtlas;let allocationRecovered=true;
+ for(const name of ['createTexture','createFramebuffer']){
+  const native=g[name];g[name]=()=>null;let refused=false;
+  try{r.atlasFrame(kept.width+1,kept.height+1);}catch(error){refused=/allocation/.test(error.message);}
+  finally{g[name]=native;}
+  allocationRecovered=allocationRecovered&&refused&&r.sampleAtlas===kept&&g.isTexture(kept.texture)&&g.isFramebuffer(kept.buffer);
+ }
+ const error=g.getError();r.destroy();return {cases,error,allocationRecovered};
+};
 window.__gpuAdaptiveMaskComparison = async()=>{
  const r=new TetraGPU(document.createElement('canvas')),g=r.gl,W=17,H=13,tile={x:0,y:0,width:W,height:H},rows=[];
  const scene={mode:'direct',center:[.5,0],span:.1,aspect:H/W,iterations:128,palette:0,rules:TetraCore.RULES.gpu};

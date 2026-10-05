@@ -63,7 +63,7 @@ test('production headers add transport, isolation and resource policies',()=>{
 });
 test('shader sources compile-time constants match the shared classification rules',()=>{
  require('../src/core.js');require('../src/gpu.js');
- const {direct,perturb,perturbBla}=globalThis.TetraGPU.sources;
+ const {direct,perturb,perturbBla,perturbAtlas,perturbBlaAtlas}=globalThis.TetraGPU.sources;
  for(const source of [direct,perturb,perturbBla]){assert.match(source,/const float LOG_R=23\.0258509299404/);assert.match(source,/uniform float uLowA,uMaxB,uTol,uThreshold;/);}
  assert.match(perturb,/intBitsToFloat/);assert.match(perturb,/uniform highp sampler2D uRef,uBla;/);
  // The BLA program ends in exactly the plain program's orbit loop (plain FP32 and floatexp steps),
@@ -72,7 +72,7 @@ test('shader sources compile-time constants match the shared classification rule
  assert.ok(orbitLoop.includes('while(!done&&i<=uIterations){')&&orbitLoop.includes('vec2 dp=scaled(dm,de)'),'orbit loop with the plain FP32 phase');
  assert.ok(perturbBla.includes(orbitLoop+'\n  if(mirrored)w.y=-w.y;'),'orbit loop reused verbatim');
  // orbitColor is inlined by GPU compilers: one call site keeps the programs small.
- for(const source of [direct,perturb,perturbBla])assert.equal(source.split('orbitColor(').length-1,2,'orbitColor defined once and called once');
+ for(const source of [direct,perturb,perturbBla,perturbAtlas,perturbBlaAtlas])assert.equal(source.split('orbitColor(').length-1,2,'orbitColor defined once and called once');
  assert.match(perturbBla,/uniform int uBlaBase\[16\];/);assert.match(perturbBla,/blaAt\(e,1\)/);assert.doesNotMatch(perturb,/while\(linear/);
  assert.ok(Math.abs(Math.log(1e10)-23.025850929940457)<1e-14);
 });
