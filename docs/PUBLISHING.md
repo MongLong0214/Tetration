@@ -8,8 +8,10 @@ Developed on branch `claude/hopeful-newton-sdzsh3` from `main` at `2cfce5b` (0.5
 
 Only this repository is in scope. No license or repository visibility change is made.
 
-## Vercel access
+## Vercel deployment
 
-The 0.5.0 review recorded that a project lookup for this repository under `monglong0214s-projects` returned **403 Forbidden** and that the execution workspace had no Vercel CLI login or token. The 1.0.0 workspace also has no Vercel credentials, so no deployment was attempted.
+Production: **https://tetration.vercel.app**, Vercel project `tetration` (personal scope `monglong0214s-projects`), connected to this repository: every push to `main` deploys to production and other branches get preview deployments. Settings: framework Other, build `npm run build`, output `dist`, install `echo No dependencies`, Node 24. The first production deployment (`dpl_9V11ePpU22dbhSt3AfQ1Bg3jx8BV`) built `main` at `27c82a9` and reached READY.
 
-`vercel.json` contains the static deployment settings and headers; the service worker needs no extra configuration on Vercel, which serves `.js` and `.webmanifest` with the correct types. No existing Vercel project or domain has been changed. No successful deployment or public HTTPS verification is claimed. Credentials and private tokens must not be placed in chat or committed.
+Vercel Authentication (standard protection) covers preview and per-deployment URLs; the production domain is public. Link previews use absolute URLs from `SITE_URL` (default `https://tetration.vercel.app`).
+
+The served bytes and headers could not be fetched from the review workspace (its network policy blocks the domain), so they still need one check from a normal browser: the page renders, `curl -I https://tetration.vercel.app/` shows the CSP and `vercel.json` headers, and the app reloads offline after one visit. Credentials and private tokens must not be placed in chat or committed.

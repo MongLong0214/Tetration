@@ -6,7 +6,7 @@ A browser-native tetration explorer. Dive from the whole complex plane to 10²�
 
 [![Validate](https://github.com/MongLong0214/Tetration/actions/workflows/ci.yml/badge.svg)](https://github.com/MongLong0214/Tetration/actions)
 
-**1.0.0.** Public deployment and device qualification are tracked in the [production review](docs/PRODUCTION_REVIEW.md). The app observes finite iterations; it does not prove convergence or divergence.
+**1.0.0** · Live at **[tetration.vercel.app](https://tetration.vercel.app)**. Device qualification and device qualification are tracked in the [production review](docs/PRODUCTION_REVIEW.md). The app observes finite iterations; it does not prove convergence or divergence.
 
 ## Explore
 
@@ -108,7 +108,7 @@ Import **MongLong0214/Tetration** into Vercel with the committed configuration:
 | Install command | `echo No dependencies` |
 | Environment variables | None |
 
-`vercel.json` adds anti-framing, MIME sniffing, referrer, permissions, HSTS, cross-origin opener/resource policies and revalidation headers. Other hosts must supply equivalent headers and serve `sw.js` as JavaScript. URL fragments carry the view; no route rewrite is needed. See [publication status](docs/PUBLISHING.md): no live URL is claimed until HTTPS verification succeeds.
+`vercel.json` adds anti-framing, MIME sniffing, referrer, permissions, HSTS, cross-origin opener/resource policies and revalidation headers. Other hosts must supply equivalent headers and serve `sw.js` as JavaScript. URL fragments carry the view; no route rewrite is needed. Production runs at https://tetration.vercel.app and redeploys on every push to `main`; see [publication status](docs/PUBLISHING.md).
 
 ## Verify
 

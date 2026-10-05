@@ -12,8 +12,10 @@ const hash = text => "'sha256-" + createHash('sha256').update(text).digest('base
 const csp = ["default-src 'none'", 'script-src ' + hash(script), 'style-src ' + hash(styles),
   "worker-src 'self' blob:", "manifest-src 'self'", "img-src 'self' data: blob:", "connect-src 'none'", "base-uri 'none'", "form-action 'none'"].join('; ');
 const html = read('index.html').replace('<head>', '<head>\n<meta http-equiv="Content-Security-Policy" content="' + csp + '">')
-  .replace('__STYLES__', () => styles).replace('__SCRIPT__', () => script);
-if (/__(?:STYLES|SCRIPT|WORKER_SOURCE)__/.test(html)) throw Error('Unresolved build placeholder');
+  .replace('__STYLES__', () => styles).replace('__SCRIPT__', () => script)
+  // Link previews need absolute URLs (SITE_URL overrides the production origin).
+  .replace(/__SITE__/g, () => new URL(process.env.SITE_URL || 'https://tetration.vercel.app').origin);
+if (/__(?:STYLES|SCRIPT|WORKER_SOURCE|SITE)__/.test(html)) throw Error('Unresolved build placeholder');
 const out = path.join(root, 'dist');
 fs.mkdirSync(out, { recursive: true });
 fs.writeFileSync(path.join(out, 'index.html'), html);

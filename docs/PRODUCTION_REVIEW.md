@@ -75,7 +75,7 @@ Threshold crossing is not a divergence proof; fixed points and periods are candi
 | --- | --- |
 | Unit tests, build, Chromium browser suites (review, release, deep, quality, explorer, perf) | Passed locally; see [VALIDATION.md](VALIDATION.md) |
 | Linux WebKit suite | Runs in GitHub Actions on pull requests and `main` (the local network policy blocks WebKit downloads; a manual dispatch from this workspace was refused with HTTP 403) |
-| Public Vercel HTTPS | Not verified (see [PUBLISHING.md](PUBLISHING.md)) |
+| Public Vercel HTTPS | Deployed to https://tetration.vercel.app (READY); served bytes and headers still to be checked from a normal browser (see [PUBLISHING.md](PUBLISHING.md)) |
 | Physical iPhone/Safari, hardware GPUs, five-hour thermal soak | Not tested |
 
 Public HTTPS review must confirm deployed bytes, headers, Worker execution, the service worker and offline reload, shared-view restoration and PNG export. Physical Safari review must cover pinch input, the share sheet with images, downloads, safe areas, background recovery and installation.

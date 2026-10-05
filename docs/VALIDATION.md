@@ -81,6 +81,6 @@ Node 22.22.0 for unit tests (CI uses Node 24), Chromium 141.0.7390.37, Playwrigh
 
 ## Remote CI and remaining gaps
 
-[Run 37241756294](https://github.com/MongLong0214/Tetration/actions/runs/37241756294) on `main` at `d3089da` passed all eight jobs: unit tests and build, and the review, release, deep, quality, explorer, perf and WebKit browser suites on GitHub runners. Linux WebKit 26.0 passed 13 checks, including 10¹⁰⁰ at full resolution with BLA on its WebGL2 path (9 table levels, program compiled). Later commits on `main` are validated by their own runs.
+[Run 37241756294](https://github.com/MongLong0214/Tetration/actions/runs/37241756294) on `main` at `d3089da` passed all eight jobs: unit tests and build, and the review, release, deep, quality, explorer, perf and WebKit browser suites on GitHub runners. Linux WebKit 26.0 passed 13 checks, including 10¹⁰⁰ at full resolution with BLA on its WebGL2 path (9 table levels, program compiled). [Run 37246543923](https://github.com/MongLong0214/Tetration/actions/runs/37246543923) on `27c82a9` (second review round) also passed all eight jobs. Later commits on `main` are validated by their own runs.
 
-Public HTTPS, physical iPhone/Safari, hardware GPU drivers and a five-hour memory and thermal soak remain unverified.
+Production is deployed at https://tetration.vercel.app; its served headers were not fetched from this workspace. Physical iPhone/Safari, hardware GPU drivers and a five-hour memory and thermal soak remain unverified.
