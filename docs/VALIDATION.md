@@ -13,9 +13,9 @@ All suites ran sequentially against one production build served by `serve.cjs` w
 | `test:browser` (review) | 29 passed | Core flows, CSP enforcement, exact links, limits, mobile focus and touch |
 | `test:release` | 16 passed | Served headers and bytes, reference pixels, engine switching, real context loss and restoration, degraded features, offline reload |
 | `test:deep` | 29 passed | GPU perturbation (plain and BLA) against FP64 and exact orbits, BLA speed, full resolution at every depth, symmetry, seams, reference reuse, deep zoom session |
-| `test:quality` | 20 passed | Antialiasing error against 64-sample references, live-frame accumulation (converges to the 16-sample image within 3/255; still and panned frames copy converged pixels bit for bit), grid lock, no single-sample image over an antialiased one, glide, inertia, reduced motion, colour flow |
+| `test:quality` | 22 passed | Antialiasing error against 64-sample references, live-frame accumulation and interleaved refinement (both converge to the 16-sample image within 3/255; still and panned frames copy converged pixels bit for bit), grid lock, no single-sample image over an antialiased one, glide, inertia, reduced motion, colour flow |
 | `test:explorer` | 22 passed | Saved views, history, shortcuts, discovery, sharing, fallbacks, four viewports, axe-core |
-| `test:perf` | 11 passed | First image, when the BLA program compiles (never in shallow views, without long tasks at depth), live-frame cadence at the overview, 10²⁵ and 10¹⁰⁰, reference speed, resource bounds |
+| `test:perf` | 12 passed | First image, when the BLA program compiles (never in shallow views, without long tasks at depth), the perturbation program prepared in a quiet shallow moment, live-frame cadence at the overview, 10²⁵ and 10¹⁰⁰, reference speed, resource bounds |
 | `test:webkit` | Not run locally | The network policy of this workspace blocks the WebKit download; the suite runs in GitHub Actions |
 | Software GLES (`gpu_software_test.py`) | Not run locally | No EGL in this workspace; it compiles the direct, plain and BLA programs where EGL exists |
 
@@ -59,8 +59,10 @@ Chromium 141.0.7390.37 on ANGLE/SwiftShader (software WebGL2, a 4-core CPU host)
 | Measurement | Result |
 | --- | --- |
 | First image after navigation | 375 ms (complete with adaptive 4× at 960 × 640: 3.9 s) |
-| Live frames while dragging, overview / 10²⁵ / 10¹⁰⁰ | 166 / 93 / 79 in 2 s (moves plus accumulation refinements; converged pixels are copied) |
-| Display frame-gap 95th percentile in those drags | 16.8 / 16.8 / 33.4 ms (grid-locked, accumulating live frames) |
+| Live frames while dragging, overview / 10²⁵ / 10¹⁰⁰ | 166 / 112 / 102 in 2 s (moves plus accumulation refinements; converged pixels are copied) |
+| Display frame-gap 95th percentile in those drags | 16.8 / 16.8 / 16.8 ms (grid-locked, accumulating live frames) |
+| Full display resolution (480 × 236, one sample) at 10¹¹ / 10²⁵ / 10¹⁰⁰ / 10⁻²⁰⁰, including the reference and shader preparation | 2.8 / 3.8 / 4.4 / 1.9 s (before the plain FP32 phase and the single `orbitColor` call site: 4.2 / 5.9 / 7.3 / 2.1 s) |
+| First perturbation draw (driver compiles the program lazily) | 0.7 s (3.2 s with four inlined `orbitColor` call sites) |
 | Wheel-zoom glide frame-gap 95th percentile | 66.7 ms |
 | Exact 10¹⁰⁰ reference orbit (6,144 steps, 140 digits) in a Worker | 73 ms |
 | Sixty-action session | 4 live GPU textures, 3 pooled, heap growth 0.22 MB |
@@ -69,11 +71,11 @@ Bilinear approximation, same frames with BLA off and automatic (160 × 96, one s
 
 | View | Plain | BLA | Speed-up | Pixels changed |
 | --- | --- | --- | --- | --- |
-| Horizon 10¹⁰⁰, 4,096 steps | 2,435 ms | 572 ms | 4.3× | Chaotic noise only (block difference 14.5) |
+| Horizon 10¹⁰⁰, 4,096 steps | 2,493 ms | 332 ms | 7.5× | Chaotic noise only (block difference 14.5) |
 | Threshold boundary 10⁻⁵⁵, 512 steps | 450 ms | 38 ms | 11.8× | 0 |
 | Plume 10¹¹, 768 steps | 326 ms | 369 ms | — (plain program kept: reach 12 steps) | — |
 
-In the app at 960 × 640 with one sample per pixel, Horizon 10¹⁰⁰ completes in about 25 s with BLA against 97 s without, and a drag shows 60 instead of 24 live frames in 2 s. At 480 × 236 (one sample per pixel, including the reference orbit) the 10¹⁰⁰ render dropped from 22.0 s before BLA to 6.5 s.
+In the app at 960 × 640 with one sample per pixel, Horizon 10¹⁰⁰ completes in about 25 s with BLA against 97 s without, and a drag shows 60 instead of 24 live frames in 2 s. At 480 × 236 (one sample per pixel, including the reference orbit) the 10¹⁰⁰ render dropped from 22.0 s before BLA to 6.5 s. With the plain FP32 phase, the 960 × 640 Horizon render completes in 15.4 s.
 
 ## Environment and interpretation
 
