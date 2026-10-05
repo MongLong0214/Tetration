@@ -35,6 +35,10 @@ def body():
         info = open_app(page, HORIZON)
         assert info['mode'] in ('perturb', 'cpu-perturb') and info['lastCompleted']['width'] >= 390
         if info['mode'] == 'perturb':
+            # A fast 1x render can finish before the parallel link/idle warm-up.
+            # Verify that BLA becomes available instead of racing its compilation.
+            page.wait_for_function('() => tetraDiagnostics.bla?.compiled', timeout=30000)
+            info = state(page)
             assert info['bla'] and info['bla']['levels'] > 0 and info['bla']['compiled'], info['bla']
         suite.record('10^100 renders at full resolution with BLA', {'mode': info['mode'], 'bla': info['bla'], 'seconds': round(info['lastCompleted']['elapsed'] / 1000, 1)})
 

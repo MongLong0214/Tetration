@@ -142,7 +142,9 @@
  uniform float uImCenter,uSpanMant;
  float pow2(int e){if(e<-126)return 0.;return intBitsToFloat((min(e,127)+127)<<23);}
  int expOf(vec2 v){float m=max(abs(v.x),abs(v.y));if(m==0.)return -1000;return ((floatBitsToInt(m)>>23)&255)-127;}
- vec2 scaled(vec2 m,int e){return m*pow2(e>>1)*pow2(e-(e>>1));}
+ // A zero mantissa can carry an arbitrary exponent. Avoid 0 * overflowing scale
+ // (NaN on native GPUs), notably when sampling the exact reference point.
+ vec2 scaled(vec2 m,int e){if(all(equal(m,vec2(0.))))return m;return m*pow2(e>>1)*pow2(e-(e>>1));}
  void normalizeExp(inout vec2 m,inout int e){int k=expOf(m);if(k==-1000){m=vec2(0.);e=-1000;return;}m=scaled(m,-k);e+=k;}
  vec2 cmul(vec2 a,vec2 b){return vec2(a.x*b.x-a.y*b.y,a.x*b.y+a.y*b.x);}
  vec4 refAt(int k){return texelFetch(uRef,ivec2(k&1023,k>>10),0);}
@@ -324,7 +326,9 @@ ${orbitLoop}` + perturbTail;
       if (this.bits < 23) throw Error('Insufficient fragment precision');
       this.maxTexture = gl.getParameter(gl.MAX_TEXTURE_SIZE);
       this.preciseTrig = this.probeTrig();
-      this.programs = {direct: this.link(direct, UNIFORMS.direct), perturb: this.link(perturb, UNIFORMS.perturb)};
+      // Link only the orbit program this view needs. A shallow first view should
+      // not wait for the larger perturbation shader (and vice versa).
+      this.programs = {};
       // The BLA program (deep views) links in warm(), in the background where the driver allows.
       this.parallel = gl.getExtension('KHR_parallel_shader_compile');
       this.pendingBla = null; this.warmed = false;
@@ -334,7 +338,7 @@ ${orbitLoop}` + perturbTail;
       this.setNearest();
       this.pool = []; this.reference = null; this.referenceTexture = null; this.live = 0; this.half = null;
       // blaMode: 'auto' uses BLA where it saves enough steps, 'on' wherever a table exists, 'off' never.
-      this.bla = null; this.blaTexture = null; this.blaMode = 'auto';
+      this.bla = null; this.blaTexture = null; this.blaMode = 'auto'; this.blaError = '';
     }
     /* One 256x2 draw comparing builtin cos/sin with the multiply-add version over |x| <= 60.
      * True when the builtins err by more than 4e-6 anywhere (then PRECISE_TRIG is compiled in). */
@@ -367,6 +371,9 @@ ${orbitLoop}` + perturbTail;
         return shader;
       });
       gl.linkProgram(program);
+      // Idle-time links have no following draw/RAF to submit these commands.
+      // Non-blocking completion polling must not leave compilation in the queue.
+      gl.flush();
       return {program, shaders};
     }
     finishLink({program, shaders}, names) {
@@ -416,7 +423,7 @@ ${orbitLoop}` + perturbTail;
       if (pending && this.parallel && this.blaMode !== 'on' && !this.gl.getProgramParameter(pending.program, this.parallel.COMPLETION_STATUS_KHR)) return null;
       this.pendingBla = null;
       try { this.programs.perturbBla = pending ? this.finishLink(pending, UNIFORMS.perturbBla) : this.link(perturbBla, UNIFORMS.perturbBla); }
-      catch { this.blaMode = 'off'; return null; }
+      catch (error) { this.blaError = String(error?.message || error); this.blaMode = 'off'; return null; }
       return this.programs.perturbBla;
     }
     // Idle-time preparation of the BLA program; one 1x1 draw also triggers lazy driver
@@ -434,7 +441,7 @@ ${orbitLoop}` + perturbTail;
     // a lazily translating driver (a no-op once deep views have drawn with it).
     warmPerturb() {
       if (this.perturbWarm || this.lost()) return;
-      this.touch(this.programs.perturb, ['Source', 'Ref']);
+      this.touch(this.program('perturb'), ['Source', 'Ref']);
       this.perturbWarm = true;
     }
     // One 1x1 draw into a throwaway target (the frame pool is left as it was).
@@ -448,6 +455,8 @@ ${orbitLoop}` + perturbTail;
       gl.activeTexture(gl.TEXTURE0);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
       gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.deleteFramebuffer(buffer); gl.deleteTexture(texture);
+      // Submit the warm-up draw too; otherwise lazy pipeline work waits for input.
+      gl.flush();
     }
     /* BLA table for a reference and the view's largest |dL| (TetraCore.blaTable),
      * as RGBA32F floatexp texels. A table built for a larger |dL| stays valid, so it
@@ -536,6 +545,16 @@ ${orbitLoop}` + perturbTail;
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
       return frame;
     }
+    // An exact integer copy of completed samples; no interpolation or new orbits.
+    copyShifted(frame, source, dx, dy) {
+      if (frame === source || frame.width !== source.width || frame.height !== source.height) throw Error('Invalid shifted frame');
+      const w = frame.width - Math.abs(dx), h = frame.height - Math.abs(dy);
+      if (w <= 0 || h <= 0) return;
+      const gl = this.gl, sx = Math.max(0, dx), sy = Math.max(0, dy), x = Math.max(0, -dx), y = Math.max(0, -dy);
+      gl.bindFramebuffer(gl.READ_FRAMEBUFFER, source.buffer); gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, frame.buffer);
+      gl.blitFramebuffer(sx, sy, sx + w, sy + h, x, y, x + w, y + h, gl.COLOR_BUFFER_BIT, gl.NEAREST);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    }
     // Issue one scissored draw into the frame. Returns immediately; use fence() to wait.
     draw(frame, tile, scene, samples, threshold = 0.035) {
       this.prepare(frame, scene, samples, threshold);
@@ -593,15 +612,17 @@ ${orbitLoop}` + perturbTail;
       const gl = this.gl, sync = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
       gl.flush();
       return new Promise((resolve, reject) => {
-        let polls = 0;
+        const started = performance.now();
         const poll = () => {
           if (gl.isContextLost()) { gl.deleteSync(sync); reject(Error('GPU context lost')); return; }
           const status = gl.clientWaitSync(sync, 0, 0);
           if (status === gl.WAIT_FAILED) { gl.deleteSync(sync); reject(Error('GPU fence failed')); return; }
           if (status === gl.TIMEOUT_EXPIRED) {
-            // A few immediate task hops catch short draws; longer work polls at timer rate.
-            polls++;
-            if (polls < 6) nextTask(poll); else setTimeout(poll, 1);
+            // Catch short draws promptly, then poll at 1 ms without a busy loop. A task
+            // hop before each timer resets HTML's nesting level: recursively scheduling
+            // timers alone clamps waits to 4 ms and strands the GPU between small batches.
+            if (performance.now() - started < 1) nextTask(poll);
+            else nextTask(() => setTimeout(poll, 1));
             return;
           }
           gl.deleteSync(sync); resolve();

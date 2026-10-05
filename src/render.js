@@ -11,6 +11,28 @@
   for(let y=0;y<height;y+=edge)for(let x=0;x<width;x+=edge)out.push({x,y,width:Math.min(edge,width-x),height:Math.min(edge,height-y)});
   return out.sort((a,b)=>(a.x+a.width/2-width/2)**2+(a.y+a.height/2-height/2)**2-((b.x+b.width/2-width/2)**2+(b.y+b.height/2-height/2)**2));
  }
+ // Fit the selected world rectangle without stretching it. Camera arithmetic stays
+ // in the fixed decimal domain, including offsets much smaller than Number's ULP.
+ function boxView(F,view,width,height,start,end){
+  const clamp=(v,max)=>Math.max(0,Math.min(max,v));
+  const x0=clamp(Math.min(start.x,end.x),width),x1=clamp(Math.max(start.x,end.x),width);
+  const y0=clamp(Math.min(start.y,end.y),height),y1=clamp(Math.max(start.y,end.y),height);
+  if(x1-x0<8||y1-y0<8||!(width>0&&height>0))return null;
+  const fw=F.parse(String(width)),fh=F.parse(String(height));
+  const left=F.parse(String(x0)),right=F.parse(String(x1)),top=F.parse(String(y0)),bottom=F.parse(String(y1));
+  const sw=right-left,sh=bottom-top;
+  return {x:view.x+view.span*(left+right-fw)/(2n*fw),y:view.y-view.span*(top+bottom-fh)/(2n*fw),span:sh*fw>sw*fh?view.span*sh/fh:view.span*sw/fw};
+ }
+ // Regions not covered by an integer-shifted image. y is top-down here, dy is
+ // the camera's upward world shift. The four strips never overlap at corners.
+ function exposedTiles(width,height,dx,dy,edge=128){
+  if(Math.abs(dx)>=width||Math.abs(dy)>=height)return tiles(width,height,edge);
+  const left=Math.max(0,-dx),top=Math.max(0,dy),w=width-Math.abs(dx),h=height-Math.abs(dy),out=[];
+  const add=(x,y,width,height)=>{if(width<=0||height<=0)return;for(const t of tiles(width,height,edge))out.push({...t,x:t.x+x,y:t.y+y});};
+  add(0,0,left,height);add(left+w,0,width-left-w,height);
+  add(left,0,w,top);add(left,top+h,w,height-top-h);
+  return out;
+ }
  function huePixels(data,angle){
   // Same matrix as CSS hue-rotate; used only for PNG fallback without Canvas filter.
   const c=Math.cos(angle*Math.PI/180),s=Math.sin(angle*Math.PI/180);
@@ -40,6 +62,6 @@
   if(F.abs(x)+F.abs(y)<view.span*2n){x+=view.span*37n/100n;y+=view.span*29n/100n;}
   return {x,y:y<0n?-y:y};
  }
- root.TetraRender={size,tiles,huePixels,perturbScene,referencePoint};
+ root.TetraRender={size,tiles,boxView,exposedTiles,huePixels,perturbScene,referencePoint};
  if(typeof module!=='undefined')module.exports=root.TetraRender;
 })(globalThis);

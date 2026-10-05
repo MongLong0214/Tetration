@@ -34,10 +34,12 @@
   <button id="shareBtn" class="primary-button" title="Share this view (S)"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M7 13 13 7M6 10l-2 2a3 3 0 0 0 4 4l2-2m0-8 2-2a3 3 0 0 1 4 4l-2 2"/></svg><span>Share</span></button>
  </nav>
 </header>
-<main id="viewport" tabindex="0" aria-label="Tetration map. Drag to pan, scroll or pinch to zoom. Arrow keys move; plus and minus zoom." aria-busy="true">
- <canvas id="gpuCanvas" aria-hidden="true"></canvas><canvas id="cpuCanvas" aria-hidden="true"></canvas><canvas id="gridCanvas" aria-hidden="true"></canvas>
- <div class="map-top"><div class="location"><span id="locationTag">02 / Bloom</span><span id="viewSubtitle">RECURSIVE PETALS</span></div><span id="engineTag" title="Finite observations. GPU results are FP32.">INITIALIZING</span></div>
+<main id="viewport" tabindex="0" aria-label="Tetration map. Drag to pan, scroll or pinch to zoom. Shift-drag selects a region to inspect. Arrow keys move; plus and minus zoom." aria-busy="true">
+ <canvas id="gpuCanvas" aria-hidden="true"></canvas><canvas id="cpuCanvas" aria-hidden="true"></canvas><canvas id="detailCanvas" aria-hidden="true" hidden></canvas><canvas id="gridCanvas" aria-hidden="true"></canvas>
+ <div class="map-top"><div class="location"><span id="locationTag">02 / Bloom</span><span id="viewSubtitle">PETALS WITHIN PETALS</span></div><span id="engineTag" title="Finite observations. GPU results are FP32.">INITIALIZING</span></div>
  <div class="crosshair" aria-hidden="true"></div>
+ <button id="detailBtn" class="detail-tool" title="Zoom to a selected region (Z or Shift-drag)" aria-label="Select a region to inspect" aria-pressed="false"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 7V3h4m6 0h4v4M3 13v4h4m6 0h4v-4M7 10h6m-3-3v6"/></svg><span>Detail</span></button>
+ <div id="detailBox" aria-hidden="true" hidden></div>
  <div id="precisionNote" class="precision-note" hidden></div>
  <div class="map-bottom">
   <div class="scale-area"><span id="zoomLabel">1×</span><div class="scale-line"></div><span id="scaleLabel">1 unit</span></div>
@@ -75,10 +77,10 @@
 <dialog id="helpDialog" aria-labelledby="guideTitle"><div class="panel-heading"><h2 id="guideTitle">Field guide</h2><button class="icon-button close-dialog" aria-label="Close guide">×</button></div>
  <p class="formula">w₀ = 1<br>wₙ₊₁ = exp(wₙ · Log z)</p>
  <p>Every pixel samples a complex base <i>z</i>. Move or zoom to compute a new view. The logarithm uses its principal value; the negative real axis has argument +π. Zero is excluded.</p>
- <h3>Controls</h3><dl class="shortcuts"><dt>Pan</dt><dd>Drag / arrow keys</dd><dt>Zoom</dt><dd>Scroll / pinch / + −</dd><dt>Zoom into a point</dt><dd>Double-click</dd><dt>Discover a new place</dt><dd>D</dd><dt>Overview / places</dt><dd>Home / 1—7</dd><dt>Back / forward</dt><dd>Alt + ← / →</dd><dt>Focus / controls</dt><dd>F / C</dd><dt>Save / share / image</dt><dd>B / S / E</dd><dt>Grid / guide</dt><dd>G / ?</dd></dl>
+ <h3>Controls</h3><dl class="shortcuts"><dt>Pan</dt><dd>Drag / arrow keys</dd><dt>Zoom</dt><dd>Scroll / pinch / + −</dd><dt>Zoom into a point</dt><dd>Double-click</dd><dt>Inspect a small structure</dt><dd>Shift-drag / Z then drag</dd><dt>Cancel a selection</dt><dd>Escape</dd><dt>Discover a new place</dt><dd>D</dd><dt>Overview / places</dt><dd>Home / 1—7</dd><dt>Back / forward</dt><dd>Alt + ← / →</dd><dt>Focus / controls</dt><dd>F / C</dd><dt>Save / share / image</dt><dd>B / S / E</dd><dt>Grid / guide</dt><dd>G / ?</dd></dl>
  <h3>Infinite zoom</h3><p>Shallow views are computed directly on the GPU. Deeper views use perturbation: one orbit is computed with exact-precision arithmetic, and every pixel follows it as a small offset on the GPU. Every depth renders at full display resolution. With Auto, the iteration limit grows as you zoom so deep structure stays resolved.</p>
  <h3>What the image can tell you</h3><p>Fixed points and period-2 orbits are candidates observed over a finite number of iterations. Crossing |w| &gt; 10¹⁰ does not prove divergence. Unresolved pixels may include slower or longer-period behavior. Different precision modes can disagree near boundaries and inside chaotic regions.</p>
- <h3>Image and motion</h3><p>Ultra renders at display resolution, up to 2× pixel density and 8.3 million pixels, then adds 4 and 16 orbit samples where edges are detected. Moving shows the current image instantly and refines it while you explore; it does not invent detail. Color flow slowly rotates the palette without recalculating the fractal. It starts only when you turn it on and pauses in the background.</p>
+ <h3>Image and motion</h3><p>Ultra renders at display resolution, up to 3× pixel density and 8.3 million pixels, then adds 4 and 16 orbit samples where edges are detected. Use Detail or Shift-drag to fit a small structure to the screen and compute its finer geometry. Moving shows the current image instantly and refines it while you explore; it does not invent detail. Recent completed views are kept in a bounded image cache for returning to them. Color flow slowly rotates the palette without recalculating the fractal. It starts only when you turn it on and pauses in the background.</p>
  <h3>Limits</h3><p>Minimum span: <b>1e−200</b>. Reference precision: <b>up to 256 decimal places</b>. Iterations: <b>up to 16,384</b>. The camera stores 256 decimal places; arithmetic is not interval-certified. Very deep views with high iteration limits can take seconds to refine.</p>
  <p class="field-note">Computation stays in your browser. No account, external computation API or app analytics. Saved views use local storage only when you save them.</p><button class="outline-button close-dialog">Return to map</button>
 </dialog>

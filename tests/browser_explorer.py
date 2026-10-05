@@ -1,6 +1,7 @@
 """Explorer product checks: saved views, history, focus, shortcuts, discovery, sharing,
 blocked-feature fallbacks, viewport sizes and automated accessibility. Production CSP stays enabled."""
 import re
+from urllib.parse import parse_qs, urlparse
 from browser_common import *
 from playwright.sync_api import sync_playwright
 
@@ -24,6 +25,10 @@ def body():
         suite.report['browser_version'] = browser.version
         context = browser.new_context(viewport={'width': 1440, 'height': 960}, permissions=['clipboard-read', 'clipboard-write'])
         page = suite.watch(context.new_page())
+        initial = open_app(page)
+        assert initial['view'] == {'x': '-2.2930579', 'y': '0.3320804', 'span': '0.00025'}, initial['view']
+        assert initial['lastCompleted']['samples'] == 16 and initial['lastCompleted']['width'] == 1440, initial['lastCompleted']
+        suite.record('Default view starts inside nested petals and computes native Ultra detail', initial['view'])
         open_app(page, 'v=1&x=-2.5&y=0&s=1.8&q=1')
         assert page.locator('html').get_attribute('lang') == 'en' and not re.search('[가-힣]', page.locator('body').inner_text())
         view = page.locator('#viewport').bounding_box()
@@ -60,7 +65,7 @@ def body():
         assert not state(page)['focus'] and state(page)['view'] == before
         suite.record('Focus mode fills the screen at full resolution and preserves exact coordinates')
 
-        for key, span in [('2', '3'), ('5', '0.00000000005'), ('7', '0.' + '0' * 99 + '7')]:
+        for key, span in [('2', '0.00025'), ('5', '0.00000000005'), ('7', '0.' + '0' * 99 + '7')]:
             page.keyboard.press(key)
             page.wait_for_function(f"() => tetraDiagnostics.view.span === '{span}'")
         assert page.locator('#locationTag').inner_text() == '07 / Horizon'
@@ -164,6 +169,40 @@ def body():
         shared = pg.evaluate('({name: __shared.files[0].name, type: __shared.files[0].type, size: __shared.files[0].size, text: __shared.text})')
         assert shared['type'] == 'image/png' and shared['size'] > 10000 and shared['text'].startswith('http')
         suite.record('Touch devices share the link and the rendered PNG through native share (API stub)', shared)
+
+        open_app(pg)
+        box = pg.locator('#viewport').bounding_box()
+        x, y = box['x'] + box['width']/2, box['y'] + box['height']/2
+        pg.mouse.move(x, y); pg.mouse.down(); pg.mouse.move(x+20, y+10)
+        image_view = state(pg)['view']
+        # Keep the drag held and invoke the export click before the URL debounce.
+        pg.locator('#exportBtn').evaluate('(e)=>e.click()')
+        pg.wait_for_function('() => !!window.__shared?.files')
+        params = parse_qs(urlparse(pg.evaluate('__shared.text')).fragment)
+        assert {'x': params['x'][0], 'y': params['y'][0], 'span': params['s'][0]} == image_view
+        pg.mouse.up(); settle(pg)
+        suite.record('A partial PNG shares the captured camera rather than the previous debounced URL')
+
+        # Real browser touch delivery: selection switches to pinch on the second
+        # finger and must save the camera at the first touch, including the very
+        # first gesture and a gesture following earlier navigation.
+        for prior_pan in [False, True]:
+            open_app(pg)
+            if prior_pan:
+                pg.locator('#viewport').focus(); pg.keyboard.press('ArrowRight'); settle(pg)
+            before = state(pg)['view']
+            pg.locator('#detailBtn').click()
+            touch = context.new_cdp_session(pg)
+            a, b = {'id': 1, 'x': 120, 'y': 360}, {'id': 2, 'x': 240, 'y': 360}
+            touch.send('Input.dispatchTouchEvent', {'type': 'touchStart', 'touchPoints': [a]})
+            touch.send('Input.dispatchTouchEvent', {'type': 'touchStart', 'touchPoints': [a, b]})
+            touch.send('Input.dispatchTouchEvent', {'type': 'touchMove', 'touchPoints': [{**a, 'x': 80}, {**b, 'x': 280}]})
+            touch.send('Input.dispatchTouchEvent', {'type': 'touchEnd', 'touchPoints': []})
+            touch.detach(); settle(pg)
+            assert state(pg)['view'] != before and pg.locator('#backBtn').is_enabled()
+            pg.locator('#backBtn').click(); settle(pg)
+            assert state(pg)['view'] == before
+            suite.record('Selection-to-pinch saves the current camera for Back' + (' after an earlier pan' if prior_pan else ' on the first gesture'))
         context.close()
 
         context = browser.new_context(viewport={'width': 1000, 'height': 700})

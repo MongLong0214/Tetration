@@ -67,6 +67,15 @@ def body():
         suite.record('Shallow drag: live frames and display cadence', {'frames_in_2s': frames, 'frame_gap_p95_ms': round(p95, 1), 'median_ms': round(statistics.median(gaps), 1)})
         settle(page)
 
+        # A close-up can need perturbation without having any useful BLA levels.
+        # Its idle preparation must not compile an unused large deep-zoom shader.
+        open_app(page, 'v=1&q=4', 'perturb')
+        assert state(page)['bla']['levels'] == 0
+        page.wait_for_timeout(3500)
+        idle = state(page)
+        assert not idle['blaReady'] and not idle['blaCompile']['pending'], idle['blaCompile']
+        suite.record('The default close-up does not compile BLA when its table has no valid levels')
+
         # At perturbation depth the BLA program is prepared in a quiet moment, without long tasks.
         open_app(page, 'v=1&x=-2.2930579295624999999999991&y=0.33208044555625&s=5e-11&q=1', 'perturb')
         page.evaluate('() => { __perf.longTasks.length = 0; }')

@@ -7,7 +7,7 @@
   const workerURL = URL.createObjectURL(new Blob([workerSource], {type: 'text/javascript'}));
   const presets = [
     {name: 'Overview', sub: 'COMPLEX PLANE', x: '-0.5', y: '0', span: '8'},
-    {name: 'Bloom', sub: 'RECURSIVE PETALS', x: '-1.9', y: '0', span: '3'},
+    {name: 'Bloom', sub: 'PETALS WITHIN PETALS', x: '-2.2930579', y: '0.3320804', span: '0.00025'},
     {name: 'Filaments', sub: 'BETWEEN THE BASINS', x: '-1.84', y: '0.09', span: '0.46'},
     {name: 'Feather', sub: 'FOLDS AND BRANCHES', x: '-0.72', y: '0.36', span: '0.7'},
     {name: 'Plume', sub: '10¹¹ · CORAL FEATHERS', x: '-2.2930579295624999999999991', y: '0.33208044555625', span: '5e-11'},
@@ -16,7 +16,7 @@
   ];
   const FIXED_ITERATIONS = [64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384];
   const AUTO_STEPS = [256, 384, 512, 768, 1024, 1536, 2048, 3072, 4096, 6144, 8192, 12288, 16384];
-  const DIRECT_LIMIT = 2 ** -16, FP64_LIMIT = 1e-13, SETTLE_MS = 110, BATCH_MS = 14, FRAME_MS = 12;
+  const DIRECT_LIMIT = 2 ** -16, FP64_LIMIT = 1e-13, SETTLE_MS = 110, BATCH_MS = 28, FRAME_MS = 12;
   const minSpan = F.parse('1e-200'), maxSpan = F.parse('1e12'), maxCoordinate = F.parse('1e12');
   const reducedMotion = matchMedia('(prefers-reduced-motion:reduce)');
   const coarsePointer = matchMedia('(pointer:coarse)').matches;
@@ -40,6 +40,20 @@
   const viewport = $('viewport'), gpuCanvas = $('gpuCanvas'), cpuCanvas = $('cpuCanvas'), gridCanvas = $('gridCanvas');
   const ctx = cpuCanvas.getContext('2d', {alpha: false}), gridCtx = gridCanvas.getContext('2d');
   const display = {canvas: cpuCanvas, view: null, frame: null, renderer: null, key: '', info: null};
+  const detailCanvas = $('detailCanvas');
+  let retainedDetail = null;
+  function clearDetail() { retainedDetail = null; detailCanvas.hidden = true; detailCanvas.width = detailCanvas.height = 1; }
+  function retainDetail() {
+    // A fully sampled native 4x stage is already useful detail, even while Ultra
+    // is still refining it. Grabbing the map must preserve that sharp image too.
+    if (retainedDetail || !gpu || display.canvas !== gpuCanvas || !display.info?.smooth || display.info.samples < 4 || display.soft || !display.view || display.canvas.width < targetSize(gpu).width) return;
+    try {
+      detailCanvas.width = gpuCanvas.width; detailCanvas.height = gpuCanvas.height;
+      detailCanvas.getContext('2d', {alpha: true}).drawImage(gpuCanvas, 0, 0);
+      retainedDetail = {view: clone(display.view), palette, aspect: display.aspect || detailCanvas.height / detailCanvas.width};
+      detailCanvas.hidden = false;
+    } catch { clearDetail(); }
+  }
 
   // ---------- Camera ----------
   function parseView(p) { return {x: F.parse(p.x), y: F.parse(p.y), span: F.parse(p.span)}; }
@@ -199,7 +213,7 @@
   }
 
   // ---------- Color flow ----------
-  function applyHue() { const angle = hue(); display.canvas.style.filter = angle ? 'hue-rotate(' + angle + 'deg)' : 'none'; }
+  function applyHue() { const angle = hue(), filter = angle ? 'hue-rotate(' + angle + 'deg)' : 'none'; display.canvas.style.filter = filter; detailCanvas.style.filter = filter; }
   function setFlow(enabled) {
     colorPhase = hue(); flow = enabled && !document.hidden; flowStarted = performance.now();
     cancelAnimationFrame(flowFrame); flowFrame = 0;
@@ -216,6 +230,11 @@
     return {zoom, dx, dy};
   }
   function reproject() {
+    if (retainedDetail) {
+      const {zoom, dx, dy} = transformFor(retainedDetail.view, visual);
+      const sy = retainedDetail.aspect / (dims.h / dims.w);
+      detailCanvas.style.transform = Number.isFinite(zoom + dx + dy) && zoom < 1e6 && zoom > 1e-6 ? `translate(${dx}px,${dy}px) scale(${zoom},${zoom * sy})` : 'scale(0)';
+    }
     if (!display.view) return;
     if (same(display.view, visual) && (display.canvas !== gpuCanvas || (display.sy || 1) === 1)) { display.canvas.style.transform = 'none'; return; }
     const {zoom, dx, dy} = transformFor(display.view, visual);
@@ -234,7 +253,11 @@
    * ({grid, shift, min, typical, cycle}: accumulation state), smooth (antialiased everywhere)}.
    * soft: present a single-sample image as its 2x2 average (see TetraGPU.presentFrame). */
   function show(renderer, frame, renderView, key, sy = 1, info = null, soft = false) {
+    // Keep genuine previously computed detail above a coarse live image. Retire it
+    // when the new image has equal or finer world sampling, or shading changes.
+    if (retainedDetail && (retainedDetail.palette !== info?.palette || frame.width / num(renderView.span) >= detailCanvas.width / num(retainedDetail.view.span) * 0.999)) clearDetail();
     display.sy = sy; display.info = info; display.soft = soft;
+    display.aspect = dims.h / dims.w * sy;
     renderer.presentFrame(frame, soft);
     if (display.frame !== frame) {
       const old = display.frame, oldRenderer = display.renderer;
@@ -250,6 +273,59 @@
     if (count > 0) { pinned.set(frame, count); return; }
     pinned.delete(frame);
     if (frame !== display.frame) renderer.releaseFrame(frame);
+  }
+
+  // Completed images own their textures: the scratch pool must never overwrite them.
+  // Three recent views cover Back/Forward without multiplying large Retina allocations.
+  const completedViews = new Map();
+  const completedBudget = (navigator.deviceMemory && navigator.deviceMemory <= 4 ? 24 : 64) * 1024 * 1024;
+  let completedBytes = 0, completedHits = 0;
+  function completedKey(v, mode, size, samples = quality) {
+    return [F.text(v.x), F.text(v.y), F.text(v.span), mode, iterationsFor(v), palette, samples, dims.w, dims.h, size.width, size.height].join('|');
+  }
+  function forgetCompleted(key) {
+    const item = completedViews.get(key);
+    if (!item) return;
+    completedViews.delete(key); completedBytes -= item.bytes;
+    unpin(item.renderer, item.frame);
+  }
+  function clearCompleted() { for (const key of [...completedViews.keys()]) forgetCompleted(key); }
+  function completedFamily(v, mode, size, samples = quality) {
+    return [F.text(v.span), mode, iterationsFor(v), palette, samples, dims.w, dims.h, size.width, size.height].join('|');
+  }
+  function rememberCompleted(v, mode, renderer, frame, ref, samples, key, native) {
+    const bytes = frame.width * frame.height * 4;
+    if (bytes > completedBudget) return;
+    const cacheKey = completedKey(v, mode, frame, samples);
+    forgetCompleted(cacheKey);
+    pin(frame);
+    completedViews.set(cacheKey, {renderer, frame, ref, key, bytes, samples, native, family: completedFamily(v, mode, frame, samples), info: {palette, samples, live: null, smooth: samples >= 4}});
+    completedBytes += bytes;
+    while (completedViews.size > 3 || completedBytes > completedBudget) forgetCompleted(completedViews.keys().next().value);
+  }
+  function restoreCompleted(v, mode) {
+    if (!gpu || !isGPUMode(mode)) return false;
+    const cacheKey = completedKey(v, mode, targetSize(gpu)), item = completedViews.get(cacheKey);
+    if (!item || item.renderer !== gpu) return false;
+    completedViews.delete(cacheKey); completedViews.set(cacheKey, item);
+    references.active = item.ref; completedHits++;
+    show(gpu, item.frame, item.native?.at || v, item.key, 1, item.info);
+    finished(item.frame.width, item.frame.height, null, iterationsFor(v), mode, item.samples, item.frame.width * item.frame.height);
+    return true;
+  }
+  function nativePan(v, mode, ref, size) {
+    const family = completedFamily(v, mode, size), round = (n, d) => n >= 0n ? (n + d / 2n) / d : -((-n + d / 2n) / d);
+    let best = null;
+    for (const item of completedViews.values()) {
+      if (item.renderer !== gpu || item.ref !== ref || item.family !== family || !item.native) continue;
+      const grid = item.native.grid, sx = round(v.x - grid.view.x, grid.px), sy = round(v.y - grid.view.y, grid.py);
+      if (F.abs(sx) > 1000000n || F.abs(sy) > 1000000n) continue;
+      const shift = [Number(sx), Number(sy)], dx = shift[0] - item.native.shift[0], dy = shift[1] - item.native.shift[1];
+      const pixels = Math.max(0, size.width - Math.abs(dx)) * Math.max(0, size.height - Math.abs(dy));
+      if (!pixels || (best && pixels <= best.pixels)) continue;
+      best = {item, grid, shift, dx, dy, pixels, at: {x: grid.view.x + sx * grid.px, y: grid.view.y + sy * grid.py, span: v.span}};
+    }
+    return best;
   }
 
   // ---------- References (exact orbits for perturbation) ----------
@@ -375,7 +451,8 @@
     // The final render for this camera has started; refining live frames would only compete.
     if (jobSerial === serial && same(visual, view)) return;
     if (gpuBusy) { interactivePending = true; return; }
-    const v = clone(visual), mode = chooseMode(v);
+    const v = clone(visual), mode = chooseMode(v), shape = dims;
+    const settings = {engine, iterationSetting, quality};
     if (!isGPUMode(mode)) return;
     let ref = null;
     if (mode === 'perturb') {
@@ -448,7 +525,11 @@
       // garbage collection, keeps the plan) or one very slow frame; faster only from a fresh frame.
       plan.over = ms > FRAME_MS * 2.5 ? (plan.over || 0) + 1 : 0;
       if (plan.over >= 3 || ms > FRAME_MS * 8 || (fresh && ms < FRAME_MS * 0.35 && !plan.full)) plan.stale = true;
-      if (renderer === gpu) {
+      // A final render (including an immediate cache restore) owns the screen now.
+      // A slow live draw from before navigation must not replace its completed image
+      // or switch a CPU render back to the GPU canvas. Camera-only changes may still
+      // reproject useful live frames; changed render settings and shape cannot.
+      if (renderer === gpu && !document.hidden && jobSerial !== serial && shape === dims && scene.palette === palette && settings.engine === engine && settings.iterationSetting === iterationSetting && settings.quality === quality) {
         show(renderer, frame, at, key, sy, {palette: scene.palette, samples: 0, live: {grid: plan.grid, shift: scene.grid.shift, min, typical, cycle}, smooth: typical >= 4});
         interactiveCount++; frame = null;
       }
@@ -499,8 +580,8 @@
     const trusted = Math.min(4, live ? live.typical : Math.max(1, info.samples));
     return {accum: {mode: 2, frame, scale, offset, count: live ? 0 : Math.max(1, info.samples), cap: 4}, min: perFrame, typical: Math.min(16, trusted + perFrame / interleave), cycle: 0};
   }
-  async function runStage(id, renderer, frame, scene, samples, onBatch) {
-    const edge = tileEdge(renderer.effectiveIterations(scene, frame.width, frame.height), samples), tiles = TetraRender.tiles(frame.width, frame.height, edge), key = rateKey(scene, samples);
+  async function runStage(id, renderer, frame, scene, samples, onBatch, work = null) {
+    const edge = tileEdge(renderer.effectiveIterations(scene, frame.width, frame.height), samples), tiles = work ? TetraRender.exposedTiles(frame.width, frame.height, work.dx, work.dy, edge) : TetraRender.tiles(frame.width, frame.height, edge), key = rateKey(scene, samples);
     const area = frame.width * frame.height;
     // Final tiles keep their own rate (live frames smooth theirs over whole frames). The first
     // batch is at most 4 tiles and a batch at most doubles, so a dense centre after cheap
@@ -518,7 +599,7 @@
       setGPUBusy(true);
       const t0 = performance.now();
       try {
-        renderer.prepare(frame, scene, samples);
+        renderer.prepare(frame, scene, samples, work ? 0 : undefined);
         for (const t of batch) renderer.drawTile(frame, t);
         await renderer.fence();
       } finally { setGPUBusy(false); }
@@ -532,10 +613,19 @@
     return true;
   }
   async function gpuJob(id, v, mode, ref) {
-    const renderer = gpu, scene = buildScene(v, mode, ref), aa = quality, key = sceneKey(scene, v);
+    const renderer = gpu, aa = quality;
     const target = targetSize(renderer);
-    const stages = [{samples: 1, name: 'detail', label: 'Resolving detail'}];
-    if (aa >= 4) stages.push({samples: 4, name: 'antialias', label: 'Smoothing edges'});
+    const reuse = nativePan(v, mode, ref, target);
+    const origin = reuse?.grid || {view: clone(v), scene: buildScene(v, mode, ref), px: v.span / BigInt(target.width), py: v.span * BigInt(Math.round(dims.h / dims.w * 1e12)) / 1000000000000n / BigInt(target.height)};
+    const span = mode === 'gpu' ? origin.scene.span : origin.scene.spanMant;
+    const shift = reuse?.shift || [0, 0], renderView = reuse?.at || v;
+    const scene = {...origin.scene, grid: {shift, step: [span / target.width, span * origin.scene.aspect / target.height]}}, key = sceneKey(scene, v);
+    const native = {grid: origin, at: clone(renderView), shift};
+    // The overlap already contains final samples. Exposed strips do not need the
+    // centre sample: start at 4x, then reuse those four samples in the 16x pass.
+    // A single 16x pass was slower on dense deep views despite fewer submissions.
+    const stages = reuse ? [{samples: aa >= 4 ? 4 : 1, name: aa >= 4 ? 'antialias' : 'detail', label: 'Resolving new detail'}] : [{samples: 1, name: 'detail', label: 'Resolving detail'}];
+    if (!reuse && aa >= 4) stages.push({samples: 4, name: 'antialias', label: 'Smoothing edges'});
     if (aa >= 16) stages.push({samples: 16, name: 'ultra', label: 'Ultra edges'});
     const total = stages.length + 1, held = new Set();
     const hold = frame => { pin(frame); held.add(frame); return frame; };
@@ -548,7 +638,15 @@
     const softer = keepSmooth && !!display.frame && display.frame.width < target.width * 0.5;
     try {
       let previous = null;
-      if (display.frame && display.renderer === renderer && display.key === key) {
+      if (reuse) {
+        await gpuIdle();
+        if (id !== serial || renderer !== gpu) return;
+        previous = hold(reuse.item.frame);
+        if (!reuse.dx && !reuse.dy) {
+          show(renderer, previous, renderView, key, 1, reuse.item.info);
+          finished(target.width, target.height, null, iterationsFor(v), mode, aa, reuse.pixels); return;
+        }
+      } else if (display.frame && display.renderer === renderer && display.key === key) {
         // The interactive frame already shows this camera; refine it in place.
         previous = hold(display.frame);
       } else if (!keepSmooth) {
@@ -556,21 +654,28 @@
         const size = interactiveSize(renderer, scene, target);
         previous = hold(renderer.beginFrame(size.width, size.height));
         $('loadingText').textContent = 'Finding the view';
-        if (!(await runStage(id, renderer, previous, scene, 1, fraction => setProgress(fraction / total * 100)))) return;
-        show(renderer, previous, v, key, 1, {palette: scene.palette, samples: 1, live: null, smooth: false});
+        // This preview has a different size and needs that size's world sampling step.
+        const preview = {...scene, grid: null};
+        if (!(await runStage(id, renderer, previous, preview, 1, fraction => setProgress(fraction / total * 100)))) return;
+        show(renderer, previous, renderView, key, 1, {palette: scene.palette, samples: 1, live: null, smooth: false});
       }
       // smoothBase: the frame under the current stage is a completed antialiased stage.
       let smoothBase = false;
       for (let s = 0; s < stages.length; s++) {
         const stage = stages[s];
         renderStage = stage.name;
-        const frame = hold(renderer.beginFrame(target.width, target.height, previous, stage.samples > 1));
+        const frame = hold(renderer.beginFrame(target.width, target.height, reuse && s === 0 ? null : previous, stage.samples > 1));
+        if (reuse && s === 0) {
+          // The exposed strips stay pending, while every overlapping 16x sample is preserved.
+          renderer.copyShifted(frame, previous, reuse.dx, reuse.dy);
+          show(renderer, frame, renderView, key, 1, {...reuse.item.info, samples: 0});
+        }
         let lastPresented = 0;
         const ok = await runStage(id, renderer, frame, scene, stage.samples, (fraction, last) => {
           setProgress((s + 1 + fraction) / total * 100);
           $('loadingText').textContent = `${stage.label} · ${target.width} × ${target.height} · ${Math.round(fraction * 100)}%`;
           $('resolutionReadout').textContent = `${target.width} × ${target.height} / ${Math.round(fraction * 100)}%`;
-          const smooth = stage.samples >= 4 && (last || smoothBase), final = last && s === stages.length - 1;
+          const smooth = stage.samples >= 4 && (last || smoothBase || !!reuse), final = last && s === stages.length - 1;
           let soft = false;
           if (keepSmooth && !smooth && !final) {
             if (!softer || (stage.samples === 1 && !last)) return;
@@ -578,16 +683,19 @@
           }
           const now = performance.now();
           if (last || now - lastPresented > 50) {
-            show(renderer, frame, v, key, 1, {palette: scene.palette, samples: last ? stage.samples : smoothBase ? 4 : 1, live: null, smooth: smooth || soft}, soft);
+            show(renderer, frame, renderView, key, 1, {palette: scene.palette, samples: last ? stage.samples : smoothBase ? 4 : 1, live: null, smooth: smooth || soft}, soft);
             lastPresented = now;
           }
-        });
+        }, reuse);
         smoothBase = ok && stage.samples >= 4;
         drop(previous);
         previous = frame;
         if (!ok) return;
       }
-      if (id === serial) finished(target.width, target.height, null, iterationsFor(v), mode, stages.at(-1).samples);
+      if (id === serial) {
+        rememberCompleted(v, mode, renderer, previous, ref, stages.at(-1).samples, key, native);
+        finished(target.width, target.height, null, iterationsFor(v), mode, stages.at(-1).samples, reuse?.pixels || 0);
+      }
     } catch (error) {
       if (id !== serial && renderer === gpu && !renderer.lost()) return;
       gpuFailed(renderer, error);
@@ -597,9 +705,11 @@
   }
   function gpuFailed(renderer, error) {
     if (renderer !== gpu) return;
+    clearDetail();
     // Out of texture memory or above the size limit with a live context: free frames, halve the budget, retry.
     if (!renderer.lost() && /allocation|limit/.test(String(error?.message)) && budgetScale > 1 / 8) {
       budgetScale /= 2;
+      clearCompleted();
       if (display.renderer === renderer && display.canvas === gpuCanvas) keepSnapshot();
       display.frame = null; display.renderer = null; display.key = '';
       renderer.releaseAll();
@@ -608,6 +718,7 @@
     keepSnapshot();
     console.warn('GPU renderer unavailable:', error?.message || error);
     gpuFailure = String(error?.message || error);
+    clearCompleted();
     if (!renderer.lost()) { try { renderer.destroy(); } catch { /* lost */ } }
     gpu = null; display.frame = null; display.renderer = null; display.key = '';
     toast('Renderer changed. Recomputing view.');
@@ -716,12 +827,15 @@
     $('statusText').textContent = 'Render interrupted'; showLoading(message); $('retryBtn').hidden = false;
   }
   $('retryBtn').onclick = () => { references.liveFailed = null; changed(); };
-  function finished(w, h, counts, iterations, mode, samples) {
+  function finished(w, h, counts, iterations, mode, samples, reusedPixels = 0) {
+    // Retained detail is a motion preview. Once this camera is complete, its own
+    // computed image must be the only fractal layer, also after zooming out.
+    clearDetail();
     lastRenderComplete = true; renderStage = 'complete'; viewport.setAttribute('aria-busy', 'false'); $('loading').hidden = true; setProgress(100);
     const elapsed = performance.now() - started;
     $('statusText').textContent = `${iterations.toLocaleString('en-US')} steps · ${elapsed < 1000 ? Math.round(elapsed) + ' ms' : (elapsed / 1000).toFixed(1) + ' s'}`;
     $('resolutionReadout').textContent = `${w} × ${h} / ${mode === 'exact' ? exactDigits() + ' DP' : isGPUMode(mode) ? (samples === 16 ? 'ULTRA AA' : samples === 4 ? 'ADAPTIVE AA' : '1×') : 'FP64'}`;
-    lastCompletedInfo = {view: serialize(), mode, iterations, palette, width: w, height: h, counts, elapsed, samples};
+    lastCompletedInfo = {view: serialize(), mode, iterations, palette, width: w, height: h, counts, elapsed, samples, reusedPixels, computedPixels: w * h - reusedPixels};
     document.body.dataset.ready = 'true'; document.body.dataset.mode = mode; document.body.dataset.complete = 'true';
     updateURL();
     scheduleWarm();
@@ -732,15 +846,18 @@
   let warmTimer = 0, quietSince = 0;
   // In shallow views the perturbation program is used once in a quiet moment too, so zooming
   // past the direct limit for the first time does not wait for the driver to compile it.
+  function canWarmBla() { return currentMode === 'perturb' && !!gpu?.bla?.levels && gpu.bla.ref === references.active; }
   function scheduleWarm() {
-    const deep = currentMode === 'perturb';
+    // Perturbation also serves the default close-up, where the BLA table is empty.
+    // Do not compile the large deep-zoom program for a view that cannot use it.
+    const deep = canWarmBla();
     if (!gpu || warmTimer || (deep ? gpu.warmed : gpu.perturbWarm)) return;
     warmTimer = setTimeout(() => {
       warmTimer = 0;
       if (!gpu || document.hidden) return;
       if (gpuBusy || !lastRenderComplete || pointerMap.size || motion.raf || performance.now() - quietSince < 2500) { scheduleWarm(); return; }
       let done = true;
-      try { if (currentMode === 'perturb') done = gpu.warm(); else gpu.warmPerturb(); } catch { /* the programs keep working */ }
+      try { if (canWarmBla()) done = gpu.warm(); else gpu.warmPerturb(); } catch { /* the programs keep working */ }
       if (!done) scheduleWarm();
     }, 2500);
   }
@@ -751,6 +868,8 @@
   // Every camera or setting change ends here. Interactive changes keep showing and
   // refining low-cost frames; the full render starts when the camera rests.
   function changed(options = {}) {
+    if (!options.interactive) cancelGesture();
+    if (options.interactive || options.animate) retainDetail(); else clearDetail();
     invalidate(); quietSince = performance.now();
     if (!options.keepVisual && (reducedMotion.matches || !options.animate)) visual = clone(view);
     syncControls(); updateReadout(); reproject(); setProgress(0);
@@ -770,6 +889,7 @@
     const id = serial, v = clone(view), mode = chooseMode(v);
     visual = clone(view); started = performance.now(); currentMode = mode; updateReadout(); reproject();
     document.body.dataset.mode = mode; document.body.dataset.complete = 'false';
+    if (restoreCompleted(v, mode)) return;
     let ref = null;
     if (needsReference(mode)) {
       ref = findReference(v, mode);
@@ -839,6 +959,7 @@
     return zoom < 64 && zoom > 1 / 64 && num(F.div(F.abs(a.x - b.x) + F.abs(a.y - b.y), larger)) < 4;
   }
   function goTo(next, index = -1) {
+    cancelGesture();
     stopMotion();
     if (same(next, view) && same(visual, view) && (lastRenderComplete || jobSerial === serial)) { locationIndex = index; syncControls(); updateReadout(); return; }
     view = next; locationIndex = index; changed({animate: near(next, visual)});
@@ -857,6 +978,29 @@
   // ---------- Pointer, wheel and keyboard ----------
   const pointerMap = new Map();
   let pinch = null, drag = null, gestureSaved = false, gestureBase = null;
+  let selecting = false, selection = null;
+  function cancelGesture() {
+    const ids = [...pointerMap.keys()];
+    selectDetail(false);
+    pointerMap.clear(); drag = null; pinch = null; gestureSaved = false; gestureBase = null; motion.samples = [];
+    for (const id of ids) { try { if (viewport.hasPointerCapture(id)) viewport.releasePointerCapture(id); } catch { /* already released */ } }
+  }
+  function selectDetail(enabled) {
+    selecting = enabled;
+    $('detailBtn').setAttribute('aria-pressed', String(enabled));
+    viewport.classList.toggle('select-detail', enabled);
+    if (!enabled && selection) { pointerMap.delete(selection.id); selection = null; $('detailBox').hidden = true; touchSetup(); }
+  }
+  function drawSelection() {
+    const {from, to} = selection, box = $('detailBox');
+    box.hidden = false;
+    box.style.left = Math.min(from.x, to.x) + 'px'; box.style.top = Math.min(from.y, to.y) + 'px';
+    box.style.width = Math.abs(to.x - from.x) + 'px'; box.style.height = Math.abs(to.y - from.y) + 'px';
+  }
+  $('detailBtn').onclick = () => {
+    selectDetail(!selecting); viewport.focus({preventScroll: true});
+    if (selecting) toast('Drag a box around the structure. Escape cancels.');
+  };
   function touchSetup() {
     const values = [...pointerMap.values()];
     if (values.length >= 2) {
@@ -873,11 +1017,27 @@
     stopMotion();
     if (!same(visual, view)) { view = clone(visual); locationIndex = -1; invalidate(); syncControls(); updateReadout(); }
     visual = clone(view);
-    if (!pointerMap.size && !gestureSaved) gestureBase = clone(view);
+    // Selection can become a pinch when a second finger arrives. Both paths need
+    // the camera at the first touch, rather than the previous gesture's history.
+    if (!pointerMap.size) { gestureBase = clone(view); gestureSaved = false; }
+    if (selection && selection.id !== e.pointerId) {
+      const first = selection; selectDetail(false); pointerMap.set(first.id, first.to);
+    }
+    if ((e.shiftKey || selecting) && !pointerMap.size) {
+      selectDetail(true);
+      const point = relative(e.clientX, e.clientY);
+      selection = {id: e.pointerId, from: point, to: point, view: clone(visual), width: dims.w, height: dims.h};
+      pointerMap.set(e.pointerId, point); drawSelection(); return;
+    }
     pointerMap.set(e.pointerId, relative(e.clientX, e.clientY)); touchSetup();
   });
   viewport.addEventListener('pointermove', e => {
     if (!pointerMap.has(e.pointerId)) return;
+    if (selection && selection.id === e.pointerId) {
+      const point = relative(e.clientX, e.clientY);
+      selection.to = {x: Math.max(0, Math.min(dims.w, point.x)), y: Math.max(0, Math.min(dims.h, point.y))};
+      drawSelection(); return;
+    }
     pointerMap.set(e.pointerId, relative(e.clientX, e.clientY));
     const values = [...pointerMap.values()];
     if (pinch && values.length >= 2) {
@@ -895,12 +1055,24 @@
   });
   function pointerEnd(e) {
     if (!pointerMap.has(e.pointerId)) return;
+    if (selection && selection.id === e.pointerId) {
+      const box = selection;
+      // ResizeObserver can run after pointerup. Check the actual layout too, so
+      // releasing a pre-resize box cannot apply it to the changed viewport.
+      const bounds = viewport.getBoundingClientRect();
+      const next = e.type === 'pointerup' && bounds.width === box.width && bounds.height === box.height ? TetraRender.boxView(F, box.view, box.width, box.height, box.from, box.to) : null;
+      selectDetail(false);
+      if (next && next.span < box.view.span) { saveHistory(box.view); view = bounded(next); locationIndex = -1; changed(); }
+      else { clearTimeout(settleTimer); settleTimer = setTimeout(finalRender, 40); }
+      return;
+    }
     const samples = drag && pointerMap.size === 1 ? motionSamples(e.timeStamp) : null;
     pointerMap.delete(e.pointerId); touchSetup();
     if (pointerMap.size) return;
     gestureSaved = false;
     if (samples && !reducedMotion.matches && e.type === 'pointerup') { motion.vx = samples.vx; motion.vy = samples.vy; startMotion(); }
-    clearTimeout(settleTimer); settleTimer = setTimeout(finalRender, 40); scheduleURL();
+    // Pointer release is an explicit stop; wheel gestures still use the debounce.
+    clearTimeout(settleTimer); settleTimer = setTimeout(finalRender, motion.raf ? SETTLE_MS : 0); scheduleURL();
   }
   function motionSamples(now) {
     const list = motion.samples.filter(s => now - s.t < 90);
@@ -911,25 +1083,36 @@
     return Math.hypot(vx, vy) > 0.35 ? {vx: Math.max(-6, Math.min(6, vx)), vy: Math.max(-6, Math.min(6, vy))} : null;
   }
   viewport.addEventListener('pointerup', pointerEnd); viewport.addEventListener('pointercancel', pointerEnd); viewport.addEventListener('lostpointercapture', pointerEnd);
-  let lastWheel = -Infinity;
+  let lastWheel = -Infinity, lastWheelSerial = -1;
   viewport.addEventListener('wheel', e => {
     if (e.target.closest('button')) return;
     e.preventDefault();
-    const before = clone(view), fresh = performance.now() - lastWheel > 500;
-    stopMotion();
     const dy = e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? dims.h : 1);
+    if (!dy) return;
+    if (selection || selecting) cancelGesture();
+    const held = pointerMap.size > 0;
+    const before = clone(view), fresh = performance.now() - lastWheel > 500 || serial !== lastWheelSerial;
+    stopMotion();
     // Chromium/Firefox send trackpad pinch as ctrl+wheel with deltaY = -100 ln(scale): follow the fingers 1:1, live.
     // Ctrl + mouse-wheel notches (|deltaY| >= 50) keep the animated wheel path.
     const pinchZoom = e.ctrlKey && e.deltaMode === 0 && Math.abs(dy) < 50;
     const step = pinchZoom ? Math.max(-0.5, Math.min(0.5, dy * 0.01)) : Math.max(-1.1, Math.min(1.1, dy * .0018));
     if (zoomAt(Math.exp(step), relative(e.clientX, e.clientY))) {
-      if (fresh) saveHistory(before);
-      lastWheel = performance.now(); locationIndex = -1; changed(pinchZoom ? {interactive: true} : {animate: true});
+      if (held) {
+        if (!gestureSaved) { saveHistory(gestureBase || before); gestureSaved = true; }
+        // Continue a held drag/pinch from the zoomed camera. Its old starting
+        // camera would undo the zoom on the very next pointer move.
+        touchSetup();
+      } else if (fresh) saveHistory(before);
+      lastWheel = performance.now(); locationIndex = -1; changed(pinchZoom || held ? {interactive: true} : {animate: true});
+      // A preset, Back, settings change or another gesture starts a new wheel
+      // history entry even when it happens inside the wheel burst's time window.
+      lastWheelSerial = serial;
     }
   }, {passive: false});
   // Safari sends trackpad pinch as gesture events; without this the whole page magnifies.
   let gestureScale = 1;
-  viewport.addEventListener('gesturestart', e => { e.preventDefault(); gestureScale = 1; if (!pointerMap.size) { stopMotion(); saveHistory(); } }, {passive: false});
+  viewport.addEventListener('gesturestart', e => { e.preventDefault(); gestureScale = 1; if (!pointerMap.size) { cancelGesture(); stopMotion(); saveHistory(); } }, {passive: false});
   viewport.addEventListener('gesturechange', e => {
     e.preventDefault();
     if (pointerMap.size || !e.scale) return;
@@ -944,6 +1127,7 @@
   $('forwardBtn').onclick = () => { if (!future.length) return; history.push(clone(view)); goTo(future.pop()); };
   viewport.addEventListener('keydown', e => {
     if (e.target.closest('button,input,select,textarea')) return;
+    if (e.key === 'Escape' && selecting) { e.preventDefault(); e.stopPropagation(); selectDetail(false); settleTimer = setTimeout(finalRender, 40); return; }
     if (['+', '=', '-', '_', 'Home', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) e.preventDefault(); else return;
     if (e.altKey && e.key === 'ArrowLeft') { $('backBtn').click(); return; }
     if (e.altKey && e.key === 'ArrowRight') { $('forwardBtn').click(); return; }
@@ -976,9 +1160,12 @@
   let discovering = false;
   function discover() {
     if (discovering) return;
+    const requestedAt = serial;
     const worker = referenceWorker(), seed = (Math.random() * 4294967296) >>> 0;
     const apply = place => {
       discovering = false; $('discoverBtn').removeAttribute('aria-busy');
+      // A queued search cannot override navigation/settings chosen afterwards.
+      if (requestedAt !== serial) return;
       if (!place) { toast('Could not find a new place. Try again.'); return; }
       closeSettings(); viewport.focus({preventScroll: true});
       const v = {x: F.parse(place.x.toPrecision(17)), y: F.parse(place.y.toPrecision(17)), span: F.parse(place.span.toPrecision(6))};
@@ -1014,18 +1201,31 @@
     catch { $('shareText').focus(); $('shareText').select(); toast('Select and copy the link.'); }
   };
   async function snapshot() {
+    // ImageBitmap creation is asynchronous. Freeze every camera/viewport transform
+    // with the image and its metadata, before navigation or resize can change them.
+    const capturedView = clone(view), capturedDims = {...dims};
     const captured = {view: serialize(), mode: currentMode, iterations: iterationsFor(), palette, complete: lastRenderComplete, hue: hue(), url: location.href};
     const gridCopy = grid ? document.createElement('canvas') : null;
+    const detailCopy = retainedDetail ? document.createElement('canvas') : null, detailView = retainedDetail && clone(retainedDetail.view), detailAspect = retainedDetail?.aspect;
+    if (detailCopy) { detailCopy.width = detailCanvas.width; detailCopy.height = detailCanvas.height; detailCopy.getContext('2d').drawImage(detailCanvas, 0, 0); }
     if (gridCopy) { gridCopy.width = gridCanvas.width; gridCopy.height = gridCanvas.height; gridCopy.getContext('2d').drawImage(gridCanvas, 0, 0); }
-    const transform = display.view ? transformFor(display.view, view) : null;
+    const transform = display.view ? transformFor(display.view, capturedView) : null;
+    const detailTransform = detailView ? transformFor(detailView, capturedView) : null;
     let source = display.canvas;
     if (display.frame && display.canvas === gpuCanvas) source = await display.renderer.capture(display.frame);
-    const out = document.createElement('canvas'); out.width = Math.max(1, source.width); out.height = Math.max(1, source.height);
+    const out = document.createElement('canvas'); out.width = Math.max(1, source.width, detailCopy?.width || 0); out.height = Math.max(1, source.height, detailCopy?.height || 0);
     const c = out.getContext('2d');
     c.fillStyle = '#060606'; c.fillRect(0, 0, out.width, out.height); c.save();
-    if (transform) { c.translate(out.width / 2 + transform.dx / dims.w * out.width, out.height / 2 + transform.dy / dims.w * out.width); c.scale(transform.zoom, transform.zoom); c.translate(-out.width / 2, -out.height / 2); }
+    if (transform) { c.translate(out.width / 2 + transform.dx / capturedDims.w * out.width, out.height / 2 + transform.dy / capturedDims.w * out.width); c.scale(transform.zoom, transform.zoom); c.translate(-out.width / 2, -out.height / 2); }
     if ('filter' in c) c.filter = `hue-rotate(${captured.hue}deg)`;
     c.drawImage(source, 0, 0, out.width, out.height); c.restore(); source.close?.();
+    if (detailCopy) {
+      const t = detailTransform;
+      c.save(); c.translate(out.width / 2 + t.dx / capturedDims.w * out.width, out.height / 2 + t.dy / capturedDims.h * out.height);
+      c.scale(t.zoom, t.zoom * detailAspect / (out.height / out.width));
+      c.translate(-out.width / 2, -out.height / 2); if ('filter' in c) c.filter = `hue-rotate(${captured.hue}deg)`;
+      c.drawImage(detailCopy, 0, 0, out.width, out.height); c.restore();
+    }
     if (!('filter' in c) && captured.hue) { const pixels = c.getImageData(0, 0, out.width, out.height); TetraRender.huePixels(pixels.data, captured.hue); c.putImageData(pixels, 0, 0); }
     if (gridCopy) c.drawImage(gridCopy, 0, 0, out.width, out.height);
     const scale = Math.max(1, out.width / 1400);
@@ -1038,6 +1238,7 @@
     return {blob, captured};
   }
   $('exportBtn').onclick = async () => {
+    updateURL();
     let result;
     try { result = await snapshot(); } catch { toast('Wait for a completed view, then save again.'); return; }
     const {blob, captured} = result;
@@ -1119,7 +1320,7 @@
     if (document.querySelector('dialog[open]') || e.target.closest('input,select,textarea,[contenteditable=true]') || e.ctrlKey || e.metaKey || e.altKey) return;
     if (e.key === 'Escape' && document.body.classList.contains('focus-mode')) { focusMode(false); return; }
     const key = e.key.toLowerCase();
-    const actions = {f: () => $('focusBtn').click(), c: openSettings, b: () => $('saveViewBtn').click(), s: () => $('shareBtn').click(), e: () => $('exportBtn').click(), d: discover, g: () => { $('grid').checked = !grid; $('grid').dispatchEvent(new Event('change')); }, '?': () => $('helpBtn').click()};
+    const actions = {z: () => $('detailBtn').click(), f: () => $('focusBtn').click(), c: openSettings, b: () => $('saveViewBtn').click(), s: () => $('shareBtn').click(), e: () => $('exportBtn').click(), d: discover, g: () => { $('grid').checked = !grid; $('grid').dispatchEvent(new Event('change')); }, '?': () => $('helpBtn').click()};
     if (actions[key]) { e.preventDefault(); actions[key](); }
     else if (/^[1-9]$/.test(key) && Number(key) <= presets.length) { e.preventDefault(); loadPreset(Number(key) - 1); }
   });
@@ -1128,6 +1329,7 @@
   let resumeFlow = false;
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) {
+      cancelGesture();
       resumeFlow = flow; setFlow(false);
       if (!lastRenderComplete) { serial++; stopCPU(); jobSerial = -1; }
     } else {
@@ -1138,9 +1340,14 @@
   reducedMotion.addEventListener('change', e => { if (e.matches) { setFlow(false); stopMotion(); visual = clone(view); reproject(); } });
   window.addEventListener('pagehide', () => { serial++; stopCPU(); });
   window.addEventListener('pageshow', e => { if (e.persisted) changed(); });
-  window.addEventListener('hashchange', () => {
-    if (location.hash === '#' + hashString()) return;
-    try { stopMotion(); saveHistory(); if (readHash()) changed(); } catch (error) { toast(error.message); }
+  window.addEventListener('hashchange', e => {
+    try {
+      // A render completion or URL debounce may replace location.hash before this
+      // queued event is delivered. The event still owns the requested navigation.
+      const hash = e.newURL ? new URL(e.newURL).hash : location.hash;
+      if (hash === '#' + hashString()) return;
+      stopMotion(); saveHistory(); if (readHash(hash)) changed();
+    } catch (error) { toast(error.message); }
   });
   // A size change invalidates the image at once; live frames follow the new shape
   // and the full render starts once resizing pauses.
@@ -1150,6 +1357,7 @@
     const next = {w: r.width, h: r.height, dpr: Math.min(Math.max(devicePixelRatio || 1, 0.25), 3)};
     if (next.w === dims.w && next.h === dims.h && next.dpr === dims.dpr) return;
     const first = dims.w === 1;
+    cancelGesture();
     dims = next;
     changed(first ? {} : {interactive: true});
   }
@@ -1171,7 +1379,9 @@
   gpuCanvas.addEventListener('webglcontextlost', e => {
     e.preventDefault();
     if (!gpu) return;
+    clearDetail();
     keepSnapshot();
+    clearCompleted();
     gpu = null; display.frame = null; display.renderer = null; display.key = ''; gpuFailure = 'context lost';
     toast('GPU context lost. Switched to CPU.'); changed();
   });
@@ -1198,6 +1408,9 @@
     referencesComputed: references.computed,
     savedCount: savedViews.length, focus: document.body.classList.contains('focus-mode'), version: VERSION, renderStage, quality, colorPhase: hue(), flow,
     interactiveFrames: interactiveCount, animating: !!motion.raf, gpuFrames: gpu ? gpu.live : 0, gpuPooled: gpu ? gpu.pool.length : 0, displayWidth: display.canvas.width, displayHeight: display.canvas.height,
+    completedCache: {entries: completedViews.size, bytes: completedBytes, budget: completedBudget, hits: completedHits},
+    retainedDetail: retainedDetail ? {width: detailCanvas.width, height: detailCanvas.height, view: serialize(retainedDetail.view)} : null,
+    blaCompile: gpu ? {pending: !!gpu.pendingBla, warmed: gpu.warmed, error: gpu.blaError} : null,
     bla: gpu?.bla ? {levels: gpu.bla.levels, reach: gpu.bla.reach, compiled: !!gpu.programs.perturbBla, mode: gpu.blaMode} : null, blaReady: !!gpu?.programs.perturbBla, displayView: display.view && serialize(display.view), displayCanvas: display.canvas.id, liveSamples: livePlan ? livePlan.samples : 0, liveInterleave: livePlan ? livePlan.interleave : 0, liveSize: livePlan ? [livePlan.width, livePlan.height] : null, liveMin: display.info?.live ? display.info.live.min : null, displaySmooth: !!display.info?.smooth, displaySoft: !!display.soft, perturbWarm: !!gpu?.perturbWarm, preciseTrig: !!gpu?.preciseTrig,
   })});
 })();
