@@ -9,7 +9,7 @@ on:
         description: Full qualification or a production GPU diagnostic
         type: choice
         default: all
-        options: [all, production, production-skip-loss]
+        options: [all, production, production-skip-loss, cpu-recovery]
 permissions:
   contents: read
 concurrency:
@@ -36,12 +36,12 @@ jobs:
       TETRA_SUITE: ${{ matrix.suite }}
     # The largest native Ultra scenes also exercise latency bounds. Use the
     # desktop macOS renderer for those; keep Linux pixel/recovery suites below.
-    runs-on: ${{ (matrix.suite == 'explorer' || matrix.suite == 'reuse' || matrix.suite == 'production') && 'macos-15' || 'ubuntu-latest' }}
+    runs-on: ${{ (matrix.suite == 'explorer' || matrix.suite == 'reuse' || matrix.suite == 'production' || matrix.suite == 'cpu-recovery') && 'macos-15' || 'ubuntu-latest' }}
     timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
-        suite: ${{ fromJSON(startsWith(inputs.suite, 'production') && '["production"]' || '["review","release","deep","quality","explorer","perf","reuse","interactions","production","zoom","webkit","reuse-webkit","interactions-webkit","production-webkit","zoom-webkit"]') }}
+        suite: ${{ fromJSON(inputs.suite == 'cpu-recovery' && '["cpu-recovery"]' || startsWith(inputs.suite, 'production') && '["production"]' || '["review","release","deep","quality","explorer","perf","reuse","interactions","production","zoom","webkit","reuse-webkit","interactions-webkit","production-webkit","zoom-webkit"]') }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
@@ -70,7 +70,7 @@ jobs:
           curl -fsS http://127.0.0.1:4173/ >/dev/null
           SUITE="$TETRA_SUITE"
           if [[ "$SUITE" == *-webkit ]]; then export TETRA_BROWSER=webkit; SUITE="${SUITE%-webkit}"; fi
-          python3 "tests/browser_${SUITE}.py"
+          if [[ "$SUITE" == cpu-recovery ]]; then python3 tools/perf/cpu_recovery.py; else python3 "tests/browser_${SUITE}.py"; fi
         env:
           TETRA_BASE_URL: http://127.0.0.1:4173
           TETRA_HARDWARE_BROWSER: ${{ runner.os == 'macOS' && '1' || '0' }}
