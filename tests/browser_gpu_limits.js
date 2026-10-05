@@ -43,11 +43,14 @@ window.__gpuPartialComparison = async(samples=16)=>{
    let seed=null;
    if(adaptive){seed=r.beginFrame(W,H);r.draw(seed,{x:0,y:0,width:W,height:H},scene,samples===4?1:4);await r.fence();}
    const a=r.beginFrame(W,H,seed,adaptive),b=r.beginFrame(W,H,seed,adaptive);
-   // Keep the original bounded 8px baseline. Both paths now share the exact
-   // orbit call site; only sample count and FP32 sum storage differ.
-   for(let y=0;y<H;y+=8)for(let x=0;x<W;x+=8){r.draw(a,{x,y,width:Math.min(8,W-x),height:Math.min(8,H-y)},scene,samples,threshold);await r.fence();}
+   // Native WebKit hangs on this original multi-orbit shader at 4096/16x,
+   // BLA off, even for an 8px tile. Bound only that reference submission;
+   // every original pixel/sample, shader and 240s comparison remains.
+   // Applying 2px to every case previously exceeded that deadline.
+   const baselineEdge=samples===16&&n===4096&&mode==='perturb'&&blaMode==='off'?2:8;
+   for(let y=0;y<H;y+=baselineEdge)for(let x=0;x<W;x+=baselineEdge){r.draw(a,{x,y,width:Math.min(baselineEdge,W-x),height:Math.min(baselineEdge,H-y)},scene,samples,threshold);await r.fence();}
    const immediately=r.readFrame(a);
-   // Production uses 64px partial tiles at 4096/16x and 32px at higher caps;
+   // Plain/unseeded production uses 64px partial tiles at 4096/16x and 32px at higher caps;
    // compare both sizes, including partial columns/heights, to the original.
    const edge=n===4096&&samples===16?64:32;
    for(let y=0;y<H;y+=edge)for(let x=0;x<W;x+=edge)await r.drawAATile(b,{x,y,width:Math.min(edge,W-x),height:Math.min(edge,H-y)},scene,()=>false,threshold,samples);
