@@ -18,6 +18,7 @@
  precision highp int;
  precision highp sampler2D;
  uniform vec2 uSize,uOffset;
+ uniform float uAspect;
  uniform int uIterations,uPalette,uSamples,uAdaptive;
  uniform float uLowA,uMaxB,uTol,uThreshold;
  uniform sampler2D uSource;
@@ -62,7 +63,8 @@
  uniform vec2 uCenter;
  uniform float uSpan;
  vec3 orbitColor(vec2 point){
-  vec2 c=uCenter+(point-uSize*.5)*(uSpan/uSize.x);
+  // Every frame, whatever its rounded size, covers the viewport's exact world rectangle.
+  vec2 c=uCenter+(point/uSize-.5)*vec2(uSpan,uSpan*uAspect);
   float radius=length(c);int kind=0;float steps=float(uIterations);
   if(radius<1e-30){return palette(4,0.,vec2(0.));}
   vec2 l=vec2(log(radius),c.y==0.&&c.x<0.?3.141592653589793:atan(c.y,c.x));
@@ -115,7 +117,7 @@
   return atan(y,x);
  }
  vec3 orbitColor(vec2 point){
-  vec2 q=(point-uSize*.5)/uSize.x;
+  vec2 q=(point/uSize-.5)*vec2(1.,uAspect);
   bool mirrored=uImCenter+q.y*uSpanMant<0.;
   vec2 dc=mirrored?uDeltaMirror+vec2(q.x,-q.y)*uSpanMant:uDelta+q*uSpanMant;
   // x = dc * 2^uScale / c0 as mantissa and exponent; dL = log1p(x).
@@ -215,7 +217,7 @@
     queue.push(task); channel.port2.postMessage(0);
   }
 
-  const COMMON = ['Size', 'Offset', 'Iterations', 'Palette', 'Samples', 'Adaptive', 'Source', 'LowA', 'MaxB', 'Tol', 'Threshold'];
+  const COMMON = ['Size', 'Aspect', 'Offset', 'Iterations', 'Palette', 'Samples', 'Adaptive', 'Source', 'LowA', 'MaxB', 'Tol', 'Threshold'];
   const UNIFORMS = {
     direct: [...COMMON, 'Center', 'Span'],
     perturb: [...COMMON, 'Ref', 'RefLength', 'RefValues', 'Scale', 'InvExp', 'L0', 'Inv', 'Delta', 'DeltaMirror', 'ImCenter', 'SpanMant'],
@@ -340,7 +342,7 @@
       gl.bindTexture(gl.TEXTURE_2D, texture); gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA8, 1, 1);
       gl.bindFramebuffer(gl.FRAMEBUFFER, buffer); gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
       gl.viewport(0, 0, 1, 1); gl.useProgram(bla.program);
-      gl.uniform2f(u.Size, 1, 1); gl.uniform1i(u.Iterations, 0); gl.uniform1i(u.Samples, 1); gl.uniform1i(u.Adaptive, 0);
+      gl.uniform2f(u.Size, 1, 1); gl.uniform1f(u.Aspect, 1); gl.uniform1i(u.Iterations, 0); gl.uniform1i(u.Samples, 1); gl.uniform1i(u.Adaptive, 0);
       for (const [unit, name] of [[0, 'Source'], [1, 'Ref'], [2, 'Bla']]) { gl.activeTexture(gl.TEXTURE0 + unit); gl.bindTexture(gl.TEXTURE_2D, this.empty); gl.uniform1i(u[name], unit); }
       gl.activeTexture(gl.TEXTURE0);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
@@ -396,13 +398,16 @@
       // Largest |dL| over the frame plus 2% of the span for subpixel samples (half a pixel
       // at 25 px and wider), the same for every frame size so live frames share the table.
       const offset = TetraCore.offsetBound(scene.delta[0], scene.delta[1], scene.deltaMirror[1], scene.imCenter,
-        scene.spanMant * 0.52, scene.spanMant * (0.5 * frame.height / frame.width + 0.02));
+        scene.spanMant * 0.52, scene.spanMant * (0.5 * (scene.aspect || frame.height / frame.width) + 0.02));
       const dL = TetraCore.logOffsetBound(offset * Math.hypot(scene.inv[0], scene.inv[1]) * 2 ** (scene.scale + scene.invExp));
       if (!(dL < Infinity)) return 0;
       const bla = this.useBla(scene.ref, scene.rules, dL);
       // Worth the larger program only when the edge pixel alone skips a quarter of a typical orbit.
       if (!bla.levels || (this.blaMode === 'auto' && bla.reach < Math.max(32, 0.25 * Math.min(scene.ref.length, scene.iterations)))) return 0;
-      return this.programs.perturbBla || ((allowLink || this.pendingBla) && this.blaProgram()) ? bla.levels : 0;
+      if (this.programs.perturbBla) return bla.levels;
+      // Parallel-compile drivers start the link in the background and keep the plain program until it is ready.
+      if (this.parallel && !this.pendingBla && this.blaMode !== 'on') { this.pendingBla = this.startLink(perturbBla); return 0; }
+      return (allowLink || this.pendingBla) && this.blaProgram() ? bla.levels : 0;
     }
     beginFrame(width, height, seed = null, adaptive = false) {
       const gl = this.gl;
@@ -442,7 +447,7 @@
       const levels = scene.mode === 'perturb' ? this.blaLevels(frame, scene, allowLink) : 0;
       const {program, uniforms: u} = this.program(levels ? 'perturbBla' : scene.mode);
       gl.bindFramebuffer(gl.FRAMEBUFFER, frame.buffer); gl.viewport(0, 0, frame.width, frame.height); gl.useProgram(program);
-      gl.uniform2f(u.Size, frame.width, frame.height); gl.uniform2f(u.Offset, 0, 0);
+      gl.uniform2f(u.Size, frame.width, frame.height); gl.uniform1f(u.Aspect, scene.aspect || frame.height / frame.width); gl.uniform2f(u.Offset, 0, 0);
       gl.uniform1i(u.Iterations, scene.iterations); gl.uniform1i(u.Palette, scene.palette);
       gl.uniform1i(u.Samples, samples); gl.uniform1i(u.Adaptive, frame.seed ? 1 : 0); gl.uniform1f(u.Threshold, threshold);
       gl.uniform1f(u.LowA, scene.rules.lowA); gl.uniform1f(u.MaxB, scene.rules.maxB); gl.uniform1f(u.Tol, scene.rules.tol);
@@ -509,6 +514,12 @@
       const gl = this.gl, out = new Uint8Array(width * height * 4);
       gl.bindFramebuffer(gl.FRAMEBUFFER, frame.buffer); gl.readPixels(x, y, width, height, gl.RGBA, gl.UNSIGNED_BYTE, out); gl.bindFramebuffer(gl.FRAMEBUFFER, null);
       return out;
+    }
+    // Free every pooled frame (after an allocation failure); frames in use are released by their owners.
+    releaseAll() {
+      if (this.gl.isContextLost()) return;
+      for (const frame of this.pool) { this.gl.deleteFramebuffer(frame.buffer); this.gl.deleteTexture(frame.texture); this.live--; }
+      this.pool = [];
     }
     releaseFrame(frame) {
       if (!frame || this.gl.isContextLost() || this.pool.includes(frame)) return;

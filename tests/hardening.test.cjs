@@ -99,3 +99,10 @@ test('local server sends the right MIME types for the offline shell',async()=>{
   assert.equal(await head('/icon-512.png'),'image/png');assert.match(await head('/'),/^text\/html/);
  }finally{await new Promise(resolve=>server.close(resolve));}
 });
+test('display sizing follows the true device density (below 1 and up to 3) and the texture limit',()=>{
+ const {size}=require('../src/render.js');
+ assert.deepEqual(size(1000,500,0.5),{width:500,height:250});
+ assert.deepEqual(size(390,844,3),{width:1170,height:2532});
+ assert.deepEqual(size(1366.4,700,1.25),{width:1708,height:875});
+ const capped=size(3000,2000,2,8294400,4096);assert.ok(capped.width<=4096&&capped.height<=4096,JSON.stringify(capped));
+});

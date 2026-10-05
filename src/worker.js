@@ -66,6 +66,11 @@ async function tileJob(job, token) {
         counts[result.kind]++;
         const rgb = TetraCore.color(result.kind, result.steps, job.palette, result.re, result.im);
         pixels[p++] = rgb[0]; pixels[p++] = rgb[1]; pixels[p++] = rgb[2]; pixels[p++] = 255;
+        // Exact orbits take long each: check for a newer job after every pixel.
+        if (exact && performance.now() - lastYield > 12) {
+          await pause(); lastYield = performance.now();
+          if (token !== current) return;
+        }
       }
       // Let a newer job or a cancel in between rows (deep FP64 rows can take long too).
       if (performance.now() - lastYield > 12) {

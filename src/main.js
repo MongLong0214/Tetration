@@ -277,6 +277,11 @@
     const iterations = iterationsFor(v), maxRe = mode === 'perturb' ? 80 : 700, need = referenceDigits(v), limit = v.span * 64n, ay = v.y < 0n ? -v.y : v.y;
     return references.cache.find(r => r.iterations >= iterations && r.maxRe === maxRe && r.digits >= Math.min(256, need) && F.abs(r.point.x - v.x) <= limit && F.abs(r.point.y - ay) <= limit) || null;
   }
+  // Live-frame stand-in while the exact reference is computed: same rules, 12 fewer guard digits, nearby.
+  function nearReference(v, mode) {
+    const maxRe = mode === 'perturb' ? 80 : 700, need = Math.min(256, referenceDigits(v)) - 12, limit = v.span * 4096n, ay = v.y < 0n ? -v.y : v.y;
+    return references.cache.find(r => r.maxRe === maxRe && r.digits >= need && F.abs(r.point.x - v.x) <= limit && F.abs(r.point.y - ay) <= limit) || null;
+  }
   function ensureReference(v, mode) {
     const found = findReference(v, mode);
     if (found) return Promise.resolve(found);
@@ -306,7 +311,7 @@
 
   // ---------- GPU rendering ----------
   function buildScene(v, mode, ref) {
-    const base = {iterations: iterationsFor(v), palette, rules: TetraCore.RULES.gpu};
+    const base = {iterations: iterationsFor(v), palette, rules: TetraCore.RULES.gpu, aspect: dims.h / dims.w};
     if (mode === 'gpu') return {...base, mode: 'direct', center: [num(v.x), num(v.y)], span: num(v.span)};
     return {...base, ...TetraRender.perturbScene(F, v, ref.point.x, ref.point.y), ref};
   }
@@ -314,8 +319,11 @@
   function rateKey(scene, samples) { return scene.mode + '|' + scene.iterations + '|' + samples; }
   function tileEdge(iterations, samples) { return Math.max(16, Math.min(256, Math.round(Math.sqrt(4096 * 256 * 16 / (iterations * samples)) / 16) * 16)); }
   // Resolution that should finish within the interactive frame budget.
-  function interactiveSize(renderer, scene, target = TetraRender.size(dims.w, dims.h, dims.dpr)) {
-    const rate = rates.get(rateKey(scene, 1)) ?? 60;
+  // Display-resolution target within the pixel budget and the device's texture limit.
+  let budgetScale = 1;
+  function targetSize(renderer) { return TetraRender.size(dims.w, dims.h, dims.dpr, 8294400 * budgetScale, Math.min(8192, renderer?.maxTexture || 8192)); }
+  function interactiveSize(renderer, scene, target = targetSize(renderer)) {
+    const rate = rates.get(rateKey(scene, 1)) ?? rates.get('tile|' + rateKey(scene, 1)) ?? 60;
     // Slow GPUs (deep views on weak hardware) drop to coarser frames rather than stall the compositor.
     const floor = rate * FRAME_MS * 4 >= 8192 ? 8192 : 2048;
     // Cap one draw's orbit work so a sudden jump in cost cannot stall the GPU (driver watchdogs).
@@ -338,12 +346,21 @@
     if (mode === 'perturb') {
       ref = findReference(v, mode);
       // One outstanding request from live frames; later frames reuse it instead of queueing stale orbits.
+      // A failed request is not retried every frame (Retry or a settings change clears it).
       if (!ref) {
-        if (!references.live) references.live = ensureReference(v, mode).finally(() => { references.live = null; requestInteractive(); }).catch(() => {});
-        return;
+        const spec = JSON.stringify(referenceSpec(v, mode).options);
+        if (!references.live && references.liveFailed !== spec) {
+          references.live = ensureReference(v, mode).then(
+            () => { references.live = null; requestInteractive(); },
+            () => { references.live = null; references.liveFailed = spec; });
+        }
+        // Meanwhile keep live frames going with the nearest cached orbit that still has enough precision.
+        ref = nearReference(v, mode);
+        if (!ref) return;
       }
     }
     const renderer = gpu, scene = buildScene(v, mode, ref), key = sceneKey(scene, v);
+    if (ref && scene.iterations > ref.iterations) scene.iterations = ref.iterations;
     if (mode === 'perturb') scheduleWarm();
     if (display.frame && display.key === key) return;
     const size = interactiveSize(renderer, scene);
@@ -374,7 +391,11 @@
   async function runStage(id, renderer, frame, scene, samples, onBatch) {
     const edge = tileEdge(renderer.effectiveIterations(scene, frame.width, frame.height), samples), tiles = TetraRender.tiles(frame.width, frame.height, edge), key = rateKey(scene, samples);
     const area = frame.width * frame.height;
-    let budget = Math.max(edge * edge, (rates.get(key) ?? (rates.get(rateKey(scene, 1)) ?? 60) / samples) * BATCH_MS);
+    // Final tiles keep their own rate (live frames smooth theirs over whole frames). The first
+    // batch is at most 4 tiles and a batch at most doubles, so a dense centre after cheap
+    // corners cannot become seconds of GPU work.
+    const tileKey = 'tile|' + key;
+    let budget = Math.max(edge * edge, Math.min(4 * edge * edge, (rates.get(tileKey) ?? (rates.get(rateKey(scene, 1)) ?? 60) / samples) * BATCH_MS));
     let index = 0;
     while (index < tiles.length) {
       if (id !== serial || renderer !== gpu) return false;
@@ -391,8 +412,8 @@
         await renderer.fence();
       } finally { setGPUBusy(false); }
       const ms = Math.max(0.5, performance.now() - t0), measured = pixels / ms;
-      rates.set(key, measured);
-      budget = Math.min(area, Math.max(edge * edge, measured * BATCH_MS));
+      rates.set(tileKey, measured);
+      budget = ms > 3 * BATCH_MS ? edge * edge : Math.min(area, 2 * pixels, Math.max(edge * edge, measured * BATCH_MS));
       if (interactivePending) { interactivePending = false; requestInteractive(); }
       if (id !== serial) return false;
       onBatch?.(index / tiles.length, index === tiles.length);
@@ -401,7 +422,7 @@
   }
   async function gpuJob(id, v, mode, ref) {
     const renderer = gpu, scene = buildScene(v, mode, ref), aa = quality, key = sceneKey(scene, v);
-    const target = TetraRender.size(dims.w, dims.h, dims.dpr);
+    const target = targetSize(renderer);
     const stages = [{samples: 1, name: 'detail', label: 'Resolving detail'}];
     if (aa >= 4) stages.push({samples: 4, name: 'antialias', label: 'Smoothing edges'});
     if (aa >= 16) stages.push({samples: 16, name: 'ultra', label: 'Ultra edges'});
@@ -447,6 +468,15 @@
   }
   function gpuFailed(renderer, error) {
     if (renderer !== gpu) return;
+    // Out of texture memory or above the size limit with a live context: free frames, halve the budget, retry.
+    if (!renderer.lost() && /allocation|limit/.test(String(error?.message)) && budgetScale > 1 / 8) {
+      budgetScale /= 2;
+      if (display.renderer === renderer && display.canvas === gpuCanvas) keepSnapshot();
+      display.frame = null; display.renderer = null; display.key = '';
+      renderer.releaseAll();
+      changed(); return;
+    }
+    keepSnapshot();
     console.warn('GPU renderer unavailable:', error?.message || error);
     gpuFailure = String(error?.message || error);
     if (!renderer.lost()) { try { renderer.destroy(); } catch { /* lost */ } }
@@ -486,11 +516,17 @@
     }
     ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
   }
+  // Keep the last GPU image as a 2D copy before the GPU goes away (a lost context has no pixels).
+  function keepSnapshot() {
+    if (display.canvas !== gpuCanvas || !display.view || !gpu || gpu.lost()) return;
+    try { configureCPUCanvas(gpuCanvas.width, gpuCanvas.height); ctx.drawImage(gpuCanvas, 0, 0); setDisplay(cpuCanvas, display.view); } catch { /* nothing to keep */ }
+  }
   // Start the CPU canvas from the image currently on screen, at the new camera.
   function seedCPUPreview(v) {
     configureCPUCanvas();
     const source = display.canvas, from = display.view;
     ctx.fillStyle = '#060606';
+    if (source === gpuCanvas && (!gpu || gpu.lost())) { ctx.fillRect(0, 0, cpuCanvas.width, cpuCanvas.height); return; }
     if (!from || (source === cpuCanvas && same(from, v))) { if (!from) ctx.fillRect(0, 0, cpuCanvas.width, cpuCanvas.height); return; }
     const copy = document.createElement('canvas'); copy.width = cpuCanvas.width; copy.height = cpuCanvas.height;
     copy.getContext('2d').drawImage(source, 0, 0, copy.width, copy.height);
@@ -550,7 +586,7 @@
     serial++; stopCPU(); viewport.setAttribute('aria-busy', 'false');
     $('statusText').textContent = 'Render interrupted'; showLoading(message); $('retryBtn').hidden = false;
   }
-  $('retryBtn').onclick = () => changed();
+  $('retryBtn').onclick = () => { references.liveFailed = null; changed(); };
   function finished(w, h, counts, iterations, mode, samples) {
     lastRenderComplete = true; renderStage = 'complete'; viewport.setAttribute('aria-busy', 'false'); $('loading').hidden = true; setProgress(100);
     const elapsed = performance.now() - started;
@@ -671,12 +707,12 @@
   }
   function goTo(next, index = -1) {
     stopMotion();
-    if (same(next, view) && same(visual, view) && lastRenderComplete) { locationIndex = index; syncControls(); updateReadout(); return; }
+    if (same(next, view) && same(visual, view) && (lastRenderComplete || jobSerial === serial)) { locationIndex = index; syncControls(); updateReadout(); return; }
     view = next; locationIndex = index; changed({animate: near(next, visual)});
   }
-  function jump(next, index = -1) { saveHistory(); goTo(next, index); }
+  function jump(next, index = -1) { if (!same(next, view)) saveHistory(); goTo(next, index); }
   function loadPreset(index) { closeSettings(); viewport.focus({preventScroll: true}); jump(parseView(presets[index]), index); }
-  function zoomButton(factor, point) { stopMotion(); saveHistory(); if (zoomAt(factor, point)) { locationIndex = -1; changed({animate: true}); } }
+  function zoomButton(factor, point) { stopMotion(); const before = clone(view); if (zoomAt(factor, point)) { saveHistory(before); locationIndex = -1; changed({animate: true}); } }
   presets.forEach((p, i) => {
     const b = document.createElement('button');
     b.className = 'preset'; b.type = 'button'; b.dataset.index = String(i); b.setAttribute('aria-pressed', 'false');
@@ -745,14 +781,17 @@
   viewport.addEventListener('wheel', e => {
     if (e.target.closest('button')) return;
     e.preventDefault();
-    if (performance.now() - lastWheel > 500) saveHistory();
-    lastWheel = performance.now();
+    const before = clone(view), fresh = performance.now() - lastWheel > 500;
     stopMotion();
     const dy = e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? dims.h : 1);
     // Chromium/Firefox send trackpad pinch as ctrl+wheel with deltaY = -100 ln(scale): follow the fingers 1:1, live.
-    const pinchZoom = e.ctrlKey && e.deltaMode === 0;
+    // Ctrl + mouse-wheel notches (|deltaY| >= 50) keep the animated wheel path.
+    const pinchZoom = e.ctrlKey && e.deltaMode === 0 && Math.abs(dy) < 50;
     const step = pinchZoom ? Math.max(-0.5, Math.min(0.5, dy * 0.01)) : Math.max(-1.1, Math.min(1.1, dy * .0018));
-    if (zoomAt(Math.exp(step), relative(e.clientX, e.clientY))) { locationIndex = -1; changed(pinchZoom ? {interactive: true} : {animate: true}); }
+    if (zoomAt(Math.exp(step), relative(e.clientX, e.clientY))) {
+      if (fresh) saveHistory(before);
+      lastWheel = performance.now(); locationIndex = -1; changed(pinchZoom ? {interactive: true} : {animate: true});
+    }
   }, {passive: false});
   // Safari sends trackpad pinch as gesture events; without this the whole page magnifies.
   let gestureScale = 1;
@@ -974,15 +1013,23 @@
   function measure() {
     const r = viewport.getBoundingClientRect();
     if (!r.width || !r.height) return;
-    const next = {w: r.width, h: r.height, dpr: Math.min(devicePixelRatio || 1, 3)};
+    const next = {w: r.width, h: r.height, dpr: Math.min(Math.max(devicePixelRatio || 1, 0.25), 3)};
     if (next.w === dims.w && next.h === dims.h && next.dpr === dims.dpr) return;
     const first = dims.w === 1;
     dims = next;
     changed(first ? {} : {interactive: true});
   }
   const observer = new ResizeObserver(measure);
-  // Browser zoom and moving between displays change density without resizing the element.
+  // Browser zoom changes density with a resize; moving to another display may not, so watch the resolution too.
   window.addEventListener('resize', measure);
+  let dprQuery = null;
+  function watchDensity() {
+    dprQuery?.removeEventListener('change', onDensity);
+    dprQuery = matchMedia(`(resolution: ${devicePixelRatio || 1}dppx)`);
+    dprQuery.addEventListener('change', onDensity);
+  }
+  function onDensity() { watchDensity(); measure(); }
+  watchDensity();
   function startGPU() {
     try { gpu = new TetraGPU(gpuCanvas); gpuFailure = ''; return true; }
     catch (error) { gpu = null; gpuFailure = String(error.message); console.warn('WebGL2 unavailable; using Worker FP64.', error.message); return false; }
@@ -990,6 +1037,7 @@
   gpuCanvas.addEventListener('webglcontextlost', e => {
     e.preventDefault();
     if (!gpu) return;
+    keepSnapshot();
     gpu = null; display.frame = null; display.renderer = null; display.key = ''; gpuFailure = 'context lost';
     toast('GPU context lost. Switched to CPU.'); changed();
   });

@@ -1,7 +1,7 @@
 {
   "suite": "deep",
   "origin": "http://127.0.0.1:4173",
-  "bundle_sha256": "6704ca966b05b21e2676a5eac7aff389a4a814f9f83220bd9c6fbc822bbe25ce",
+  "bundle_sha256": "c3b4b9998ed9d7bcbcd3db6f1ee5b3ad8230860ef801184c3804b6b739dd662a",
   "playwright": "1.56.0",
   "limitations": [
     "SwiftShader WebGL2 on a Linux runner; FP32 GPU arithmetic as on hardware, but no hardware driver qualification.",
@@ -23,9 +23,9 @@
         ],
         "total": 2560,
         "refLength": 513,
-        "gpuMs": 2442
+        "gpuMs": 2416
       },
-      "seconds": 4.2
+      "seconds": 4.23
     },
     {
       "name": "GPU perturbation equals FP64 pixel for pixel: convergence boundary at 2e-6",
@@ -40,9 +40,9 @@
         ],
         "total": 2560,
         "refLength": 513,
-        "gpuMs": 874
+        "gpuMs": 952
       },
-      "seconds": 5.24
+      "seconds": 5.35
     },
     {
       "name": "GPU perturbation equals FP64 pixel for pixel: negative real axis at 1e-9",
@@ -57,9 +57,9 @@
         ],
         "total": 2560,
         "refLength": 7,
-        "gpuMs": 4
+        "gpuMs": 8
       },
-      "seconds": 5.28
+      "seconds": 5.4
     },
     {
       "name": "GPU perturbation equals FP64 pixel for pixel: lower half plane at 1e-30",
@@ -74,9 +74,9 @@
         ],
         "total": 2560,
         "refLength": 513,
-        "gpuMs": 16
+        "gpuMs": 20
       },
-      "seconds": 5.34
+      "seconds": 5.47
     },
     {
       "name": "GPU perturbation equals FP64 pixel for pixel: view containing the origin at 1e-20",
@@ -91,9 +91,9 @@
         ],
         "total": 2560,
         "refLength": 513,
-        "gpuMs": 11
+        "gpuMs": 15
       },
-      "seconds": 5.4
+      "seconds": 5.53
     },
     {
       "name": "GPU perturbation equals FP64 pixel for pixel: fixed-point interior at 1e-150",
@@ -108,9 +108,9 @@
         ],
         "total": 2560,
         "refLength": 513,
-        "gpuMs": 16
+        "gpuMs": 18
       },
-      "seconds": 5.55
+      "seconds": 5.68
     },
     {
       "name": "GPU perturbation equals FP64 pixel for pixel: reference above the axis at 3e-9",
@@ -125,9 +125,9 @@
         ],
         "total": 2560,
         "refLength": 57,
-        "gpuMs": 12
+        "gpuMs": 17
       },
-      "seconds": 5.61
+      "seconds": 5.75
     },
     {
       "name": "Chaotic view keeps FP64 structure and class statistics: Plume 10^11",
@@ -140,11 +140,11 @@
           1352,
           927
         ],
-        "gpu_numeric": 927,
-        "gpu_unresolved": 294,
-        "block_diff": 10.72
+        "gpu_numeric": 961,
+        "gpu_unresolved": 290,
+        "block_diff": 9.19
       },
-      "seconds": 7.11
+      "seconds": 7.31
     },
     {
       "name": "Chaotic view keeps FP64 structure and class statistics: Abyss 10^25",
@@ -157,11 +157,11 @@
           1441,
           1073
         ],
-        "gpu_numeric": 1079,
-        "gpu_unresolved": 44,
-        "block_diff": 13.44
+        "gpu_numeric": 1066,
+        "gpu_unresolved": 46,
+        "block_diff": 11.91
       },
-      "seconds": 10.06
+      "seconds": 10.21
     },
     {
       "name": "Chaotic view keeps FP64 structure and class statistics: Horizon 10^100",
@@ -174,11 +174,11 @@
           1517,
           1038
         ],
-        "gpu_numeric": 1044,
+        "gpu_numeric": 1027,
         "gpu_unresolved": 6,
-        "block_diff": 14.61
+        "block_diff": 12.98
       },
-      "seconds": 13.47
+      "seconds": 13.9
     },
     {
       "name": "With BLA forced on, structured views still equal FP64 pixel for pixel",
@@ -186,7 +186,7 @@
       "detail": {
         "views": 7
       },
-      "seconds": 14.29
+      "seconds": 14.73
     },
     {
       "name": "BLA is as faithful to FP64 as plain FP32 perturbation in chaotic views",
@@ -194,26 +194,26 @@
       "detail": {
         "Abyss 10^25": {
           "off": {
-            "mismatch": 1113,
-            "block_diff": 13.71
+            "mismatch": 934,
+            "block_diff": 11.36
           },
           "on": {
-            "mismatch": 1111,
-            "block_diff": 13.44
+            "mismatch": 856,
+            "block_diff": 11.91
           }
         },
         "Horizon 10^100": {
           "off": {
-            "mismatch": 1333,
-            "block_diff": 14.67
+            "mismatch": 1299,
+            "block_diff": 14.45
           },
           "on": {
-            "mismatch": 1263,
-            "block_diff": 14.61
+            "mismatch": 1015,
+            "block_diff": 12.98
           }
         }
       },
-      "seconds": 17.22
+      "seconds": 17.64
     },
     {
       "name": "Automatic BLA renders deep views several times faster",
@@ -223,22 +223,22 @@
           "span": "7e-100",
           "levels": 10,
           "reach": 2344,
-          "plainMs": 2470,
-          "autoMs": 536,
-          "onMs": 567,
-          "speedup": 4.61,
-          "differing": 7688,
+          "plainMs": 2508,
+          "autoMs": 620,
+          "onMs": 605,
+          "speedup": 4.05,
+          "differing": 7585,
           "total": 15360,
-          "blockDiff": 14.52
+          "blockDiff": 14.07
         },
         "threshold 1e-55": {
           "span": "1e-55",
           "levels": 8,
           "reach": 510,
-          "plainMs": 422,
-          "autoMs": 25,
-          "onMs": 25,
-          "speedup": 16.86,
+          "plainMs": 496,
+          "autoMs": 31,
+          "onMs": 30,
+          "speedup": 15.84,
           "differing": 0,
           "total": 15360,
           "blockDiff": 0
@@ -247,16 +247,16 @@
           "span": "5e-11",
           "levels": 6,
           "reach": 12,
-          "plainMs": 364,
-          "autoMs": 378,
-          "onMs": 391,
-          "speedup": 0.96,
-          "differing": 2953,
+          "plainMs": 374,
+          "autoMs": 395,
+          "onMs": 369,
+          "speedup": 0.95,
+          "differing": 2932,
           "total": 15360,
-          "blockDiff": 7.06
+          "blockDiff": 6.67
         }
       },
-      "seconds": 33.23
+      "seconds": 34.61
     },
     {
       "name": "GPU perturbation pixels equal exact 95-digit orbits at 1e-55",
@@ -333,25 +333,42 @@
           "diff": 0
         }
       ],
-      "seconds": 33.53
+      "seconds": 34.93
     },
     {
       "name": "Views centred on the real axis are exactly conjugate-symmetric at depth",
       "passed": true,
       "detail": null,
-      "seconds": 33.7
+      "seconds": 35.13
     },
     {
       "name": "Perturbation tiles are seamless at 1, 4 and 16 samples",
       "passed": true,
       "detail": null,
-      "seconds": 41.37
+      "seconds": 42.89
     },
     {
       "name": "Perturbation is at least as faithful to FP64 as direct FP32 near the handover depth",
       "passed": true,
       "detail": null,
-      "seconds": 41.94
+      "seconds": 43.52
+    },
+    {
+      "name": "Direct FP32 matches FP64 within 15% of chaotic pixels (precise trig where builtins are imprecise)",
+      "passed": true,
+      "detail": {
+        "-1.84,0.09,0.0285": {
+          "wrong": 1051,
+          "total": 10240,
+          "block_diff": 3.71
+        },
+        "-2.5,0,1.8": {
+          "wrong": 537,
+          "total": 10240,
+          "block_diff": 2.45
+        }
+      },
+      "seconds": 44.04
     },
     {
       "name": "Full display resolution at span 5e-11",
@@ -362,7 +379,7 @@
           236
         ],
         "iterations": 768,
-        "ms": 3967,
+        "ms": 4201,
         "bla": {
           "levels": 6,
           "reach": 12,
@@ -370,7 +387,7 @@
           "mode": "auto"
         }
       },
-      "seconds": 46.58
+      "seconds": 48.78
     },
     {
       "name": "Full display resolution at span 7e-25",
@@ -381,7 +398,7 @@
           236
         ],
         "iterations": 1536,
-        "ms": 5795,
+        "ms": 6081,
         "bla": {
           "levels": 7,
           "reach": 232,
@@ -389,7 +406,7 @@
           "mode": "auto"
         }
       },
-      "seconds": 53.03
+      "seconds": 55.21
     },
     {
       "name": "Full display resolution at span 7e-100",
@@ -400,7 +417,7 @@
           236
         ],
         "iterations": 4096,
-        "ms": 6704,
+        "ms": 7571,
         "bla": {
           "levels": 10,
           "reach": 2344,
@@ -408,7 +425,7 @@
           "mode": "auto"
         }
       },
-      "seconds": 60.14
+      "seconds": 63.22
     },
     {
       "name": "Full display resolution at span 1e-200",
@@ -419,7 +436,7 @@
           236
         ],
         "iterations": 8192,
-        "ms": 1712,
+        "ms": 2037,
         "bla": {
           "levels": 12,
           "reach": 12,
@@ -427,13 +444,13 @@
           "mode": "auto"
         }
       },
-      "seconds": 62.11
+      "seconds": 65.77
     },
     {
       "name": "Animated zoom at 1e-150 lands exactly on its target and completes",
       "passed": true,
       "detail": "0.0000000000",
-      "seconds": 64.43
+      "seconds": 68.64
     },
     {
       "name": "Auto iteration limit follows depth",
@@ -445,7 +462,7 @@
         "7e-100": 4096,
         "1e-200": 8192
       },
-      "seconds": 64.57
+      "seconds": 68.74
     },
     {
       "name": "Pans, zooms and history return reuse one exact reference orbit",
@@ -456,19 +473,19 @@
         "digits": 65,
         "iterations": 2048,
         "length": 407,
-        "elapsed": 15
+        "elapsed": 13
       },
-      "seconds": 101.59
+      "seconds": 107.28
     },
     {
       "name": "Continuous wheel zoom over eight decades keeps live perturbation frames",
       "passed": true,
       "detail": {
         "span": "0.00000000000000000008781766442932356017",
-        "frames": 240,
+        "frames": 209,
         "references": 3
       },
-      "seconds": 114.08
+      "seconds": 120.13
     },
     {
       "name": "CPU FP64 perturbation completes every pixel at full resolution",
@@ -480,22 +497,22 @@
         43438,
         16994
       ],
-      "seconds": 117.61
+      "seconds": 123.71
     },
     {
       "name": "Exact per-pixel mode still renders deep views",
       "passed": true,
       "detail": 64,
-      "seconds": 120.12
+      "seconds": 126.23
     },
     {
       "name": "No uncaught browser exceptions",
       "passed": true,
       "detail": null,
-      "seconds": 120.12
+      "seconds": 126.23
     }
   ],
-  "count": 28,
+  "count": 29,
   "uncaught_errors": [],
-  "seconds": 120.2
+  "seconds": 126.4
 }

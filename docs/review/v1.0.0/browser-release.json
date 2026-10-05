@@ -1,7 +1,7 @@
 {
   "suite": "release",
   "origin": "http://127.0.0.1:4173",
-  "bundle_sha256": "6704ca966b05b21e2676a5eac7aff389a4a814f9f83220bd9c6fbc822bbe25ce",
+  "bundle_sha256": "c3b4b9998ed9d7bcbcd3db6f1ee5b3ad8230860ef801184c3804b6b739dd662a",
   "playwright": "1.56.0",
   "limitations": [
     "No physical iPhone/Safari test.",
@@ -20,7 +20,7 @@
       "name": "HTTP security headers and served bytes match the production build",
       "passed": true,
       "detail": null,
-      "seconds": 0.84
+      "seconds": 0.79
     },
     {
       "name": "Application renders through browser WebGL2",
@@ -31,13 +31,13 @@
         "precision": 23,
         "maxTexture": 8192
       },
-      "seconds": 2.97
+      "seconds": 2.99
     },
     {
       "name": "24 direct-shader reference pixels match FP64 across all palettes",
       "passed": true,
       "detail": 24,
-      "seconds": 3.27
+      "seconds": 3.35
     },
     {
       "name": "Perturbation-shader reference pixels match the exact reference orbit",
@@ -119,61 +119,61 @@
           ]
         }
       ],
-      "seconds": 6.83
+      "seconds": 7.06
     },
     {
       "name": "Copied URL reopens the same coordinates on a loopback origin",
       "passed": true,
       "detail": null,
-      "seconds": 8.67
+      "seconds": 9.52
     },
     {
       "name": "Automatic engine switches direct GPU, perturbation and back by depth",
       "passed": true,
       "detail": null,
-      "seconds": 16.41
+      "seconds": 20.0
     },
     {
       "name": "Real WebGL context loss completes an FP64 Worker render",
       "passed": true,
       "detail": null,
-      "seconds": 22.48
+      "seconds": 25.97
     },
     {
       "name": "Deep view during GPU loss uses full-resolution FP64 perturbation",
       "passed": true,
       "detail": null,
-      "seconds": 23.38
+      "seconds": 26.88
     },
     {
       "name": "Context restoration recompiles shaders and returns to the GPU",
       "passed": true,
       "detail": null,
-      "seconds": 27.38
+      "seconds": 30.99
     },
     {
       "name": "WebGL2 unavailable at startup uses the Worker FP64 path",
       "passed": true,
       "detail": null,
-      "seconds": 28.46
+      "seconds": 32.13
     },
     {
       "name": "Without WebGL2, deep views still render at full resolution (FP64 perturbation)",
       "passed": true,
       "detail": null,
-      "seconds": 29.49
+      "seconds": 33.18
     },
     {
       "name": "No OffscreenCanvas or scheduler uses transferable pixel buffers and timer yields",
       "passed": true,
       "detail": 3,
-      "seconds": 30.62
+      "seconds": 34.81
     },
     {
       "name": "Single active Worker quota uses transferable pixel buffers and timer yields",
       "passed": true,
       "detail": 2,
-      "seconds": 32.19
+      "seconds": 36.44
     },
     {
       "name": "Service worker installs the app shell and reloads it offline",
@@ -181,22 +181,22 @@
       "detail": {
         "scope": "http://127.0.0.1:4173/"
       },
-      "seconds": 37.13
+      "seconds": 41.44
     },
     {
       "name": "Without Workers, the GPU still renders deep views (main-thread reference)",
       "passed": true,
       "detail": null,
-      "seconds": 39.8
+      "seconds": 44.29
     },
     {
       "name": "No uncaught browser exceptions",
       "passed": true,
       "detail": null,
-      "seconds": 39.83
+      "seconds": 44.3
     }
   ],
   "count": 16,
   "uncaught_errors": [],
-  "seconds": 39.9
+  "seconds": 44.4
 }

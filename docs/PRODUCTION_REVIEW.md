@@ -37,7 +37,22 @@ A second, independent review (six reviewers, each finding checked by two or thre
 | iOS zoomed into 12 px form fields; error banner overflowed phones; desktop panel dimmed the map | 16 px controls on touch, wrapping banner, transparent backdrop on wide screens |
 | Discover stayed busy after a Worker crash; export only checked the PNG header; `serve.cjs` ignored its directory | Fixed; the export is decoded and must contain the fractal; `npm start` serves `dist` as built |
 
-Not changed: GPU `sin`/`cos` precision on drivers with Vulkan-minimum trigonometry (a driver-gated polynomial is a possible follow-up); Open Graph image needs an absolute site URL once a domain exists.
+A second round (a completeness critic, six targeted reviewers, every finding refuted or confirmed by two skeptics; 16 confirmed, 5 refuted) added:
+
+| Finding | Fix |
+| --- | --- |
+| GPU `sin`/`cos` err by ~2e-4 on some drivers (SwiftShader measured), 3× more wrong chaotic pixels than FP32 allows | A start-up probe compares builtins with a multiply-add version and compiles `PRECISE_TRIG` only where needed (direct-view FP64 mismatch 35% → 10%) |
+| The 16× stage recomputed the 4 rotated-grid samples of the 4× stage | They lie on the 4×4 grid: 16× reuses them (marked in alpha), ~25% less final-stage work, identical AA error |
+| First final render at depth linked the BLA program synchronously even with parallel compilation | Background link on first use; plain program until ready |
+| Moving the window to a display with another density kept the old resolution; zoomed-out pages rendered more pixels than the screen | Resolution media query re-measures; density 0.25–3 |
+| Live frames covered a slightly different vertical extent than the viewport (stretch between live and final frames) | Shaders map by the viewport aspect, independent of the frame's rounded size |
+| One texture-allocation failure switched to the CPU for the session; context loss blacked out the view | Pool freed and budget halved on allocation errors; the last GPU image is kept as a 2D snapshot |
+| A failing reference was retried every frame; live frames stopped while a deeper reference was computed | Failures are not retried until Retry or a new spec; live frames use the nearest cached orbit with enough precision meanwhile |
+| A batch budget learned on cheap corner tiles could make the next centre batch take seconds | First batch ≤ 4 tiles, growth ≤ 2× per batch, reset after an overrun; tile rates kept apart from live-frame rates |
+| Ctrl + mouse wheel was treated as pinch; no-op navigation cleared Forward; same-view navigation restarted a running render | Notches keep the animated path; history saved only on real changes; same-view navigation is a no-op |
+| Exact CPU mode noticed cancellation only per 4-pixel row | Per-pixel check |
+
+Not changed: final renders reuse a cached reference within 64 spans, so chaotic pixels can differ from a fresh tab at the same link (structured regions are identical); the FP32 escape threshold can flush below about 1e−90 at the iteration-limit edge; the Open Graph image needs an absolute site URL once a domain exists.
 
 ## Engineering review
 

@@ -1,7 +1,7 @@
 {
   "suite": "quality",
   "origin": "http://127.0.0.1:4173",
-  "bundle_sha256": "6704ca966b05b21e2676a5eac7aff389a4a814f9f83220bd9c6fbc822bbe25ce",
+  "bundle_sha256": "c3b4b9998ed9d7bcbcd3db6f1ee5b3ad8230860ef801184c3804b6b739dd662a",
   "playwright": "1.56.0",
   "limitations": [
     "Software WebGL2; antialiasing error measured on sampled cameras.",
@@ -25,58 +25,58 @@
         "width": 1000,
         "height": 592,
         "counts": null,
-        "elapsed": 11591.79999999993,
+        "elapsed": 11570.599999999627,
         "samples": 16
       },
-      "seconds": 12.33
+      "seconds": 12.64
     },
     {
       "name": "Adaptive 4x and 16x antialiasing reduce error against a 64-sample reference: direct overview",
       "passed": true,
       "detail": {
-        "rmse1": 23.93341344653493,
-        "rmse4": 10.720969062555826,
-        "rmse16": 5.296309388156134,
-        "changed4": 4961,
-        "changed16": 5393,
+        "rmse1": 23.544786533957716,
+        "rmse4": 10.82969237829093,
+        "rmse16": 5.41507963298692,
+        "changed4": 4971,
+        "changed16": 5355,
         "pixels": 25600,
         "reference": "64 samples per pixel"
       },
-      "seconds": 16.41
+      "seconds": 17.09
     },
     {
       "name": "Adaptive 4x and 16x antialiasing reduce error against a 64-sample reference: direct filaments",
       "passed": true,
       "detail": {
-        "rmse1": 35.85067937137183,
-        "rmse4": 17.32674054608673,
-        "rmse16": 8.914196407238428,
-        "changed4": 11970,
-        "changed16": 12265,
+        "rmse1": 35.69161453877117,
+        "rmse4": 17.28174997380207,
+        "rmse16": 8.843201630825803,
+        "changed4": 12004,
+        "changed16": 12247,
         "pixels": 25600,
         "reference": "64 samples per pixel"
       },
-      "seconds": 19.29
+      "seconds": 20.06
     },
     {
       "name": "Adaptive 4x and 16x antialiasing reduce error against a 64-sample reference: perturbation plume",
       "passed": true,
       "detail": {
-        "rmse1": 62.98289539550211,
-        "rmse4": 30.70090215404195,
-        "rmse16": 15.643349211519224,
+        "rmse1": 62.94579369474357,
+        "rmse4": 30.664236670521518,
+        "rmse16": 15.60549758810435,
         "changed4": 12495,
-        "changed16": 12551,
+        "changed16": 12524,
         "pixels": 14400,
         "reference": "64 samples per pixel"
       },
-      "seconds": 48.61
+      "seconds": 49.9
     },
     {
       "name": "Direct tiles with adaptive samples equal one full-frame draw",
       "passed": true,
       "detail": 0,
-      "seconds": 49.02
+      "seconds": 50.31
     },
     {
       "name": "Dragging shows live single-sample frames, then refines on release",
@@ -89,7 +89,7 @@
           "16": 0
         }
       },
-      "seconds": 56.9
+      "seconds": 58.84
     },
     {
       "name": "Wheel zoom eases the visible camera onto the exact target",
@@ -97,58 +97,58 @@
       "detail": {
         "target_span": "0.237716252204793110"
       },
-      "seconds": 59.34
+      "seconds": 61.3
     },
     {
       "name": "A flick keeps gliding with decaying inertia, then renders",
       "passed": true,
       "detail": null,
-      "seconds": 63.57
+      "seconds": 65.78
     },
     {
       "name": "Colour flow changes only presentation, without recomputing",
       "passed": true,
       "detail": null,
-      "seconds": 64.22
+      "seconds": 66.43
     },
     {
       "name": "A shared view keeps quality and hue and opens without motion",
       "passed": true,
       "detail": null,
-      "seconds": 66.49
+      "seconds": 68.72
     },
     {
       "name": "Reduced-motion preference stops colour flow",
       "passed": true,
       "detail": null,
-      "seconds": 66.52
+      "seconds": 68.73
     },
     {
       "name": "Reduced motion jumps directly and disables inertia",
       "passed": true,
       "detail": null,
-      "seconds": 72.41
+      "seconds": 75.3
     },
     {
       "name": "CPU keeps the reprojected image while replacement Workers are pending",
       "passed": true,
       "detail": 0,
-      "seconds": 77.78
+      "seconds": 80.74
     },
     {
       "name": "Palette changes recolour the rendered view",
       "passed": true,
       "detail": null,
-      "seconds": 81.11
+      "seconds": 84.77
     },
     {
       "name": "No uncaught browser exceptions",
       "passed": true,
       "detail": null,
-      "seconds": 81.11
+      "seconds": 84.77
     }
   ],
   "count": 15,
   "uncaught_errors": [],
-  "seconds": 81.2
+  "seconds": 84.9
 }

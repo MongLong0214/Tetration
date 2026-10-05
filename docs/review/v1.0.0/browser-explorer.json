@@ -1,7 +1,7 @@
 {
   "suite": "explorer",
   "origin": "http://127.0.0.1:4173",
-  "bundle_sha256": "6704ca966b05b21e2676a5eac7aff389a4a814f9f83220bd9c6fbc822bbe25ce",
+  "bundle_sha256": "c3b4b9998ed9d7bcbcd3db6f1ee5b3ad8230860ef801184c3804b6b739dd662a",
   "playwright": "1.56.0",
   "limitations": [
     "Mobile input is emulated. No physical iPhone or hardware GPU qualification."
@@ -458,7 +458,7 @@
         "width": 1440,
         "height": 872
       },
-      "seconds": 4.29
+      "seconds": 5.01
     },
     {
       "name": "Automated WCAG checks: desktop map",
@@ -469,7 +469,7 @@
           "color-contrast"
         ]
       },
-      "seconds": 4.52
+      "seconds": 5.24
     },
     {
       "name": "Automated WCAG checks: desktop controls",
@@ -480,53 +480,53 @@
           "color-contrast"
         ]
       },
-      "seconds": 4.71
+      "seconds": 5.44
     },
     {
       "name": "Back, forward and a new navigation branch preserve history",
       "passed": true,
       "detail": null,
-      "seconds": 8.94
+      "seconds": 9.77
     },
     {
       "name": "Focus mode fills the screen at full resolution and preserves exact coordinates",
       "passed": true,
       "detail": null,
-      "seconds": 16.58
+      "seconds": 17.4
     },
     {
       "name": "Starting-point shortcuts 1-7 include the deep perturbation places",
       "passed": true,
       "detail": null,
-      "seconds": 19.85
+      "seconds": 21.41
     },
     {
       "name": "Discover (D and button) jumps to new detailed places and joins history",
       "passed": true,
       "detail": {
-        "x": "0.049170618876814842",
-        "y": "0.98384654447436315",
-        "span": "0.399383"
+        "x": "0.23443840295076371",
+        "y": "1.1349746983498334",
+        "span": "1.6"
       },
-      "seconds": 27.62
+      "seconds": 57.76
     },
     {
       "name": "Named views survive reload and restore sub-FP64 coordinates safely",
       "passed": true,
       "detail": null,
-      "seconds": 47.04
+      "seconds": 77.73
     },
     {
       "name": "One-action clipboard sharing reopens the exact coordinates",
       "passed": true,
       "detail": null,
-      "seconds": 53.39
+      "seconds": 84.03
     },
     {
       "name": "Removing a saved view persists",
       "passed": true,
       "detail": null,
-      "seconds": 60.96
+      "seconds": 92.18
     },
     {
       "name": "Automated WCAG checks: guide",
@@ -537,7 +537,7 @@
           "color-contrast"
         ]
       },
-      "seconds": 61.2
+      "seconds": 92.43
     },
     {
       "name": "Automated WCAG checks: mobile map",
@@ -548,7 +548,7 @@
           "color-contrast"
         ]
       },
-      "seconds": 63.3
+      "seconds": 94.6
     },
     {
       "name": "Automated WCAG checks: mobile controls",
@@ -559,48 +559,48 @@
           "color-contrast"
         ]
       },
-      "seconds": 63.5
+      "seconds": 94.81
     },
     {
       "name": "Coordinate draft survives keyboard-like resizing and submits",
       "passed": true,
       "detail": null,
-      "seconds": 64.51
+      "seconds": 96.34
     },
     {
       "name": "Controls reachable at 390x844 with 44px targets",
       "passed": true,
       "detail": null,
-      "seconds": 64.51
+      "seconds": 96.34
     },
     {
       "name": "Controls reachable at 320x568 with 44px targets",
       "passed": true,
       "detail": null,
-      "seconds": 65.76
+      "seconds": 97.58
     },
     {
       "name": "Controls reachable at 844x390 with 44px targets",
       "passed": true,
       "detail": null,
-      "seconds": 66.95
+      "seconds": 99.34
     },
     {
       "name": "Controls reachable at 1280x720 with 44px targets",
       "passed": true,
       "detail": null,
-      "seconds": 69.37
+      "seconds": 102.65
     },
     {
       "name": "Touch devices share the link and the rendered PNG through native share (API stub)",
       "passed": true,
       "detail": {
-        "name": "tetra-1791154224443.png",
+        "name": "tetra-1791158903441.png",
         "type": "image/png",
-        "size": 116296,
+        "size": 116645,
         "text": "http://127.0.0.1:4173/#v=1&x=-2.5&y=0&s=1.8&n=auto&p=0&e=auto&g=0&q=1&c=0"
       },
-      "seconds": 71.1
+      "seconds": 104.56
     },
     {
       "name": "Automated WCAG checks: manual sharing",
@@ -611,22 +611,22 @@
           "color-contrast"
         ]
       },
-      "seconds": 73.6
+      "seconds": 107.35
     },
     {
       "name": "Blocked clipboard and storage expose usable fallbacks",
       "passed": true,
       "detail": null,
-      "seconds": 75.6
+      "seconds": 109.35
     },
     {
       "name": "No uncaught browser exceptions",
       "passed": true,
       "detail": null,
-      "seconds": 75.62
+      "seconds": 109.37
     }
   ],
   "count": 22,
   "uncaught_errors": [],
-  "seconds": 75.7
+  "seconds": 109.5
 }

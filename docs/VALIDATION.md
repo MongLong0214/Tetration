@@ -8,11 +8,11 @@ All suites ran sequentially against one production build served by `serve.cjs` w
 
 | Suite | Result | Scope |
 | --- | --- | --- |
-| `npm test` | 122 passed, 0 failed or skipped | Reference orbits against an independent decimal orbit and an mpmath fixture; FP64 perturbation against exact orbits; BLA table algebra, radii, refusal and fidelity; Workers; discovery; CSP, build, server and offline shell; saved views; rendering utilities |
+| `npm test` | 123 passed, 0 failed or skipped | Reference orbits against an independent decimal orbit and an mpmath fixture; FP64 perturbation against exact orbits; BLA table algebra, radii, refusal and fidelity; Workers; discovery; CSP, build, server and offline shell; saved views; rendering utilities |
 | `npm run lint` | 0 problems | ESLint correctness rules over every source and test script |
 | `test:browser` (review) | 29 passed | Core flows, CSP enforcement, exact links, limits, mobile focus and touch |
 | `test:release` | 16 passed | Served headers and bytes, reference pixels, engine switching, real context loss and restoration, degraded features, offline reload |
-| `test:deep` | 28 passed | GPU perturbation (plain and BLA) against FP64 and exact orbits, BLA speed, full resolution at every depth, symmetry, seams, reference reuse, deep zoom session |
+| `test:deep` | 29 passed | GPU perturbation (plain and BLA) against FP64 and exact orbits, BLA speed, full resolution at every depth, symmetry, seams, reference reuse, deep zoom session |
 | `test:quality` | 15 passed | Antialiasing error against 64-sample references, live frames, glide, inertia, reduced motion, colour flow |
 | `test:explorer` | 22 passed | Saved views, history, shortcuts, discovery, sharing, fallbacks, four viewports, axe-core |
 | `test:perf` | 11 passed | First image, when the BLA program compiles (never in shallow views, without long tasks at depth), live-frame cadence at the overview, 10²⁵ and 10¹⁰⁰, reference speed, resource bounds |
@@ -21,7 +21,7 @@ All suites ran sequentially against one production build served by `serve.cjs` w
 
 No check was skipped or disabled. Six axe-core scans found no violations; colour contrast over the fractal is reported as incomplete, as before, which is not full WCAG certification.
 
-The final build is **195,960 bytes**, SHA-256 **`6704ca966b05b21e2676a5eac7aff389a4a814f9f83220bd9c6fbc822bbe25ce`**. All six browser reports carry this hash.
+The final build is **203,273 bytes**, SHA-256 **`c3b4b9998ed9d7bcbcd3db6f1ee5b3ad8230860ef801184c3804b6b739dd662a`**. All six browser reports carry this hash.
 
 ## Numerical checks
 
@@ -81,6 +81,6 @@ Node 22.22.0 for unit tests (CI uses Node 24), Chromium 141.0.7390.37, Playwrigh
 
 ## Remote CI and remaining gaps
 
-GitHub Actions runs every suite, including Linux WebKit, on pull requests and pushes to `main`. A manual workflow dispatch from this workspace was refused (HTTP 403, the integration has no Actions permission), so no remote run of 1.0.0 is claimed here; the 0.5.0 run evidence remains in `review/v0.5.0/remote-ci/`.
+[Run 37241756294](https://github.com/MongLong0214/Tetration/actions/runs/37241756294) on `main` at `d3089da` passed all eight jobs: unit tests and build, and the review, release, deep, quality, explorer, perf and WebKit browser suites on GitHub runners. Linux WebKit 26.0 passed 13 checks, including 10¹⁰⁰ at full resolution with BLA on its WebGL2 path (9 table levels, program compiled). Later commits on `main` are validated by their own runs.
 
 Public HTTPS, physical iPhone/Safari, hardware GPU drivers and a five-hour memory and thermal soak remain unverified.
