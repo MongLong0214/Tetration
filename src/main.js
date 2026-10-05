@@ -38,7 +38,8 @@
   const pin = frame => { pinned.set(frame, (pinned.get(frame) || 0) + 1); };
 
   const viewport = $('viewport'), gpuCanvas = $('gpuCanvas'), cpuCanvas = $('cpuCanvas'), gridCanvas = $('gridCanvas');
-  const ctx = cpuCanvas.getContext('2d', {alpha: false}), gridCtx = gridCanvas.getContext('2d');
+  // Recovery must remain usable when the browser's GPU process is stalled.
+  const ctx = cpuCanvas.getContext('2d', {alpha: false, willReadFrequently: true}), gridCtx = gridCanvas.getContext('2d');
   const display = {canvas: cpuCanvas, view: null, frame: null, renderer: null, key: '', info: null};
   const detailCanvas = $('detailCanvas');
   let retainedDetail = null;
@@ -760,14 +761,14 @@
   }
   function configureCPUCanvas(width = Math.round(dims.w * dims.dpr), height = Math.round(dims.h * dims.dpr)) {
     if (cpuCanvas.width !== width || cpuCanvas.height !== height) {
-      const copy = document.createElement('canvas'); copy.width = cpuCanvas.width; copy.height = cpuCanvas.height; copy.getContext('2d').drawImage(cpuCanvas, 0, 0);
+      const copy = document.createElement('canvas'); copy.width = cpuCanvas.width; copy.height = cpuCanvas.height; copy.getContext('2d', {willReadFrequently: true}).drawImage(cpuCanvas, 0, 0);
       cpuCanvas.width = width; cpuCanvas.height = height; ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high'; ctx.drawImage(copy, 0, 0, width, height);
     }
     ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
   }
   // Keep the last GPU image as a 2D copy before the GPU goes away (a lost context has no pixels).
   function keepSnapshot() {
-    if (display.canvas !== gpuCanvas || !display.view || !gpu || gpu.lost()) return;
+    if (display.canvas !== gpuCanvas || !display.view || !gpu || gpu.lost() || gpuBusy) return;
     try { configureCPUCanvas(gpuCanvas.width, gpuCanvas.height); ctx.drawImage(gpuCanvas, 0, 0); setDisplay(cpuCanvas, display.view); } catch { /* nothing to keep */ }
   }
   // Start the CPU canvas from the image currently on screen, at the new camera.
@@ -775,10 +776,10 @@
     configureCPUCanvas();
     const source = display.canvas, from = display.view;
     ctx.fillStyle = '#060606';
-    if (source === gpuCanvas && (!gpu || gpu.lost())) { ctx.fillRect(0, 0, cpuCanvas.width, cpuCanvas.height); return; }
+    if (source === gpuCanvas && (!gpu || gpu.lost() || gpuBusy)) { ctx.fillRect(0, 0, cpuCanvas.width, cpuCanvas.height); return; }
     if (!from || (source === cpuCanvas && same(from, v))) { if (!from) ctx.fillRect(0, 0, cpuCanvas.width, cpuCanvas.height); return; }
     const copy = document.createElement('canvas'); copy.width = cpuCanvas.width; copy.height = cpuCanvas.height;
-    copy.getContext('2d').drawImage(source, 0, 0, copy.width, copy.height);
+    copy.getContext('2d', {willReadFrequently: true}).drawImage(source, 0, 0, copy.width, copy.height);
     const {zoom, dx, dy} = transformFor(from, v), scale = cpuCanvas.width / dims.w;
     ctx.fillRect(0, 0, cpuCanvas.width, cpuCanvas.height);
     if (Number.isFinite(zoom + dx + dy) && zoom < 1e6 && zoom > 1e-6) ctx.drawImage(copy, dx * scale + (1 - zoom) * copy.width / 2, dy * scale + (1 - zoom) * copy.height / 2, copy.width * zoom, copy.height * zoom);
@@ -793,14 +794,16 @@
     const maximum = Math.max(12, Math.floor(Math.min(mode === 'exact' ? 72 : 2048, dims.w * dims.dpr, Math.sqrt(pixelBudget * dims.w / dims.h))));
     const passes = [...new Set((mode === 'exact' ? [12, 30, maximum] : [160, 420, maximum]).map(w => Math.min(w, maximum)))].sort((a, b) => a - b);
     const iterations = iterationsFor(v), label = mode === 'exact' ? exactDigits(v) + ' DP' : mode === 'cpu-perturb' ? 'FP64 perturbation' : 'FP64';
-    const base = {...serialize(v), mode, digits: exactDigits(v), iterations, palette, bitmap: true};
+    // Transfer actual pixel buffers; creating Worker GPU-backed images can wait
+    // on the same failed process this CPU renderer is meant to recover from.
+    const base = {...serialize(v), mode, digits: exactDigits(v), iterations, palette, bitmap: false};
     if (ref) Object.assign(base, {ref: {V: ref.V, T: ref.T, ReA: ref.ReA, ImA: ref.ImA, length: ref.length, values: ref.values, L0: ref.L0, c0: ref.c0}, deltaRe: num(v.x - ref.point.x), deltaIm: num(v.y - ref.point.y), deltaMirror: num(-v.y - ref.point.y), imCenter: num(v.y)});
     let activePass = 0;
     function startPass() {
       if (id !== serial || job !== pool.job) return;
       const w = passes[activePass], h = Math.max(1, Math.round(w * dims.h / dims.w));
       const passCanvas = document.createElement('canvas'); passCanvas.width = w; passCanvas.height = h;
-      const pctx = passCanvas.getContext('2d', {alpha: false}); pctx.imageSmoothingEnabled = true; pctx.drawImage(cpuCanvas, 0, 0, w, h);
+      const pctx = passCanvas.getContext('2d', {alpha: false, willReadFrequently: true}); pctx.imageSmoothingEnabled = true; pctx.drawImage(cpuCanvas, 0, 0, w, h);
       const progress = workers.map(() => 0), counts = workers.map(() => [0, 0, 0, 0, 0]), completed = new Set();
       showLoading(`${label} · pass ${activePass + 1}/${passes.length} · 0%`);
       const paint = () => { pool.pendingPaint = 0; if (id !== serial) return; ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high'; ctx.drawImage(passCanvas, 0, 0, cpuCanvas.width, cpuCanvas.height); };

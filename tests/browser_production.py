@@ -315,7 +315,19 @@ def body():
         page.locator('#homeBtn').click();settle(page);consistent(page)
         page.locator('#backBtn').click();settle(page);consistent(page)
         suite.record('Precision/AA/shading/min/max/Auto transitions complete with the requested samples, including navigation after a reported GPU fallback')
-        ctx.close(); suite.no_errors(); browser.close()
+        ctx.close(); browser.close()
+        # A shared maximum-quality URL must also recover before any prior view
+        # has warmed the driver or measured its throughput. Use a fresh process.
+        cold=p.webkit.launch() if WEBKIT else launch(p)
+        cold_context=cold.new_context(viewport={'width':640,'height':430})
+        cold_page=suite.watch(cold_context.new_page())
+        open_app(cold_page,SHALLOW.replace('&n=128','&n=16384'))
+        d=consistent(cold_page)
+        assert d['iterations']==16384 and d['lastCompleted']['samples']==16 and d['quality']==16,d
+        assert d['lastCompleted']['width']==640 and d['lastCompleted']['height']==354,d
+        suite.report['cold_maximum_backend']={k:d[k] for k in ['backend','gpuFailure','lastCompleted']}
+        suite.record('A cold maximum-quality shared URL completes with the full requested iterations, samples and dimensions')
+        cold_context.close();suite.no_errors();cold.close()
 
 
 run(suite, body)

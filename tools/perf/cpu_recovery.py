@@ -3,6 +3,7 @@
 This opt-in diagnostic preserves the 640x430 viewport, 16384 limit, AA16 and
 240-second render deadline. It does not replace the production qualification.
 """
+import hashlib
 from pathlib import Path
 import subprocess
 import sys
@@ -20,6 +21,7 @@ PROGRESS = '''setInterval(()=>{const d=window.tetraDiagnostics;if(!d)return;
 
 def body():
     with sync_playwright() as p:
+        cpu_image = None
         for engine in ['cpu', 'auto']:
             browser = bc.launch(p)
             suite.report['browser_version'] = browser.version
@@ -31,15 +33,24 @@ def body():
                     return
                 print(engine, message.text, flush=True)
                 process = subprocess.run(['ps', '-Ao', 'pid,pcpu,comm'], capture_output=True, text=True, check=True)
-                print('BROWSER_CPU', '\n'.join(line for line in process.stdout.splitlines() if 'Chrom' in line), flush=True)
+                print('BROWSER_CPU', '\n'.join(line for line in process.stdout.splitlines() if 'ms-playwright' in line), flush=True)
             page.on('console', log)
+            suite.report['processors'] = page.evaluate('navigator.hardwareConcurrency')
             print('CPU_RECOVERY_STAGE', engine, flush=True)
             page.goto(bc.BASE + '/#v=1&x=-1.84&y=0.09&s=0.46&n=16384&q=16&e=' + engine)
             bc.ready(page)
             d = bc.state(page)
             assert d['iterations'] == 16384 and d['lastCompleted']['samples'] == 16 and d['complete'], d
             assert d['lastCompleted']['width'] == 640 and d['lastCompleted']['height'] == 354, d
-            suite.record(engine + ' completes the unchanged maximum scene', d['lastCompleted'])
+            detail = dict(d['lastCompleted'])
+            if d['mode'] == 'cpu':
+                pixels = page.evaluate("()=>{const c=document.querySelector('#cpuCanvas');return Array.from(c.getContext('2d').getImageData(0,0,c.width,c.height).data)}")
+                image_hash = hashlib.sha256(bytes(pixels)).hexdigest()
+                if cpu_image is not None:
+                    assert image_hash == cpu_image, 'Native CPU recovery changed the completed image'
+                cpu_image = image_hash
+                detail['native_rgba_sha256'] = image_hash
+            suite.record(engine + ' completes the unchanged maximum scene', detail)
             context.close()
             browser.close()
         suite.no_errors()

@@ -20,7 +20,7 @@ test('complex BigInt orbit agrees with FP64 on selected non-boundary inputs',()=
 test('all palettes return finite RGB bytes',()=>{for(let p=0;p<3;p++)for(let k=0;k<5;k++)for(const n of [0,1,5,32,256,1025]){const c=color(k,n,p);assert.equal(c.length,3);c.forEach(x=>assert.ok(Number.isInteger(x)&&x>=0&&x<=255));}});
 
 test('finite classification can differ with convergence tolerance',()=>{assert.equal(orbit64(-.2,.7,512).kind,1);assert.equal(makePreciseOrbit(60)('-0.2','0.7',512).kind,0);});
-test('FP64 distance bounds preserve complete native-hypot orbit results',()=>{
+test('FP64 distance bounds and exact cycles preserve complete native-hypot orbit results',()=>{
  // orbitRules keeps the direct Euclidean predicates: compare classification,
  // exact stopping step and final complex value, including long unresolved runs.
  const compare=(x,y,n)=>assert.deepEqual(orbit64(x,y,n),orbitRules(x,y,n,RULES.cpu),`${x}+${y}i / ${n}`);
@@ -29,4 +29,17 @@ test('FP64 distance bounds preserve complete native-hypot orbit results',()=>{
  for(let i=0;i<10000;i++)compare((random()-.5)*12,(random()-.5)*8,256);
  for(const x of [0,.01,.5,1,Math.SQRT2,Math.exp(1/Math.E),Math.exp(-Math.E),-1,1e-300,1e12])
   for(const y of [0,-0,1e-14,-1e-14])compare(x,y,16384);
+});
+test('exact FP64 cycle skips preserve the final phase at short guards and nonmultiple caps',()=>{
+ for(const [x,y] of [[-1.9837500000000001,.22225],[-1.9837500000000001,-.22225],[-1.84,.09],[.01,-0],[1,0],[1,-0]])
+  for(const n of [0,1,2,3,4,15,16,17,31,32,33,64,65,66,67,127,128,129,1023,1024,1025,16383,16384])
+   assert.deepEqual(orbit64(x,y,n),orbitRules(x,y,n,RULES.cpu),`${x}+${y}i / ${n}`);
+});
+test('an actual higher-period FP64 orbit retains unresolved classification while avoiding repeated exponentials',t=>{
+ const x=-1.9837500000000001,y=.22225,n=16384,expected=orbitRules(x,y,n,RULES.cpu);
+ assert.equal(expected.kind,0);assert.equal(expected.steps,n);
+ const exp=Math.exp;let calls=0;
+ t.mock.method(Math,'exp',a=>{calls++;return exp(a);});
+ assert.deepEqual(orbit64(x,y,n),expected);
+ assert.ok(calls<128,`${calls} exponentials for ${n} logical steps`);
 });

@@ -24,6 +24,7 @@
     const lr = Math.log(Math.hypot(cr, ci));
     const li = ci === 0 && cr < 0 ? Math.PI : Math.atan2(ci, cr);
     let wr = 1, wi = 0, oldr = NaN, oldi = NaN, fixed = 0, periodic = 0;
+    let checkpoint = null, checkpointStep = 0, checkpointDistance = 1;
     for (let n = 1; n <= iterations; n++) {
       const a = wr * lr - wi * li, b = wr * li + wi * lr;
       if (!Number.isFinite(a + b)) return { kind: 4, steps: n, re: wr, im: wi };
@@ -37,6 +38,19 @@
       oldr = wr; oldi = wi; wr = nr; wi = ni;
       if (fixed >= 8) return { kind: 1, steps: n, re: wr, im: wi };
       if (periodic >= 12) return { kind: 2, steps: n, re: wr, im: wi };
+      // Brent checkpoints detect an exactly repeated FP64 machine state, not
+      // approximate mathematical periodicity. Preserve signed zeros, the prior
+      // iterate and both counters; the n>2 guard must already be active too.
+      // A repeated full state has no future terminal event inside its cycle.
+      if (checkpointStep > 2 && Object.is(wr, checkpoint[0]) && Object.is(wi, checkpoint[1]) &&
+          Object.is(oldr, checkpoint[2]) && Object.is(oldi, checkpoint[3]) &&
+          fixed === checkpoint[4] && periodic === checkpoint[5]) {
+        const cycle = n - checkpointStep;
+        n += Math.floor((iterations - n) / cycle) * cycle;
+      } else if (n - checkpointStep === checkpointDistance) {
+        checkpoint = [wr, wi, oldr, oldi, fixed, periodic]; checkpointStep = n;
+        checkpointDistance *= 2;
+      }
     }
     return { kind: 0, steps: iterations, re: wr, im: wi };
   }

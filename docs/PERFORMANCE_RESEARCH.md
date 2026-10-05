@@ -211,6 +211,20 @@ QA의 Playwright를 로컬과 동일한 `1.63.0`으로 고정했다. 이동 중 
 
 `f93d2c91…`의 로컬 전체 15개 스위트는 약 499초에 251개 검사와 uncaught exception 0을 확인했다. 원격 `37332480186`의 최대 설정은 실제 프로세서 3개·메모리 힌트 8 GB·Worker 3개를 사용했지만 같은 240초 제한을 넘겼다. 앱은 즉시 상태 조회에 응답했고 CPU 계산 중이었다. Worker 용량 제한이 이 실패를 전부 설명하지 않는다. `tools/perf/cpu_recovery.py`와 수동 `cpu-recovery` 실행은 같은 카메라·640×354·16,384회·AA16·240초 조건에서 새 브라우저의 CPU 직접 계산과 Auto/GPU 복구를 비교하며, 진행률과 브라우저 프로세스 CPU 사용량을 기록한다. 이 진단은 기존 전체 생산 흐름 검사를 대체하거나 실패를 통과로 바꾸지 않는다.
 
+### GPU 의존 복구와 정확한 FP64 순환의 중복 계산
+
+원격 진단 `37334404015`는 GPU 작업을 앞서 실행하지 않은 CPU 직접 계산도 원래 240초 제한을 넘겼다. 최종 패스는 약 78%였고 renderer 프로세스는 약 283% CPU를 사용했다. 반면 로컬 `f93d2c91…`의 새 브라우저는 CPU 직접 계산을 약 55.6초에 끝냈지만, Auto에서 실제 GPU fence가 멈춘 뒤에는 Worker 8개가 첫 패스 0%에서 240초를 넘기며 거의 CPU를 사용하지 않았다. 계산량과 GPU 의존 복구는 서로 다른 문제다.
+
+CPU Worker가 실제 픽셀을 `OffscreenCanvas`/`ImageBitmap`으로 바꾸는 경로와 2D Canvas 기본 래스터 정책은 GPU에 의존할 수 있다. [Chromium OffscreenCanvas 구현](https://chromium.googlesource.com/chromium/src/+/0b221257fd7e14da5ceea5e9b97cad3e9deecd9a/third_party/blink/renderer/core/offscreencanvas/offscreen_canvas.cc)과 [HTML Canvas 구현](https://chromium.googlesource.com/chromium/src/+/63cc88a00dfe15f406487da666eb5c2611120963/third_party/blink/renderer/core/html/canvas/html_canvas_element.cc)을 참고해 CPU 경로는 실제 pixel buffer를 전송하고, 출력·패스·CPU 복사 Canvas는 `willReadFrequently:true`를 사용한다. GPU가 바쁜 동안 CPU 전환을 위한 GPU readback도 피한다. `da7ebfba…`는 같은 로컬 시작 조건에서 실제 GPU timeout 후 CPU 계산을 약 56.8초에 완료했다(앞선 GPU 대기를 포함한 전체 시작 시간과 구분). 직접 CPU 계산 약 55.7초와 분류 개수가 같았다. 특정 native 호출 내부의 잠금 위치까지 증명한 것은 아니다.
+
+CPU 타일 24→48→64→64→48→24 비교는 M4에서 용량 힌트 3과 WebGL 비활성화를 명시한 별도 계산 실험이다. 320×156·16,384회·AA16 전체 이미지 바이트는 모두 같았다. 24의 중앙값 약 30.260초에 비해 48은 31.254초로 약 3% 느렸고, 64는 28.703초로 약 5% 빨랐다. 큰 타일만으로 극적인 개선을 얻는 가설을 제외하고 기존 24를 유지한다.
+
+더 큰 낭비는 1·2주기 이외의 FP64 순환이었다. [Brent의 원 논문](https://maths-people.anu.edu.au/~brent/pd/rpb051i.pdf)의 checkpoint 방식으로 **현재·이전 복소 값의 모든 비트와 고정·주기 카운터가 정확히 다시 일치할 때만** 전체 순환의 배수를 건너뛴다. `Object.is`로 signed zero를 보존하고, `n>2` 조건이 이미 활성화된 checkpoint만 비교한다. 나머지 단계는 기존 native exp/cos/sin으로 계산하므로 최종 위상도 유지한다. 허용 오차·분류·논리 반복 상한을 바꾸거나 수학적 주기성을 새로 주장하지 않는다. FP64의 정확한 유한 상태 순환을 이용하는 계산 최적화다.
+
+`d8253e44…`는 독립 Euclidean 구현과 11,000개 입력의 분류·정확한 종료 단계·최종 복소 값이 일치한다. 짧은 한도·주기 배수가 아닌 한도·켤레·signed zero 검사와 실제 고차 순환에서 exp 호출 수를 확인하는 검사를 추가했고 단위 135개·린트를 통과했다. Node의 동일 960개 최대 반복 점을 순서 교대로 6회 비교한 중앙값은 앞선 거리 최적화 기준 209.011→7.306 ms였다. 512개 점은 실제 exp 계산이 1/4 미만으로 줄었으며, 일부는 16,384개의 논리 단계를 31회 계산으로 같은 최종 상태까지 도달했다.
+
+실제 전체 CPU 렌더도 같은 origin에서 old→new→new→old 순서로 비교했다. M4에서 용량 힌트 3과 WebGL 비활성화를 양쪽에 동일하게 적용한 320×156·16,384회·AA16 조건이다. `da7ebfba…`는 30.172·30.136초, `d8253e44…`는 2.195·2.223초로 중앙값 30.154→2.209초, 약 13.7배 빨랐다. 네 번의 전체 RGBA SHA256은 모두 `6034947c1d8be199a5d4efdbea19f983c27f4e9e59277efb769cc44520b6d38f`였고 분류 개수도 같았다. 이 용량 주입 실험을 실제 3코어 인증이나 전체 GPU·deep zoom의 13.7배 개선으로 부르지 않는다. 생산 흐름에는 별도 새 브라우저에서 최대 품질 공유 URL을 바로 여는 검사를 추가했다. 원래 640×354·16,384회·AA16·240초 조건을 유지한 전체 로컬·원격 검증은 진행 중이다.
+
 ## 직접 실험하고 제외한 방법
 
 | 실험 | 이 기기의 결과 | 판단 |
