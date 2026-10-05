@@ -21,6 +21,7 @@ def body():
         for name, mx, my in [('plume', 12, 5), ('abyss', -12, 5), ('horizon', 12, -5), ('horizon', -12, -5)]:
             v = VIEWS[name]
             first = open_app(page, f"v=1&x={v['x']}&y={v['y']}&s={v['span']}&q=16", 'perturb')
+            suite.report['graphics'] = graphics(page)
             before = page.evaluate(GRAB)
             box = page.locator('#viewport').bounding_box()
             x, y = box['x'] + box['width'] / 2, box['y'] + box['height'] / 2

@@ -85,6 +85,14 @@ def state(page):
     return page.evaluate('window.tetraDiagnostics')
 
 
+def graphics(page):
+    """Record the actual driver; an OS label does not establish hardware use."""
+    return page.evaluate('''()=>{const gl=document.querySelector('#gpuCanvas').getContext('webgl2');
+      if(!gl)return null;const e=gl.getExtension('WEBGL_debug_renderer_info');
+      return {renderer:gl.getParameter(e?e.UNMASKED_RENDERER_WEBGL:gl.RENDERER),
+        vendor:gl.getParameter(e?e.UNMASKED_VENDOR_WEBGL:gl.VENDOR),version:gl.getParameter(gl.VERSION)};}''')
+
+
 def open_app(page, fragment='', mode=None, fresh=True):
     """Load the app; fresh=False keeps the document and exercises hash navigation."""
     if fresh and page.url.startswith(BASE):

@@ -26,7 +26,9 @@ jobs:
       - run: npm run build
   browser:
     needs: unit
-    runs-on: ubuntu-latest
+    # The largest native Ultra scenes also exercise latency bounds. Use the
+    # desktop macOS renderer for those; keep Linux pixel/recovery suites below.
+    runs-on: ${{ (matrix.suite == 'explorer' || matrix.suite == 'reuse') && 'macos-15' || 'ubuntu-latest' }}
     timeout-minutes: 45
     strategy:
       fail-fast: false
@@ -44,8 +46,10 @@ jobs:
       - name: Install browser QA dependencies
         run: |
           npm install --no-save --package-lock=false --ignore-scripts axe-core@4.11.0
-          python3 -m pip install -r tests/requirements.txt
-          if [[ "${{ matrix.suite }}" == *webkit ]]; then python3 -m playwright install --with-deps webkit; else python3 -m playwright install --with-deps chromium; fi
+          python3 -m venv .browser-venv
+          echo "$GITHUB_WORKSPACE/.browser-venv/bin" >> "$GITHUB_PATH"
+          .browser-venv/bin/python -m pip install -r tests/requirements.txt
+          if [[ "${{ matrix.suite }}" == *webkit ]]; then .browser-venv/bin/python -m playwright install --with-deps webkit; else .browser-venv/bin/python -m playwright install --with-deps chromium; fi
       - name: Browser suite on a served origin
         run: |
           node serve.cjs dist >/tmp/tetra-server.log 2>&1 &

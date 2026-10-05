@@ -26,6 +26,7 @@ def body():
         context = browser.new_context(viewport={'width': 1440, 'height': 960}, permissions=['clipboard-read', 'clipboard-write'])
         page = suite.watch(context.new_page())
         initial = open_app(page)
+        suite.report['graphics'] = graphics(page)
         assert initial['view'] == {'x': '-2.2930579', 'y': '0.3320804', 'span': '0.00025'}, initial['view']
         assert initial['lastCompleted']['samples'] == 16 and initial['lastCompleted']['width'] == 1440, initial['lastCompleted']
         suite.record('Default view starts inside nested petals and computes native Ultra detail', initial['view'])
