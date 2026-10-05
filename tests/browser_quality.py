@@ -43,6 +43,13 @@ def body():
             assert r['revealed'] > 0 and r['revealedWrong'] == 0, (name, r)
             assert r['resampledMax'] == 4 + per and r['resampledTrusted'] > r['pixels'] * 0.95, (name, r)
             suite.record('Live accumulation converges to the 16-sample image, still and panned frames copy it: ' + name, r)
+        # Interleaved refinement (slow GPUs: a quarter of the pixels per frame, four times as many pixels).
+        for name, args in [('direct filaments', ['-1.84', '0.09', '0.46', 160, 96, 384, 'direct', 1, True]),
+                           ('perturbation abyss', ['-0.605137938972379900971816986088586258864125', '0.437740442074800562969426507709712806289976004723289995229', '7e-25', 120, 72, 1536, 'perturb', 1, True])]:
+            r = page.evaluate('(a) => __tetraPixels.accumulate(...a)', args)
+            assert r['phaseWrong'] == 0 and r['frames'] == 61 and r['notSixteen'] == 0, (name, r)
+            assert r['worst'] <= 3 and r['mean'] < 0.6 and r['stillDiff'] == 0 and r['overlapDiff'] == 0 and r['revealedWrong'] == 0, (name, r)
+            suite.record('Interleaved live refinement updates one 2x2 phase per frame and converges to the 16-sample image: ' + name, r)
 
         worst = page.evaluate('() => __tetraPixels.seams("-2.5","0","1.8",192,128,384,"direct",4)')
         assert worst == 0, worst
@@ -218,8 +225,8 @@ def body():
         small.add_init_script(NO_WEBGPU)
         open_app(small, 'v=1&x=-1.84&y=0.09&s=0.46&q=4')
         small.evaluate('''() => { window.__shown = []; window.__on = true; let last = null;
-          const tick = () => { const d = tetraDiagnostics; const k = d.displaySmooth + '|' + d.interactiveFrames + '|' + d.renderStage;
-            if (k !== last) { __shown.push({smooth: d.displaySmooth, live: d.liveMin, stage: d.renderStage, complete: d.complete}); last = k; }
+          const tick = () => { const d = tetraDiagnostics; const k = d.displaySmooth + "|" + d.displaySoft + "|" + d.interactiveFrames + "|" + d.renderStage;
+            if (k !== last) { __shown.push({smooth: d.displaySmooth, soft: d.displaySoft, live: d.liveMin, stage: d.renderStage, complete: d.complete}); last = k; }
             if (__on) requestAnimationFrame(tick); }; requestAnimationFrame(tick); }''')
         sbox = small.locator('#viewport').bounding_box()
         sx, sy = sbox['x'] + sbox['width'] / 2, sbox['y'] + sbox['height'] / 2
@@ -233,7 +240,7 @@ def body():
         shown = small.evaluate('() => { __on = false; return __shown; }')
         rough = [s for s in shown if not s['smooth']]
         assert len(shown) > 10 and not rough and state(small)['lastCompleted']['samples'] == 4, (rough[:5], len(shown))
-        suite.record('Dragging and settling never show a single-sample image over an antialiased one', {'observed_states': len(shown), 'live_frames_min_samples': min(s['live'] for s in shown if s['live'] is not None)})
+        suite.record('Dragging and settling never show a single-sample image over an antialiased one', {'observed_states': len(shown), 'soft_states': sum(1 for s in shown if s['soft']), 'live_frames_min_samples': min(s['live'] for s in shown if s['live'] is not None)})
         small.close()
         suite.no_errors()
         browser.close()

@@ -27,7 +27,7 @@
  uniform sampler2D uSource;
  // Live accumulation: uSource is the previous live image, carried by an integer shift (mode 1)
  // or resampled from another sampling grid (mode 2) with at most uHistCap samples of trust.
- uniform int uAccum,uHistMode;
+ uniform int uAccum,uHistMode,uInterleave,uPhase;
  uniform vec2 uHistShift,uHistScale,uHistOffset;
  uniform float uHistCount,uHistCap;
  out vec4 pixel;
@@ -71,30 +71,38 @@
  }
  void main(){
   vec2 point=gl_FragCoord.xy+uOffset;
+  /* Every path ends in one sample loop: orbitColor is inlined by GPU compilers, so a single
+   * call site keeps the program small and quick to compile. */
+  vec4 seed=vec4(0.);vec3 rgb=vec3(0.);float alpha=1.,weight=1.;int first=0,count=1,mode=0;
   if(uAccum==1){
    // Running mean of up to 16 stratified samples; converged pixels are copied, not recomputed.
-   vec4 h=history(point);int n=int(h.a);
-   if(n>=16){pixel=vec4(h.rgb,16./255.);return;}
-   int m=min(16,n+uSamples);vec3 sum=vec3(0.);
-   for(int i=n;i<m;i++)sum+=orbitColor(point+cell(i));
-   pixel=vec4((h.rgb*float(n)+sum)/float(m),float(m)/255.);return;
+   seed=history(point);int n=int(seed.a);
+   if(n>=16){pixel=vec4(seed.rgb,16./255.);return;}
+   // Interleaved refinement: a pixel with history takes new samples on one frame in four
+   // (a world-locked 2x2 pattern), so a frame costs a quarter and can have four times the pixels.
+   if(uInterleave==1&&n>0){ivec2 a=ivec2(floor(point+uShift));if(((a.x&1)+2*(a.y&1))!=uPhase){pixel=vec4(seed.rgb,float(n)/255.);return;}}
+   first=n;count=min(16,n+uSamples)-n;rgb=seed.rgb*float(n);weight=1./float(n+count);alpha=float(n+count)/255.;mode=1;
+  }else{
+   if(uAdaptive==1){
+    ivec2 p=ivec2(gl_FragCoord.xy),size=textureSize(uSource,0);seed=texelFetch(uSource,p,0);vec3 center=seed.rgb;float contrast=0.;
+    for(int y=-1;y<=1;y++)for(int x=-1;x<=1;x++){vec3 delta=abs(center-texelFetch(uSource,clamp(p+ivec2(x,y),ivec2(0),size-1),0).rgb);contrast=max(contrast,max(delta.r,max(delta.g,delta.b)));}
+    if(contrast<uThreshold){pixel=seed;return;}
+   }
+   if(uSamples==16){
+    // A 16x pixel whose seed was a 4x pixel reuses those 4 samples (the rotated grid lies on the 4x4 grid).
+    bool reuse=uAdaptive==1&&abs(seed.a-64./255.)<.5/255.;
+    if(reuse){rgb=seed.rgb*4.;first=4;}
+    count=16-first;weight=.0625;mode=2;
+   }
+   else if(uSamples==4){count=4;weight=.25;alpha=64./255.;mode=3;}
   }
-  vec4 seed=vec4(0.);
-  if(uAdaptive==1){
-   ivec2 p=ivec2(gl_FragCoord.xy),size=textureSize(uSource,0);seed=texelFetch(uSource,p,0);vec3 center=seed.rgb;float contrast=0.;
-   for(int y=-1;y<=1;y++)for(int x=-1;x<=1;x++){vec3 delta=abs(center-texelFetch(uSource,clamp(p+ivec2(x,y),ivec2(0),size-1),0).rgb);contrast=max(contrast,max(delta.r,max(delta.g,delta.b)));}
-   if(contrast<uThreshold){pixel=seed;return;}
+  for(int s=0;s<count;s++){
+   int c=first+s;
+   // Sample offsets: progressive cells (accumulation and 16x, where reused cells come first), rotated grid, centre.
+   vec2 o=mode==3?RG[s]:mode==0?vec2(0.):cell(c);
+   rgb+=orbitColor(point+o);
   }
-  vec3 rgb=vec3(0.);float alpha=1.;
-  if(uSamples==16){
-   bool reuse=uAdaptive==1&&abs(seed.a-64./255.)<.5/255.;
-   if(reuse)rgb=seed.rgb*4.;
-   for(int j=0;j<4;j++)for(int i=0;i<4;i++)if(!reuse||i!=RGROW[j])rgb+=orbitColor(point+(vec2(float(i),float(j))+.5)*.25-.5);
-   rgb*=.0625;
-  }
-  else if(uSamples==4){for(int i=0;i<4;i++)rgb+=orbitColor(point+RG[i]);rgb*=.25;alpha=64./255.;}
-  else rgb=orbitColor(point);
-  pixel=vec4(rgb,alpha);
+  pixel=vec4(rgb*weight,alpha);
  }`;
 
   const direct = header + `
@@ -203,13 +211,57 @@
    if(fixedCount>=8){kind=1;steps=float(i);break;}
    if(periodCount>=12){kind=2;steps=float(i);break;}
    if(k>0&&de>-126&&de<120){vec2 ws=scaled(w,-de);if(dot(ws,ws)<dot(dm,dm)){dm=w;de=0;normalizeExp(dm,de);k=0;cur=vec4(0.,0.,LOG_R,0.);}}`;
+  /* The same step in plain FP32 once |d| is far inside the float range (after the linear phase
+   * it usually is): identical 24-bit mantissas without exponent bookkeeping. The V dL term uses
+   * dL as a plain float; where that underflows (spans below ~1e-38) it is below FP32 resolution
+   * of d L while |d| >= 1e-20. Rebases and near returns below that hand back to floatexp. */
+  const plainStep = `
+    if(k>=uRefLength){dp=w;k=0;cur=vec4(0.,0.,LOG_R,0.);}
+    vec2 V=cur.xy,eps=cmul(V,dLp)+cmul(dp,L);
+    if(eps.x>cur.z){kind=3;steps=float(i)+min(1.,(eps.x-cur.z)/LOG_R);done=true;break;}
+    float a=cur.w+eps.x,b=uL0.x*V.y+uL0.y*V.x+eps.y;
+    if(isnan(a)||isnan(b)||isinf(a)||isinf(b)||a<uLowA||abs(b)>uMaxB){kind=4;steps=float(i);done=true;break;}
+    vec2 next;
+    if(k+1>=uRefValues){next=exp(a)*cosSin(b);dp=next;k=0;cur=vec4(0.,0.,LOG_R,0.);}
+    else{
+     vec4 nx=refAt(k+1);vec2 Vn=nx.xy;
+     if(max(abs(eps.x),abs(eps.y))<2.44140625e-4){
+      dp=cmul(Vn,cmul(eps,vec2(1.,0.)+.5*eps+cmul(eps,eps)*(1./6.)));next=Vn+dp;k++;cur=nx;
+     }else{
+      float s,c,h;sincosh(eps.y,s,c,h);float hx=exp(.5*eps.x);
+      next=cmul(Vn*hx,vec2(c,s))*hx;
+      if(eps.x>40.){dp=next;k=0;cur=vec4(0.,0.,LOG_R,0.);}
+      else{dp=cmul(Vn,vec2(expm1s(eps.x)*c-2.*h*h,hx*hx*s));k++;cur=nx;}
+     }
+    }
+    float r=length(next),tol=uTol*(1.+r);
+    fixedCount=length(next-w)<tol?fixedCount+1:0;
+    periodCount=i>2&&length(next-old)<tol?periodCount+1:0;
+    old=w;w=next;
+    if(fixedCount>=8){kind=1;steps=float(i);done=true;break;}
+    if(periodCount>=12){kind=2;steps=float(i);done=true;break;}
+    if(k>0&&dot(w,w)<dot(dp,dp)){dp=w;k=0;cur=vec4(0.,0.,LOG_R,0.);}
+    if(dot(dp,dp)<1e-40){back=true;i++;break;}`;
+  // Remaining steps: plain while |d| allows (entered at |d| >= 2^-60, left below 1e-20), else floatexp.
+  const orbitLoop = `
+  while(!done&&i<=uIterations){
+   if(de>=-60&&de<100){
+    vec2 dp=scaled(dm,de),dLp=scaled(dLm,max(dLe,-200));bool back=false;
+    for(;i<=uIterations;i++){${plainStep}
+    }
+    if(done||!back)break;
+    dm=dp;de=0;normalizeExp(dm,de);
+   }
+   for(;i<=uIterations;i++){${perturbStep.replace(/break;/g, 'done=true;break;')}
+    if(de>=-60&&de<100){i++;break;}
+   }
+  }`;
   const perturbTail = `
   if(mirrored)w.y=-w.y;
   return palette(kind,steps,w);
  }` + footer;
   const perturb = perturbHead + `
-  for(int i=1;i<=uIterations;i++){${perturbStep}
-  }` + perturbTail;
+  int i=1;bool done=false;${orbitLoop}` + perturbTail;
   /* The same orbit with bilinear approximation (TetraCore.blaTable): while d is tiny
    * the pixel follows the reference, so aligned runs of 2^j linear steps are applied
    * at once as d = A d + B dL. The approach loop ends when |d| outgrows the shortest
@@ -239,8 +291,7 @@
    i++;
    if(k==0)break;
   }
-  if(!done)for(;i<=uIterations;i++){${perturbStep}
-  }` + perturbTail;
+${orbitLoop}` + perturbTail;
 
   // Macrotask hop without timer clamping, so short GPU work is noticed promptly.
   // Created on first use: an idle open port would keep Node test processes alive.
@@ -255,7 +306,7 @@
     queue.push(task); channel.port2.postMessage(0);
   }
 
-  const COMMON = ['Size', 'Aspect', 'Grid', 'Shift', 'Step', 'Offset', 'Iterations', 'Palette', 'Samples', 'Adaptive', 'Source', 'LowA', 'MaxB', 'Tol', 'Threshold', 'Accum', 'HistMode', 'HistShift', 'HistScale', 'HistOffset', 'HistCount', 'HistCap'];
+  const COMMON = ['Size', 'Aspect', 'Grid', 'Shift', 'Step', 'Offset', 'Iterations', 'Palette', 'Samples', 'Adaptive', 'Source', 'LowA', 'MaxB', 'Tol', 'Threshold', 'Accum', 'HistMode', 'Interleave', 'Phase', 'HistShift', 'HistScale', 'HistOffset', 'HistCount', 'HistCap'];
   const UNIFORMS = {
     direct: [...COMMON, 'Center', 'Span'],
     perturb: [...COMMON, 'Ref', 'RefLength', 'RefValues', 'Scale', 'InvExp', 'L0', 'Inv', 'Delta', 'DeltaMirror', 'ImCenter', 'SpanMant'],
@@ -281,7 +332,7 @@
       gl.bindTexture(gl.TEXTURE_2D, this.empty);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 0, 255]));
       this.setNearest();
-      this.pool = []; this.reference = null; this.referenceTexture = null; this.live = 0;
+      this.pool = []; this.reference = null; this.referenceTexture = null; this.live = 0; this.half = null;
       // blaMode: 'auto' uses BLA where it saves enough steps, 'on' wherever a table exists, 'off' never.
       this.bla = null; this.blaTexture = null; this.blaMode = 'auto';
     }
@@ -375,18 +426,28 @@
       if (!this.programs.perturbBla && !this.pendingBla && this.parallel) { this.pendingBla = this.startLink(perturbBla); return false; }
       const bla = this.blaProgram();
       if (!bla) return this.blaMode === 'off';
-      // A throwaway 1x1 target, so the frame pool is left as it was.
-      const gl = this.gl, u = bla.uniforms, texture = gl.createTexture(), buffer = gl.createFramebuffer();
+      this.touch(bla, ['Source', 'Ref', 'Bla']);
+      this.warmed = true;
+      return true;
+    }
+    // Idle-time first use of the perturbation program, so the first deep frame does not wait for
+    // a lazily translating driver (a no-op once deep views have drawn with it).
+    warmPerturb() {
+      if (this.perturbWarm || this.lost()) return;
+      this.touch(this.programs.perturb, ['Source', 'Ref']);
+      this.perturbWarm = true;
+    }
+    // One 1x1 draw into a throwaway target (the frame pool is left as it was).
+    touch({program, uniforms: u}, samplers) {
+      const gl = this.gl, texture = gl.createTexture(), buffer = gl.createFramebuffer();
       gl.bindTexture(gl.TEXTURE_2D, texture); gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA8, 1, 1);
       gl.bindFramebuffer(gl.FRAMEBUFFER, buffer); gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
-      gl.viewport(0, 0, 1, 1); gl.useProgram(bla.program);
-      gl.uniform2f(u.Size, 1, 1); gl.uniform1f(u.Aspect, 1); gl.uniform1i(u.Iterations, 0); gl.uniform1i(u.Samples, 1); gl.uniform1i(u.Adaptive, 0);
-      for (const [unit, name] of [[0, 'Source'], [1, 'Ref'], [2, 'Bla']]) { gl.activeTexture(gl.TEXTURE0 + unit); gl.bindTexture(gl.TEXTURE_2D, this.empty); gl.uniform1i(u[name], unit); }
+      gl.viewport(0, 0, 1, 1); gl.useProgram(program);
+      gl.uniform2f(u.Size, 1, 1); gl.uniform1f(u.Aspect, 1); gl.uniform1i(u.Iterations, 0); gl.uniform1i(u.Samples, 1); gl.uniform1i(u.Adaptive, 0); gl.uniform1i(u.Accum, 0);
+      samplers.forEach((name, unit) => { gl.activeTexture(gl.TEXTURE0 + unit); gl.bindTexture(gl.TEXTURE_2D, this.empty); gl.uniform1i(u[name], unit); });
       gl.activeTexture(gl.TEXTURE0);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
       gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.deleteFramebuffer(buffer); gl.deleteTexture(texture);
-      this.warmed = true;
-      return true;
     }
     /* BLA table for a reference and the view's largest |dL| (TetraCore.blaTable),
      * as RGBA32F floatexp texels. A table built for a larger |dL| stays valid, so it
@@ -486,6 +547,7 @@
       if (gl.isContextLost()) throw Error('GPU context lost');
       const levels = scene.mode === 'perturb' ? this.blaLevels(frame, scene, allowLink) : 0;
       const {program, uniforms: u} = this.program(levels ? 'perturbBla' : scene.mode);
+      if (scene.mode === 'perturb') this.perturbWarm = true;
       gl.bindFramebuffer(gl.FRAMEBUFFER, frame.buffer); gl.viewport(0, 0, frame.width, frame.height); gl.useProgram(program);
       gl.uniform2f(u.Size, frame.width, frame.height); gl.uniform1f(u.Aspect, scene.aspect || frame.height / frame.width); gl.uniform2f(u.Offset, 0, 0);
       gl.uniform1i(u.Grid, scene.grid ? 1 : 0);
@@ -497,6 +559,7 @@
        * offset, count, cap}; uSamples is then the number of new samples per pixel. */
       const accum = scene.accum, history = accum && accum.mode ? accum : null;
       gl.uniform1i(u.Accum, accum ? 1 : 0); gl.uniform1i(u.HistMode, history ? history.mode : 0);
+      gl.uniform1i(u.Interleave, accum && accum.phase !== undefined ? 1 : 0); gl.uniform1i(u.Phase, accum?.phase ?? 0);
       if (history) {
         if (history.frame === frame) throw Error('Live history cannot be its own target');
         const shift = history.shift || [0, 0], scale = history.scale || [1, 1], offset = history.offset || [0, 0];
@@ -546,12 +609,35 @@
         poll();
       });
     }
-    presentFrame(frame) {
+    /* soft: show a single-sample image without its noise, as the 2x2 average (an exact box
+     * filter: a 2:1 linear blit) scaled back up bilinearly — four samples per pixel at half
+     * resolution, for two blits. */
+    presentFrame(frame, soft = false) {
       const gl = this.gl, c = this.canvas;
       if (c.width !== frame.width || c.height !== frame.height) { c.width = frame.width; c.height = frame.height; }
-      gl.bindFramebuffer(gl.READ_FRAMEBUFFER, frame.buffer); gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
-      gl.blitFramebuffer(0, 0, frame.width, frame.height, 0, 0, frame.width, frame.height, gl.COLOR_BUFFER_BIT, gl.NEAREST);
+      const hw = frame.width >> 1, hh = frame.height >> 1;
+      if (soft && hw >= 1 && hh >= 1) {
+        const half = this.halfFrame(hw, hh);
+        gl.bindFramebuffer(gl.READ_FRAMEBUFFER, frame.buffer); gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, half.buffer);
+        gl.blitFramebuffer(0, 0, hw * 2, hh * 2, 0, 0, hw, hh, gl.COLOR_BUFFER_BIT, gl.LINEAR);
+        gl.bindFramebuffer(gl.READ_FRAMEBUFFER, half.buffer); gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
+        gl.blitFramebuffer(0, 0, hw, hh, 0, 0, frame.width, frame.height, gl.COLOR_BUFFER_BIT, gl.LINEAR);
+      } else {
+        gl.bindFramebuffer(gl.READ_FRAMEBUFFER, frame.buffer); gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
+        gl.blitFramebuffer(0, 0, frame.width, frame.height, 0, 0, frame.width, frame.height, gl.COLOR_BUFFER_BIT, gl.NEAREST);
+      }
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    }
+    // One reusable half-size target for soft presentation (not part of the frame pool).
+    halfFrame(width, height) {
+      const gl = this.gl;
+      if (this.half && this.half.width === width && this.half.height === height) return this.half;
+      if (this.half) { gl.deleteFramebuffer(this.half.buffer); gl.deleteTexture(this.half.texture); }
+      const texture = gl.createTexture(), buffer = gl.createFramebuffer();
+      gl.bindTexture(gl.TEXTURE_2D, texture); gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA8, width, height); this.setNearest();
+      gl.bindFramebuffer(gl.FRAMEBUFFER, buffer); gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
+      this.half = {width, height, texture, buffer};
+      return this.half;
     }
     // Copy a frame into a 2D canvas (top row first) for export.
     capture(frame) {
@@ -588,6 +674,7 @@
       this.pool = [];
       for (const {program} of Object.values(this.programs)) gl.deleteProgram(program);
       if (this.pendingBla) gl.deleteProgram(this.pendingBla.program);
+      if (this.half) { gl.deleteFramebuffer(this.half.buffer); gl.deleteTexture(this.half.texture); this.half = null; }
       gl.deleteTexture(this.empty); if (this.referenceTexture) gl.deleteTexture(this.referenceTexture); if (this.blaTexture) gl.deleteTexture(this.blaTexture);
     }
   }

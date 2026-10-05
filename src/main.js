@@ -231,10 +231,11 @@
   }
   /* sy: extra vertical scale of a grid-locked live frame (its vertical overscan differs slightly).
    * info: how the image was sampled — {palette, samples (per pixel, 0 for live frames), live
-   * ({grid, shift, min}: accumulation state), smooth (antialiased everywhere)}. */
-  function show(renderer, frame, renderView, key, sy = 1, info = null) {
-    display.sy = sy; display.info = info;
-    renderer.presentFrame(frame);
+   * ({grid, shift, min, typical, cycle}: accumulation state), smooth (antialiased everywhere)}.
+   * soft: present a single-sample image as its 2x2 average (see TetraGPU.presentFrame). */
+  function show(renderer, frame, renderView, key, sy = 1, info = null, soft = false) {
+    display.sy = sy; display.info = info; display.soft = soft;
+    renderer.presentFrame(frame, soft);
     if (display.frame !== frame) {
       const old = display.frame, oldRenderer = display.renderer;
       display.frame = frame; display.renderer = renderer;
@@ -336,11 +337,15 @@
   function livePlanFor(renderer, scene) {
     const target = targetSize(renderer), key = [scene.mode, scene.iterations, scene.palette, target.width, target.height].join('|');
     if (livePlan && livePlan.key === key && !livePlan.stale) return livePlan;
+    // Full resolution with every pixel each frame if affordable (4 samples if even that is), else
+    // interleaved refinement: a quarter of the pixels per frame, so four times as many pixels.
     const one = interactiveSize(renderer, scene, target, 1), four = interactiveSize(renderer, scene, target, 4);
-    const useFour = four.width >= target.width, pick = useFour ? four : one, samples = useFour ? 4 : 1;
+    let pick = one, samples = 1, interleave = 1;
+    if (four.width >= target.width) { pick = four; samples = 4; }
+    else if (one.width < target.width) { pick = interactiveSize(renderer, scene, target, 1, 4); interleave = 4; }
     // An unchanged size keeps the existing plan, and with it the sampling grid.
-    if (livePlan && livePlan.key === key && livePlan.width === pick.width && livePlan.height === pick.height && livePlan.samples === samples) { livePlan.stale = false; return livePlan; }
-    livePlan = {key, ...pick, samples, full: pick.width >= target.width};
+    if (livePlan && livePlan.key === key && livePlan.width === pick.width && livePlan.height === pick.height && livePlan.samples === samples && livePlan.interleave === interleave) { livePlan.stale = false; return livePlan; }
+    livePlan = {key, ...pick, samples, interleave, phase: 0, full: pick.width >= target.width};
     return livePlan;
   }
   // Snap the frame centre to the world grid of its pixels, so consecutive live frames of a pan
@@ -350,12 +355,12 @@
     const snap = (value, step) => { if (step <= 0n) return value; const q = value >= 0n ? (value + step / 2n) / step : -((-value + step / 2n) / step); return q * step; };
     return {x: snap(v.x, px), y: snap(v.y, py), span: v.span};
   }
-  function interactiveSize(renderer, scene, target = targetSize(renderer), samples = 1) {
+  function interactiveSize(renderer, scene, target = targetSize(renderer), samples = 1, interleave = 1) {
     const rate = (rates.get(rateKey(scene, samples)) ?? (rates.get(rateKey(scene, 1)) ?? rates.get('tile|' + rateKey(scene, 1)) ?? 60) / samples);
     // Slow GPUs (deep views on weak hardware) drop to coarser frames rather than stall the compositor.
     const floor = rate * FRAME_MS * 4 >= 8192 ? 8192 : 2048;
     // Cap one draw's orbit work so a sudden jump in cost cannot stall the GPU (driver watchdogs).
-    const pixels = Math.max(floor / samples, Math.min(target.width * target.height, rate * FRAME_MS, 8e7 / samples / renderer.effectiveIterations(scene, target.width, target.height)));
+    const pixels = Math.max(floor / samples, Math.min(target.width * target.height, rate * FRAME_MS * interleave, 8e7 * interleave / samples / renderer.effectiveIterations(scene, target.width, target.height)));
     // Quantised so consecutive frames reuse pooled textures instead of reallocating.
     const scale = Math.min(1, Math.round(Math.sqrt(pixels / (target.width * target.height)) * 24) / 24 || 1 / 24);
     return {width: Math.max(32, Math.round(target.width * scale)), height: Math.max(20, Math.round(target.height * scale))};
@@ -395,7 +400,7 @@
     const plan = livePlanFor(renderer, scene);
     // Grid-locked live frame (always, also at full resolution): one live pixel of overscan on every
     // side hides the sub-pixel shift.
-    let at, size, sy, min = 0, typical = 0;
+    let at, size, sy, min = 0, typical = 0, cycle = 0;
     {
       // Zoom levels of 1/8 octave: within a level the grid stays put and the compositor scales
       // the frame by at most 9%, so zooming does not resample the fractal every frame either.
@@ -417,7 +422,8 @@
       const shift = [Number((snapped.x - grid.ox) / px), Number((snapped.y - grid.oy) / py)];
       if (Math.abs(shift[0]) > 1e6 || Math.abs(shift[1]) > 1e6) { plan.grid = null; requestInteractive(); return; }
       scene = {...grid.scene, grid: {shift, step: grid.step}};
-      ({accum: scene.accum, min, typical} = liveHistory(renderer, grid, shift, size, at, sy, plan.samples));
+      ({accum: scene.accum, min, typical, cycle} = liveHistory(renderer, grid, shift, size, at, sy, plan.samples, plan.interleave));
+      if (plan.interleave > 1) { plan.phase = (plan.phase + 1) & 3; scene.accum.phase = plan.phase; }
     }
     const key = sceneKey(scene, at) + '|live' + plan.samples;
     if (mode === 'perturb') scheduleWarm();
@@ -435,14 +441,15 @@
       spent = ms;
       // A shifted history skips converged pixels, so its frames overstate the rate: they may only
       // lower the estimate. Frames that sample every pixel measure it.
-      const fresh = scene.accum.mode !== 1, k = rateKey(scene, plan.samples), measured = size.width * size.height / ms;
+      // Interleaved frames compute about a quarter of the pixels that have history.
+      const fresh = scene.accum.mode !== 1, k = rateKey(scene, plan.samples), measured = size.width * size.height / (scene.accum.mode ? plan.interleave : 1) / ms;
       if (fresh || measured < (rates.get(k) ?? Infinity)) rates.set(k, rates.has(k) ? rates.get(k) * 0.5 + measured * 0.5 : measured);
       // Re-plan only when far off budget: three slow frames in a row (a single hitch, such as a
       // garbage collection, keeps the plan) or one very slow frame; faster only from a fresh frame.
       plan.over = ms > FRAME_MS * 2.5 ? (plan.over || 0) + 1 : 0;
       if (plan.over >= 3 || ms > FRAME_MS * 8 || (fresh && ms < FRAME_MS * 0.35 && !plan.full)) plan.stale = true;
       if (renderer === gpu) {
-        show(renderer, frame, at, key, sy, {palette: scene.palette, samples: 0, live: {grid: plan.grid, shift: scene.grid.shift, min, typical}, smooth: typical >= 4});
+        show(renderer, frame, at, key, sy, {palette: scene.palette, samples: 0, live: {grid: plan.grid, shift: scene.grid.shift, min, typical, cycle}, smooth: typical >= 4});
         interactiveCount++; frame = null;
       }
     } catch (error) {
@@ -468,15 +475,18 @@
    * with no history starts from scratch. Returns the shader input and the fewest samples any
    * pixel will hold after this frame (min) and what the bulk of the image holds (typical:
    * newly revealed strips at an edge aside). */
-  function liveHistory(renderer, grid, shift, size, at, sy, perFrame) {
+  function liveHistory(renderer, grid, shift, size, at, sy, perFrame, interleave) {
     const info = display.frame && display.renderer === renderer && display.canvas === gpuCanvas ? display.info : null;
-    const none = {accum: {mode: 0}, min: perFrame, typical: perFrame};
+    const none = {accum: {mode: 0}, min: perFrame, typical: perFrame, cycle: 0};
     if (!info || info.palette !== palette) return none;
     const frame = display.frame, live = info.live;
     if (live && live.grid === grid && frame.width === size.width && frame.height === size.height) {
       const dx = shift[0] - live.shift[0], dy = shift[1] - live.shift[1];
-      const typical = Math.min(16, live.typical + perFrame);
-      return {accum: {mode: 1, frame, shift: [dx, dy]}, min: dx === 0 && dy === 0 ? Math.min(16, live.min + perFrame) : perFrame, typical};
+      const typical = Math.min(16, live.typical + perFrame / interleave);
+      // Interleaved, every pixel has taken new samples once a full cycle of phases has passed.
+      if (dx || dy) return {accum: {mode: 1, frame, shift: [dx, dy]}, min: perFrame, typical, cycle: 0};
+      const cycle = live.cycle + 1, full = cycle >= interleave;
+      return {accum: {mode: 1, frame, shift: [dx, dy]}, min: full ? Math.min(16, live.min + perFrame) : live.min, typical, cycle: full ? 0 : cycle};
     }
     // Pixel centre of this frame -> texel coordinate of the shown frame, per axis (both images
     // map world coordinates linearly with y up; spans as ratios keep this exact at any depth).
@@ -487,7 +497,7 @@
     const offset = [(ox - rx / 2 + 0.5) * frame.width, (oy - ry / 2 + 0.5) * frame.height];
     if (![...scale, ...offset].every(Number.isFinite)) return none;
     const trusted = Math.min(4, live ? live.typical : Math.max(1, info.samples));
-    return {accum: {mode: 2, frame, scale, offset, count: live ? 0 : Math.max(1, info.samples), cap: 4}, min: perFrame, typical: Math.min(16, trusted + perFrame)};
+    return {accum: {mode: 2, frame, scale, offset, count: live ? 0 : Math.max(1, info.samples), cap: 4}, min: perFrame, typical: Math.min(16, trusted + perFrame / interleave), cycle: 0};
   }
   async function runStage(id, renderer, frame, scene, samples, onBatch) {
     const edge = tileEdge(renderer.effectiveIterations(scene, frame.width, frame.height), samples), tiles = TetraRender.tiles(frame.width, frame.height, edge), key = rateKey(scene, samples);
@@ -530,9 +540,12 @@
     const total = stages.length + 1, held = new Set();
     const hold = frame => { pin(frame); held.add(frame); return frame; };
     const drop = frame => { if (held.delete(frame)) unpin(renderer, frame); };
-    // An antialiased picture on screen (a converged live frame) is not replaced by single-sample
-    // stages: they would flash noise over a smooth image. Stages then appear once antialiased.
+    /* Over an antialiased picture (a converged live frame) single-sample stages would flash
+     * noise. They are shown soft (the 2x2 average) where that is sharper than the picture on
+     * screen — the 1x stage once complete, the 4x stage while it fills in — and held back
+     * otherwise until antialiased. The last stage always appears. */
     const keepSmooth = display.renderer === renderer && display.canvas === gpuCanvas && !!display.info?.smooth && display.info.palette === scene.palette;
+    const softer = keepSmooth && !!display.frame && display.frame.width < target.width * 0.5;
     try {
       let previous = null;
       if (display.frame && display.renderer === renderer && display.key === key) {
@@ -547,7 +560,7 @@
         show(renderer, previous, v, key, 1, {palette: scene.palette, samples: 1, live: null, smooth: false});
       }
       // smoothBase: the frame under the current stage is a completed antialiased stage.
-      let presenting = !keepSmooth, smoothBase = false;
+      let smoothBase = false;
       for (let s = 0; s < stages.length; s++) {
         const stage = stages[s];
         renderStage = stage.name;
@@ -557,13 +570,16 @@
           setProgress((s + 1 + fraction) / total * 100);
           $('loadingText').textContent = `${stage.label} · ${target.width} × ${target.height} · ${Math.round(fraction * 100)}%`;
           $('resolutionReadout').textContent = `${target.width} × ${target.height} / ${Math.round(fraction * 100)}%`;
-          // Held back behind a smooth picture until antialiased, the last stage, or a slow render.
-          if (!presenting && !(last && (stage.samples >= 4 || s === stages.length - 1 || performance.now() - started > 2500))) return;
+          const smooth = stage.samples >= 4 && (last || smoothBase), final = last && s === stages.length - 1;
+          let soft = false;
+          if (keepSmooth && !smooth && !final) {
+            if (!softer || (stage.samples === 1 && !last)) return;
+            soft = true;
+          }
           const now = performance.now();
           if (last || now - lastPresented > 50) {
-            const smooth = stage.samples >= 4 && (last || smoothBase);
-            show(renderer, frame, v, key, 1, {palette: scene.palette, samples: last ? stage.samples : smoothBase ? 4 : 1, live: null, smooth});
-            lastPresented = now; presenting = true;
+            show(renderer, frame, v, key, 1, {palette: scene.palette, samples: last ? stage.samples : smoothBase ? 4 : 1, live: null, smooth: smooth || soft}, soft);
+            lastPresented = now;
           }
         });
         smoothBase = ok && stage.samples >= 4;
@@ -714,14 +730,17 @@
    * a quiet moment: compiling can occupy a slow GPU process for a second, which should
    * not land in the middle of a gesture or delay the first image. */
   let warmTimer = 0, quietSince = 0;
+  // In shallow views the perturbation program is used once in a quiet moment too, so zooming
+  // past the direct limit for the first time does not wait for the driver to compile it.
   function scheduleWarm() {
-    if (!gpu || gpu.warmed || warmTimer || currentMode !== 'perturb') return;
+    const deep = currentMode === 'perturb';
+    if (!gpu || warmTimer || (deep ? gpu.warmed : gpu.perturbWarm)) return;
     warmTimer = setTimeout(() => {
       warmTimer = 0;
       if (!gpu || document.hidden) return;
       if (gpuBusy || !lastRenderComplete || pointerMap.size || motion.raf || performance.now() - quietSince < 2500) { scheduleWarm(); return; }
       let done = true;
-      try { done = gpu.warm(); } catch { /* the plain program keeps working */ }
+      try { if (currentMode === 'perturb') done = gpu.warm(); else gpu.warmPerturb(); } catch { /* the programs keep working */ }
       if (!done) scheduleWarm();
     }, 2500);
   }
@@ -1179,6 +1198,6 @@
     referencesComputed: references.computed,
     savedCount: savedViews.length, focus: document.body.classList.contains('focus-mode'), version: VERSION, renderStage, quality, colorPhase: hue(), flow,
     interactiveFrames: interactiveCount, animating: !!motion.raf, gpuFrames: gpu ? gpu.live : 0, gpuPooled: gpu ? gpu.pool.length : 0, displayWidth: display.canvas.width, displayHeight: display.canvas.height,
-    bla: gpu?.bla ? {levels: gpu.bla.levels, reach: gpu.bla.reach, compiled: !!gpu.programs.perturbBla, mode: gpu.blaMode} : null, blaReady: !!gpu?.programs.perturbBla, displayView: display.view && serialize(display.view), displayCanvas: display.canvas.id, liveSamples: livePlan ? livePlan.samples : 0, liveMin: display.info?.live ? display.info.live.min : null, displaySmooth: !!display.info?.smooth, preciseTrig: !!gpu?.preciseTrig,
+    bla: gpu?.bla ? {levels: gpu.bla.levels, reach: gpu.bla.reach, compiled: !!gpu.programs.perturbBla, mode: gpu.blaMode} : null, blaReady: !!gpu?.programs.perturbBla, displayView: display.view && serialize(display.view), displayCanvas: display.canvas.id, liveSamples: livePlan ? livePlan.samples : 0, liveInterleave: livePlan ? livePlan.interleave : 0, liveSize: livePlan ? [livePlan.width, livePlan.height] : null, liveMin: display.info?.live ? display.info.live.min : null, displaySmooth: !!display.info?.smooth, displaySoft: !!display.soft, perturbWarm: !!gpu?.perturbWarm, preciseTrig: !!gpu?.preciseTrig,
   })});
 })();

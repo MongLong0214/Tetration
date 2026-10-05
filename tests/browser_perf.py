@@ -41,6 +41,11 @@ def body():
         page.wait_for_timeout(3000)
         assert not state(page)['blaReady'], 'BLA program compiled outside perturbation depths'
         suite.record('Shallow views never compile the deep-zoom (BLA) program')
+        # The plain perturbation program is used once in a quiet moment, so the first deep frame does not compile it.
+        page.wait_for_function('() => tetraDiagnostics.perturbWarm', timeout=20000)
+        long_tasks = page.evaluate('__perf.longTasks')
+        assert not long_tasks or max(long_tasks) < 400, long_tasks
+        suite.record('Shallow views prepare the perturbation program in a quiet moment')
 
         box = page.locator('#viewport').bounding_box()
         cx, cy = box['x'] + box['width'] / 2, box['y'] + box['height'] / 2
@@ -76,7 +81,8 @@ def body():
         frames = state(page)['interactiveFrames'] - frames0
         p95 = gaps[int(len(gaps) * .95)]
         assert frames >= 15 and p95 < 150, (frames, p95)
-        suite.record('Deep (10^25) drag keeps live perturbation frames', {'frames_in_2s': frames, 'frame_gap_p95_ms': round(p95, 1)})
+        live = state(page)
+        suite.record('Deep (10^25) drag keeps live perturbation frames', {'frames_in_2s': frames, 'frame_gap_p95_ms': round(p95, 1), 'live_size': live['liveSize'], 'interleave': live['liveInterleave']})
         settle(page)
 
         def wheel():
@@ -105,7 +111,8 @@ def body():
         # Grid-locked live frames are re-used while a move stays within one live pixel, so fewer
         # draws are needed for the same motion; the display cadence (p95) is the smoothness measure.
         assert frames >= 12 and p95 < 150, (frames, p95)
-        suite.record('Deep (10^100) drag keeps live BLA perturbation frames', {'frames_in_2s': frames, 'frame_gap_p95_ms': round(p95, 1), 'complete_s': round(info['lastCompleted']['elapsed'] / 1000, 1), 'bla': info['bla']})
+        live = state(page)
+        suite.record('Deep (10^100) drag keeps live BLA perturbation frames', {'frames_in_2s': frames, 'frame_gap_p95_ms': round(p95, 1), 'complete_s': round(info['lastCompleted']['elapsed'] / 1000, 1), 'live_size': live['liveSize'], 'interleave': live['liveInterleave'], 'bla': info['bla']})
         settle(page)
 
         # Resource stability across a long exploration session.

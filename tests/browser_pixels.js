@@ -188,16 +188,24 @@
      * converge to the 16-sample image; a still frame copies it bit for bit; a pan copies every
      * overlapping pixel and starts revealed ones afresh; a resampled history is trusted for at
      * most its cap. */
-    accumulate(cx, cy, span, W, H, iterations, mode, perFrame) {
+    accumulate(cx, cy, span, W, H, iterations, mode, perFrame, interleave = false) {
       const built = scene(cx, cy, span, iterations, 0, mode), r = gpu();
       const unit = (mode === 'direct' ? built.scene.span : built.scene.spanMant) / W;
-      const at = (shift, accum) => ({...built.scene, aspect: H / W, grid: {shift, step: [unit, unit]}, ...(accum ? {accum} : {})});
+      // Interleaved: a world-locked 2x2 pattern, one phase per frame, only for pixels with history.
+      let phase = 0;
+      const at = (shift, accum) => ({...built.scene, aspect: H / W, grid: {shift, step: [unit, unit]}, ...(accum ? {accum: interleave ? {...accum, phase: (phase = (phase + 1) & 3)} : accum} : {})});
       const render = (sc, samples) => { const f = r.beginFrame(W, H); r.draw(f, {x: 0, y: 0, width: W, height: H}, sc, samples); return f; };
       const take = f => { const out = r.readFrame(f); r.releaseFrame(f); return out; };
       const reference = take(render(at([0, 0]), 16));
-      let prev = render(at([0, 0], {mode: 0}), perFrame), frames = 1;
-      while (frames * perFrame < 16) {
+      let prev = render(at([0, 0], {mode: 0}), perFrame), frames = 1, phaseWrong = 0;
+      const needed = interleave ? 1 + 4 * (16 / perFrame - 1) : 16 / perFrame;
+      while (frames < needed) {
         const next = render(at([0, 0], {mode: 1, frame: prev, shift: [0, 0]}), perFrame);
+        if (interleave && frames === 1) {
+          // The first refinement adds samples exactly to the pixels of its phase.
+          const px = r.readFrame(next);
+          for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (px[(y * W + x) * 4 + 3] !== ((x & 1) + 2 * (y & 1) === phase ? 2 : 1) * perFrame) phaseWrong++;
+        }
         r.releaseFrame(prev); prev = next; frames++;
       }
       const converged = r.readFrame(prev);
@@ -223,7 +231,7 @@
       let resampledMax = 0, resampledTrusted = 0;
       for (let k = 3; k < resampled.length; k += 4) { resampledMax = Math.max(resampledMax, resampled[k]); if (resampled[k] === 4 + perFrame) resampledTrusted++; }
       r.releaseFrame(prev);
-      return {frames, worst, mean: sum / (W * H * 3), notSixteen, stillDiff, overlap, overlapDiff, revealed, revealedWrong, resampledMax, resampledTrusted, pixels: W * H};
+      return {frames, worst, mean: sum / (W * H * 3), notSixteen, stillDiff, overlap, overlapDiff, revealed, revealedWrong, resampledMax, resampledTrusted, phaseWrong, pixels: W * H};
     },
   };
 })();
