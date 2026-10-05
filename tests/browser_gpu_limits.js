@@ -31,6 +31,7 @@ window.__gpuPartialComparison = async(samples=16)=>{
   const r=new TetraGPU(document.createElement('canvas')),cases=[],W=48,H=30;
   r.program('perturb');
   for(const threshold of [0.035,0])for(const blaMode of ['off','on'])for(const n of [128,1024,4096])for(const mode of ['direct','perturb'])for(const adaptive of [false,true]){
+   if(window.__traceKernels)console.log('AA_CASE',JSON.stringify({samples,threshold,blaMode,n,mode,adaptive}));
    r.blaMode=blaMode;
    const scene={mode,iterations:n,palette:0,aspect:H/W,rules:TetraCore.RULES.gpu};
    if(mode==='direct'){scene.center=[-1.84,.09];scene.span=.46;}

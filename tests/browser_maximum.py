@@ -4,8 +4,11 @@ from playwright.sync_api import sync_playwright
 import math
 import struct
 
-suite = Suite('maximum', ['Desktop Chromium/WebKit, not physical Safari or mobile qualification.',
+KERNEL_ONLY = os.environ.get('TETRA_KERNEL_ONLY') == '1'
+suite = Suite('maximum-kernel' if KERNEL_ONLY else 'maximum', ['Desktop Chromium/WebKit, not physical Safari or mobile qualification.',
                          'Float outputs compare finite FP32 states. No infinite-orbit proof is claimed.'])
+if KERNEL_ONLY:
+    suite.report['limitations'].append('Kernel-only diagnostic; excludes cold app flows and is not full qualification.')
 CASES = [
     ('Plume', '-2.2930579295624999999999991', '0.33208044555625', '5e-11', 16384),
     ('Abyss', '-0.605137938972379900971816986088586258864125',
@@ -18,10 +21,11 @@ CASES = [
 TRACE = '''(()=>{
  Object.defineProperty(window,'TetraGPU',{configurable:true,set(GPU){
   Object.defineProperty(window,'TetraGPU',{configurable:true,writable:true,value:GPU});
-  const p=GPU.prototype,prepare=p.prepare,program=p.program,draw=p.drawTile,fence=p.fence;
+  const p=GPU.prototype,prepare=p.prepare,program=p.program,draw=p.drawTile,partial=p.drawAATile,fence=p.fence;
   p.program=function(name){this.__traceProgram=name;return program.call(this,name);};
   p.prepare=function(frame,scene,samples,...args){this.__traceScene={mode:scene.mode,n:scene.iterations,samples,w:frame.width,h:frame.height};return prepare.call(this,frame,scene,samples,...args);};
   p.drawTile=function(frame,tile){this.__traceTile=tile;return draw.call(this,frame,tile);};
+  p.drawAATile=function(frame,tile,...args){this.__traceTile={...tile,partial:true};return partial.call(this,frame,tile,...args);};
   p.fence=function(){const count=this.__traceCount=(this.__traceCount||0)+1,started=performance.now();
    const detail={count,program:this.__traceProgram,scene:this.__traceScene,tile:this.__traceTile,stage:window.tetraDiagnostics?.renderStage};
    if(count<=12)console.log('MAX_FENCE_START',JSON.stringify(detail));
@@ -53,7 +57,7 @@ def navigate_after(page):
 
 def body():
     with sync_playwright() as p:
-        for name, x, y, span, n in CASES:
+        for name, x, y, span, n in ([] if KERNEL_ONLY else CASES):
             # Each cold process owns the full original resolution/cap/AA case.
             browser = launch(p); suite.report['browser_version'] = browser.version
             context = browser.new_context(viewport={'width': 640, 'height': 430})
@@ -73,27 +77,32 @@ def body():
                          {k: d[k] for k in ['backend', 'gpuFailure', 'lastCompleted']})
             context.close(); browser.close()
 
-        browser = launch(p); context = browser.new_context(viewport={'width': 640, 'height': 430})
-        context.add_init_script('''const get=WebGL2RenderingContext.prototype.getExtension;
-          WebGL2RenderingContext.prototype.getExtension=function(name){return name==='EXT_color_buffer_float'?null:get.call(this,name);};''')
-        suite.report['limitations'].append('One context injects absence of the optional float-color extension; CPU pixels and navigation are real.')
-        page = suite.watch(context.new_page())
-        x, y = '-2.2930579295428124999999991', '0.3320804455471875'
-        open_app(page, f'v=1&x={x}&y={y}&s=1e-50&n=16384&q=16')
-        d = check_requested(page, 16384); assert d['mode'] == 'cpu-perturb', d
-        controls(page); page.locator('#quality').select_option('4'); close_controls(page); settle(page)
-        check_requested(page, 16384, 4)
-        assert state(page)['mode'] == 'cpu-perturb'
-        navigate_after(page)
-        suite.record('Missing float-color extension computes the full deep request on FP64 Workers and remains navigable')
-        context.close(); browser.close()
+        if not KERNEL_ONLY:
+            browser = launch(p); context = browser.new_context(viewport={'width': 640, 'height': 430})
+            context.add_init_script('''const get=WebGL2RenderingContext.prototype.getExtension;
+              WebGL2RenderingContext.prototype.getExtension=function(name){return name==='EXT_color_buffer_float'?null:get.call(this,name);};''')
+            suite.report['limitations'].append('One context injects absence of the optional float-color extension; CPU pixels and navigation are real.')
+            page = suite.watch(context.new_page())
+            x, y = '-2.2930579295428124999999991', '0.3320804455471875'
+            open_app(page, f'v=1&x={x}&y={y}&s=1e-50&n=16384&q=16')
+            d = check_requested(page, 16384); assert d['mode'] == 'cpu-perturb', d
+            controls(page); page.locator('#quality').select_option('4'); close_controls(page); settle(page)
+            check_requested(page, 16384, 4)
+            assert state(page)['mode'] == 'cpu-perturb'
+            navigate_after(page)
+            suite.record('Missing float-color extension computes the full deep request on FP64 Workers and remains navigable')
+            context.close(); browser.close()
 
         browser = launch(p); context = browser.new_context(viewport={'width': 320, 'height': 240})
         # Isolate kernel probes from the application's idle-time warm-up; the
         # probe's own WebGL context still uses the real browser and GPU.
         context.add_init_script('''const get=HTMLCanvasElement.prototype.getContext;
           HTMLCanvasElement.prototype.getContext=function(type,...args){if(type==='webgl2'&&this.id==='gpuCanvas')return null;return get.call(this,type,...args);};''')
-        page = suite.watch(context.new_page()); open_app(page, 'v=1&x=.5&y=0&s=.1&n=64&q=1&e=cpu')
+        page = suite.watch(context.new_page())
+        if os.environ.get('TETRA_TRACE_GPU') == '1':
+            page.add_init_script(TRACE + 'window.__traceKernels=true;')
+            page.on('console', lambda msg: print('MAX_CONSOLE', msg.text, flush=True))
+        open_app(page, 'v=1&x=.5&y=0&s=.1&n=64&q=1&e=cpu')
         page.evaluate((ROOT / 'tests/browser_gpu_limits.js').read_text())
         for samples in [4, 16]:
             with browser_deadline(240000):

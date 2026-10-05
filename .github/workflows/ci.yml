@@ -9,7 +9,7 @@ on:
         description: Full qualification or a production GPU diagnostic
         type: choice
         default: all
-        options: [all, production, production-skip-loss, maximum, maximum-trace, cpu-recovery]
+        options: [all, production, production-skip-loss, maximum, maximum-trace, maximum-kernel-webkit-trace, cpu-recovery]
 permissions:
   contents: read
 concurrency:
@@ -41,7 +41,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        suite: ${{ fromJSON(inputs.suite == 'cpu-recovery' && '["cpu-recovery"]' || startsWith(inputs.suite, 'production') && '["production"]' || startsWith(inputs.suite, 'maximum') && '["maximum"]' || '["review","release","deep","quality","explorer","perf","reuse","interactions","production","zoom","webkit","reuse-webkit","interactions-webkit","production-webkit","zoom-webkit","maximum","maximum-webkit"]') }}
+        suite: ${{ fromJSON(inputs.suite == 'cpu-recovery' && '["cpu-recovery"]' || startsWith(inputs.suite, 'production') && '["production"]' || inputs.suite == 'maximum-kernel-webkit-trace' && '["maximum-webkit"]' || startsWith(inputs.suite, 'maximum') && '["maximum"]' || '["review","release","deep","quality","explorer","perf","reuse","interactions","production","zoom","webkit","reuse-webkit","interactions-webkit","production-webkit","zoom-webkit","maximum","maximum-webkit"]') }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
@@ -74,7 +74,8 @@ jobs:
         env:
           TETRA_BASE_URL: http://127.0.0.1:4173
           TETRA_HARDWARE_BROWSER: ${{ runner.os == 'macOS' && '1' || '0' }}
-          TETRA_TRACE_GPU: ${{ (startsWith(inputs.suite, 'production') || inputs.suite == 'maximum-trace') && '1' || '0' }}
+          TETRA_TRACE_GPU: ${{ (startsWith(inputs.suite, 'production') || inputs.suite == 'maximum-trace' || inputs.suite == 'maximum-kernel-webkit-trace') && '1' || '0' }}
+          TETRA_KERNEL_ONLY: ${{ inputs.suite == 'maximum-kernel-webkit-trace' && '1' || '0' }}
           TETRA_SKIP_PENDING_LOSS: ${{ inputs.suite == 'production-skip-loss' && '1' || '0' }}
           DEBUG: ${{ startsWith(inputs.suite, 'production') && 'pw:browser' || '' }}
       - name: Preserve browser evidence
