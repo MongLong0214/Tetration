@@ -592,7 +592,11 @@
     const effective = renderer.effectiveIterations(scene, frame.width, frame.height);
     const workCap = 8e7;
     const highCap = scene.iterations >= 8192;
-    const partial = splitAA(scene.iterations, samples) && renderer.floatColor;
+    // A seeded 4096-step BLA pass has already skipped the long approach.
+    // Splitting its AA adds a measured fivefold Auto Horizon regression.
+    // Keep plain/unseeded 4096 and every higher-cap request bounded.
+    const ordinaryBlaAA = scene.iterations === 4096 && samples === 16 && frame.seed && scene.mode === 'perturb' && renderer.blaLevels(frame, scene, false) > 0;
+    const partial = splitAA(scene.iterations, samples) && renderer.floatColor && !ordinaryBlaAA;
     // A partial pass evaluates one orbit per pixel. Use that per-pass work
     // when sizing its tile; charging all AA samples here quadruples fences.
     const edge = partial ? Math.min(highCap ? 32 : 64, tileEdge(effective, 1)) : highCap ? Math.min(16, tileEdge(effective, samples)) : tileEdge(effective, samples);
