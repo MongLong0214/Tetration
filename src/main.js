@@ -96,10 +96,11 @@
   function chooseMode(v = view) {
     if (engine === 'exact') return 'exact';
     const pixel = num(v.span) / Math.max(dims.w, 1), scale = magnitude(v);
-    // Long direct FP32 loops can stall the browser compositor, not just this
-    // renderer. FP64 Workers now skip exact machine cycles and finish these
-    // dense high-cap views faster, retaining full resolution, AA and the cap.
-    if (engine === 'auto' && pixel >= scale * DIRECT_LIMIT && iterationsFor(v) >= 8192) return 'cpu';
+    // Dense high-cap views around FP64 scales finish faster on Workers using
+    // exact machine cycles. Very deep views keep GPU perturbation, with long
+    // Ultra passes split into four-sample submissions below.
+    if (engine === 'auto' && iterationsFor(v) >= 8192 &&
+        (num(v.span) >= scale * FP64_LIMIT || (quality === 16 && gpu && !gpu.floatColor))) return pixel >= scale * FP64_LIMIT ? 'cpu' : 'cpu-perturb';
     if (engine === 'auto' && gpu) return pixel >= scale * DIRECT_LIMIT ? 'gpu' : 'perturb';
     return pixel >= scale * FP64_LIMIT ? 'cpu' : 'cpu-perturb';
   }
@@ -588,7 +589,8 @@
   async function runStage(id, renderer, frame, scene, samples, onBatch, work = null) {
     const effective = renderer.effectiveIterations(scene, frame.width, frame.height);
     const workCap = 8e7;
-    const edge = tileEdge(effective, samples);
+    const partial = samples === 16 && scene.iterations >= 8192 && renderer.floatColor;
+    const edge = partial ? Math.min(16, tileEdge(effective, samples)) : tileEdge(effective, samples);
     const tiles = work ? TetraRender.exposedTiles(frame.width, frame.height, work.dx, work.dy, edge) : TetraRender.tiles(frame.width, frame.height, edge), key = rateKey(scene, samples);
     const area = frame.width * frame.height;
     // Cheap tiles can precede a dense, unresolved basin. Measured throughput
@@ -611,9 +613,13 @@
       setGPUBusy(true);
       const t0 = performance.now();
       try {
-        renderer.prepare(frame, scene, samples, work ? 0 : undefined);
-        for (const t of batch) renderer.drawTile(frame, t);
-        await renderer.fence();
+        if (partial) {
+          for (const t of batch) if (!(await renderer.drawUltraTile(frame, t, scene, () => id !== serial || renderer !== gpu, work ? 0 : undefined))) return false;
+        } else {
+          renderer.prepare(frame, scene, samples, work ? 0 : undefined);
+          for (const t of batch) renderer.drawTile(frame, t);
+          await renderer.fence();
+        }
       } finally { setGPUBusy(false); }
       const ms = Math.max(0.5, performance.now() - t0), measured = pixels / ms;
       rates.set(tileKey, measured);

@@ -200,6 +200,10 @@
     const Lr = ref.L0[0] + dLr, Li = ref.L0[1] + dLi, lowA = rules.lowA, maxB = rules.maxB, tolerance = rules.tol;
     const levels = bla ? bla.levels : 0, base = bla?.base, table = bla?.data;
     let k = 1, dr = 0, di = 0, wr = 1, wi = 0, oldr = 0, oldi = 0, fixed = 0, periodic = 0, linear = levels > 0;
+    let checkpoint = null, checkpointStep = 0, checkpointDistance = 1;
+    // Observe a complete cycle while every BLA run is still eligible. If that
+    // cycle uses no BLA skips, a shorter remaining cap cannot introduce one.
+    const cycleLimit = iterations >= 8192 ? iterations - (levels ? 1 << (levels - 1) : 0) : -1;
     for (let n = 1; n <= iterations; n++) {
       if (k >= length) { dr = wr; di = wi; k = 0; }
       if (k === 0) linear = levels > 0;
@@ -222,6 +226,7 @@
           if (j === 1 && R > 0) linear = false;
         }
         if (skip) {
+          checkpoint = null; checkpointStep = 0; checkpointDistance = 1;
           // Skipped steps stay within epsMax of the reference, so V + d loses nothing here.
           k += skip; n += skip - 1;
           wr = V[2 * k] + dr; wi = V[2 * k + 1] + di; oldr = V[2 * k - 2]; oldi = V[2 * k - 1];
@@ -251,6 +256,21 @@
       if (fixed >= 8) return { kind: 1, steps: n, re: wr, im: wi };
       if (periodic >= 12) return { kind: 2, steps: n, re: wr, im: wi };
       if (k && nr * nr + ni * ni < dr * dr + di * di) { dr = nr; di = ni; k = 0; }
+      if (n <= cycleLimit) {
+        // Reference index, perturbation, previous iterate and BLA phase are
+        // part of the state too. Any actual BLA skip invalidates the checkpoint.
+        if (checkpointStep > 2 && k === checkpoint[0] && linear === checkpoint[1] &&
+            Object.is(dr, checkpoint[2]) && Object.is(di, checkpoint[3]) &&
+            Object.is(wr, checkpoint[4]) && Object.is(wi, checkpoint[5]) &&
+            Object.is(oldr, checkpoint[6]) && Object.is(oldi, checkpoint[7]) &&
+            fixed === checkpoint[8] && periodic === checkpoint[9]) {
+          const cycle = n - checkpointStep;
+          n += Math.floor((iterations - n) / cycle) * cycle;
+        } else if (n - checkpointStep >= checkpointDistance) {
+          checkpoint = [k, linear, dr, di, wr, wi, oldr, oldi, fixed, periodic];
+          checkpointStep = n; checkpointDistance *= 2;
+        }
+      }
     }
     return { kind: 0, steps: iterations, re: wr, im: wi };
   }

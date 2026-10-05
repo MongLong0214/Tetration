@@ -296,9 +296,25 @@ E = A2 E1 + C2 B1² + D2 B1 + E2
 
 같은 콜드 URL·640×354·16384회·16샘플에서 실제 M4에서도 직접 재현했다. 페이지는 visible/focused이며 실제 CPU 계산은 약 4.1초에 끝났지만 rAF가 멈춰 설정 버튼을 누르지 못했다. 그리드 Canvas의 software 선호 설정과 direct FP32의 정확한 상태 반복 건너뛰기를 각각 시도했으나 같은 입력 정지가 남아 채택하지 않았다. native 드라이버 내부 원인은 확정하지 않았다.
 
-Automatic은 이제 **direct 영역의 8192회 이상**에서 FP64 Worker를 선택한다. CPU의 exact machine-cycle 최적화는 그대로 사용하고 반복 수·AA·최종 해상도를 줄이지 않는다. 낮은 반복 수와 deep perturbation은 기존 GPU 경로를 유지한다. 같은 콜드 최대 URL은 실제 M4에서 약 4.16초에 완성되고 화면 갱신은 초당 약 60회 계속됐다. 이후 native 설정 변경·Home·Back 조작과 GPU 재사용이 정상 완료됐으며 GPU timeout도 발생하지 않았다. 이는 관측한 위험 작업을 보내기 전에 피하는 정책이며, 이미 멈춘 native GPU가 언제나 복구된다는 보장은 아니다. FP64와 FP32는 정밀도와 유한 분류 규칙이 다르므로 두 backend의 모든 chaotic 픽셀이 동일하다는 주장도 하지 않는다.
+`734749e`에서는 Automatic이 **direct 영역의 8192회 이상**에서 FP64 Worker를 선택하도록 했다. CPU의 exact machine-cycle 최적화는 그대로 사용하고 반복 수·AA·최종 해상도를 줄이지 않는다. 낮은 반복 수와 deep perturbation은 기존 GPU 경로를 유지한다. 같은 콜드 최대 URL은 실제 M4에서 약 4.16초에 완성되고 화면 갱신은 초당 약 60회 계속됐다. 이후 native 설정 변경·Home·Back 조작과 GPU 재사용이 정상 완료됐으며 GPU timeout도 발생하지 않았다. 이는 관측한 위험 작업을 보내기 전에 피하는 정책이며, 이미 멈춘 native GPU가 언제나 복구된다는 보장은 아니다. FP64와 FP32는 정밀도와 유한 분류 규칙이 다르므로 두 backend의 모든 chaotic 픽셀이 동일하다는 주장도 하지 않는다.
 
-production 검사는 콜드 최대 완료 후 실제 설정 클릭, 8192회/AA16/동일 해상도 계산, 낮은 반복 수 전환, Home·Back까지 추가했다. click 강제 실행, actionability 우회, 원래 240초 계산 한도 변경은 없다. 이 변경의 전체 로컬·원격 검증은 진행 중이다.
+production 검사는 콜드 최대 완료 후 실제 설정 클릭, 8192회/AA16/동일 해상도 계산, 낮은 반복 수 전환, Home·Back까지 추가했다. click 강제 실행, actionability 우회, 원래 240초 계산 한도 변경은 없다. `734749e`의 전체 로컬 15개 스위트·257개 검사와 원격 `37342654282`의 15개 스위트·135개 단위 검사는 통과했다. 그러나 다음 깊은 최대 설정 검사는 이 범위 밖의 실제 결함을 발견했다.
+
+## 깊은 최대 설정의 GPU 제출과 상태 반복
+
+`734749e`가 전체 검사를 통과한 뒤, 새 브라우저에서 Plume·Abyss·Horizon을 각각 16384회·AA16·640×354로 열어 완료 후 실제 설정·Home·Back을 조작했다. Plume은 GPU timeout 후 실제 FP64 계산을 약 135초에 끝냈지만 rAF가 멈추고 설정 클릭의 원래 30초 한도를 넘겼다. 기존 전체 통과는 유지하되 이 깊은 설정의 통과로 확대 해석하지 않는다.
+
+현재 Automatic은 8192회 이상에서 상대 span이 FP64 규모(`magnitude × 1e-13`) 이상이면 CPU를 사용한다. 픽셀 크기에 따라 direct FP64 또는 FP64 perturbation을 선택하므로 viewport 크기로 이 정책이 뒤집히지 않는다. 더 깊은 영역은 GPU perturbation을 유지한다. 고반복 AA16에서 선택적 float-color 확장이 없으면 실제 CPU perturbation으로 전체 요청을 계산한다. Exact 및 명시적 CPU 설정, 낮은 반복 수의 GPU 경로는 유지한다.
+
+고반복 GPU Ultra는 최대 16×16 타일에서 한 번에 새 4샘플만 계산하고 매 제출의 native fence를 기다린다. 두 작은 RGBA32F 텍스처(16×16 기준 총 8 KiB)에 합을 보존한 뒤 마지막에 한 번만 RGBA8로 반올림한다. 기존 4샘플 seed, 대비 기반 선택과 팬의 강제 AA16 띠 계산을 그대로 반영한다. [EXT_color_buffer_float 표준](https://registry.khronos.org/webgl/extensions/EXT_color_buffer_float/)은 RGBA32F 색 출력의 비클램핑과 RGBA/FLOAT readback을 규정한다. 취소된 중간 합은 기존 완료 프레임에 복사하지 않는다. 실제 원본과 수정 경로를 같은 제한된 제출로 비교한 48개 조합·69,120픽셀에서 모든 RGBA 바이트, 이전 프레임, 취소 프레임이 일치했다. 원본 AA16을 제한 없이 큰 타일로 제출한 초기 비교는 native 컨텍스트의 이후 출력까지 바꾸었으므로 통과로 세지 않는다. 드라이버 내부 원인은 확정하지 않았다.
+
+FP64 perturbation도 기준 인덱스·오프셋·현재/직전 복소 상태·고정점/주기 카운터·BLA phase가 완전히 같은 machine cycle만 건너뛴다. 실제 BLA 점프는 checkpoint를 무효화하고 모든 BLA 길이가 아직 허용되는 범위에서만 cycle을 확인한다. 변경 전후 6개 뷰·10개 cap·CPU/GPU 규칙·BLA on/off의 23,040개 결과 객체가 정확히 같다. signed zero와 이후 기준 threshold를 놓치는 가짜 주기는 단위 검사로 보존했다.
+
+GPU는 BLA 이후의 plain FP32 루프에만 완전한 상태 checkpoint를 적용한다. 저반복 셰이더의 register 비용을 늘리지 않도록 고반복 프로그램을 분리한다. 3개 깊이·BLA on/off·8192/8193/16383/16384의 6,144개 지점에서 FP32 최종 복소값·분류·논리 종료 단계를 uint 비트로 비교해 모두 일치했다. 유한 machine state의 반복이며 수학적 무한 주기의 증명은 아니다.
+
+실제 M4 Chromium의 새 브라우저에서 같은 640×354·16384회·AA16을 Plume FP64 perturbation 약 20.0초, Abyss GPU 약 33.0초, Horizon GPU 약 21.9초에 끝냈다. 최대 Auto span 1e-200은 8192회·AA16 약 3.68초였다. Abyss/Horizon 팬은 완료 샘플 90%를 보존하고 새 10% 띠를 AA16으로 약 3.05/2.00초에 계산했다. 각각 설정·Home·Back을 실제 actionable 조작으로 확인했다. 최초 방문의 이 시간이 모든 기기의 상한이라는 뜻은 아니다.
+
+`browser_maximum.py`는 이 콜드 4개 뷰, 고반복 팬, 선택적 확장 부재, 실제 FP32 phase 및 AA 출력·취소를 검사한다. 기존 해상도·반복 수·AA·240초 한도·픽셀 허용 오차를 줄이지 않았다. 원래 15개 CI 스위트에 maximum/maximum-webkit을 추가한 17개 전체 검사와 137개 단위 검사로 최종 소스를 확인한다. 현재 최종 runtime SHA는 `b5730c08d20ac39b110ffb431b43900733f6e01c8894d8e9f424c92c85545e10`이며 전체 실행 결과는 완료 후 추가한다.
 
 ## 라이브러리와 외부 구현의 활용 판단
 

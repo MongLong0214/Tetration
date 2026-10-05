@@ -25,6 +25,8 @@
  uniform int uIterations,uPalette,uSamples,uAdaptive;
  uniform float uLowA,uMaxB,uTol,uThreshold;
  uniform sampler2D uSource;
+ uniform sampler2D uPartialSource;
+ uniform int uPartial,uPartialBase;
  // Live accumulation: uSource is the previous live image, carried by an integer shift (mode 1)
  // or resampled from another sampling grid (mode 2) with at most uHistCap samples of trust.
  uniform int uAccum,uHistMode,uInterleave,uPhase;
@@ -69,12 +71,23 @@
   }
   return vec4(0.);
  }
+ vec4 adaptiveSeed(vec2 point,out float contrast){
+  ivec2 p=ivec2(point),size=textureSize(uSource,0);vec4 seed=texelFetch(uSource,p,0);vec3 center=seed.rgb;contrast=0.;
+  for(int y=-1;y<=1;y++)for(int x=-1;x<=1;x++){vec3 delta=abs(center-texelFetch(uSource,clamp(p+ivec2(x,y),ivec2(0),size-1),0).rgb);contrast=max(contrast,max(delta.r,max(delta.g,delta.b)));}
+  return seed;
+ }
  void main(){
   vec2 point=gl_FragCoord.xy+uOffset;
   /* Every path ends in one sample loop: orbitColor is inlined by GPU compilers, so a single
    * call site keeps the program small and quick to compile. */
   vec4 seed=vec4(0.);vec3 rgb=vec3(0.);float alpha=1.,weight=1.;int first=0,count=1,mode=0;
-  if(uAccum==1){
+  if(uPartial==1){
+   if(uAdaptive==1){float contrast;seed=adaptiveSeed(point,contrast);if(contrast<uThreshold){pixel=seed;return;}}
+   bool reuse=uAdaptive==1&&abs(seed.a-64./255.)<.5/255.;
+   first=(reuse?4:0)+uPartialBase;count=min(4,max(0,16-first));mode=2;
+   rgb=uPartialBase==0?(reuse?seed.rgb*4.:vec3(0.)):texelFetch(uPartialSource,ivec2(gl_FragCoord.xy),0).rgb;
+   weight=uPartialBase==12?.0625:1.;
+  }else if(uAccum==1){
    // Running mean of up to 16 stratified samples; converged pixels are copied, not recomputed.
    seed=history(point);int n=int(seed.a);
    if(n>=16){pixel=vec4(seed.rgb,16./255.);return;}
@@ -84,8 +97,7 @@
    first=n;count=min(16,n+uSamples)-n;rgb=seed.rgb*float(n);weight=1./float(n+count);alpha=float(n+count)/255.;mode=1;
   }else{
    if(uAdaptive==1){
-    ivec2 p=ivec2(gl_FragCoord.xy),size=textureSize(uSource,0);seed=texelFetch(uSource,p,0);vec3 center=seed.rgb;float contrast=0.;
-    for(int y=-1;y<=1;y++)for(int x=-1;x<=1;x++){vec3 delta=abs(center-texelFetch(uSource,clamp(p+ivec2(x,y),ivec2(0),size-1),0).rgb);contrast=max(contrast,max(delta.r,max(delta.g,delta.b)));}
+    float contrast;seed=adaptiveSeed(point,contrast);
     if(contrast<uThreshold){pixel=seed;return;}
    }
    if(uSamples==16){
@@ -258,12 +270,30 @@
     if(de>=-60&&de<100){i++;break;}
    }
   }`;
+  // Once inside the plain loop, BLA is over. A repeated full FP32 state with
+  // the same reference index can skip whole cycles without changing the cap.
+  // Keep this in a separate high-cap program so ordinary views use no extra
+  // checkpoint registers. Leaving the plain loop discards its checkpoint.
+  const cycleState = `vec2 cycleD=vec2(0.),cycleW=vec2(0.),cycleOld=vec2(0.);
+    int cycleK=0,cycleFixed=0,cyclePeriod=0,cycleStep=0,cycleDistance=1;`;
+  const cycleStep = `
+    if(cycleStep>2&&k==cycleK&&fixedCount==cycleFixed&&periodCount==cyclePeriod&&
+       all(equal(floatBitsToUint(dp),floatBitsToUint(cycleD)))&&
+       all(equal(floatBitsToUint(w),floatBitsToUint(cycleW)))&&
+       all(equal(floatBitsToUint(old),floatBitsToUint(cycleOld)))){
+     int cycle=i-cycleStep;i+=((uIterations-i)/cycle)*cycle;
+    }else if(i-cycleStep>=cycleDistance){
+     cycleD=dp;cycleW=w;cycleOld=old;cycleK=k;cycleFixed=fixedCount;cyclePeriod=periodCount;
+     cycleStep=i;cycleDistance*=2;
+    }`;
+  const cycleOrbitLoop = orbitLoop.replace('bool back=false;', 'bool back=false;' + cycleState).replace(plainStep, plainStep + cycleStep);
   const perturbTail = `
   if(mirrored)w.y=-w.y;
   return palette(kind,steps,w);
  }` + footer;
   const perturb = perturbHead + `
   int i=1;bool done=false;${orbitLoop}` + perturbTail;
+  const perturbCycle = perturb.replace(orbitLoop, cycleOrbitLoop);
   /* The same orbit with bilinear approximation (TetraCore.blaTable): while d is tiny
    * the pixel follows the reference, so aligned runs of 2^j linear steps are applied
    * at once as d = A d + B dL. The approach loop ends when |d| outgrows the shortest
@@ -294,6 +324,7 @@
    if(k==0)break;
   }
 ${orbitLoop}` + perturbTail;
+  const perturbBlaCycle = perturbBla.replace(orbitLoop, cycleOrbitLoop);
 
   // Macrotask hop without timer clamping, so short GPU work is noticed promptly.
   // Created on first use: an idle open port would keep Node test processes alive.
@@ -308,12 +339,14 @@ ${orbitLoop}` + perturbTail;
     queue.push(task); channel.port2.postMessage(0);
   }
 
-  const COMMON = ['Size', 'Aspect', 'Grid', 'Shift', 'Step', 'Offset', 'Iterations', 'Palette', 'Samples', 'Adaptive', 'Source', 'LowA', 'MaxB', 'Tol', 'Threshold', 'Accum', 'HistMode', 'Interleave', 'Phase', 'HistShift', 'HistScale', 'HistOffset', 'HistCount', 'HistCap'];
+  const COMMON = ['Size', 'Aspect', 'Grid', 'Shift', 'Step', 'Offset', 'Iterations', 'Palette', 'Samples', 'Adaptive', 'Source', 'PartialSource', 'Partial', 'PartialBase', 'LowA', 'MaxB', 'Tol', 'Threshold', 'Accum', 'HistMode', 'Interleave', 'Phase', 'HistShift', 'HistScale', 'HistOffset', 'HistCount', 'HistCap'];
   const UNIFORMS = {
     direct: [...COMMON, 'Center', 'Span'],
     perturb: [...COMMON, 'Ref', 'RefLength', 'RefValues', 'Scale', 'InvExp', 'L0', 'Inv', 'Delta', 'DeltaMirror', 'ImCenter', 'SpanMant'],
   };
   UNIFORMS.perturbBla = [...UNIFORMS.perturb, 'Bla', 'BlaLevels', 'BlaBase'];
+  UNIFORMS.perturbCycle = UNIFORMS.perturb;
+  UNIFORMS.perturbBlaCycle = UNIFORMS.perturbBla;
   // Default drawing buffers need not have the offscreen RGBA8 format. Some
   // WebKit drivers reject a framebuffer blit to them with INVALID_OPERATION.
   // Draw the computed texture instead, keeping sample-count alpha off screen.
@@ -324,7 +357,14 @@ ${orbitLoop}` + perturbTail;
  out vec4 pixel;
  void main(){pixel=vec4(texture(uSource,gl_FragCoord.xy/uSize).rgb,1.);}`;
   UNIFORMS.present = ['Size', 'Source'];
-  const SOURCES = {direct, perturb, perturbBla, present};
+  const copy = `#version 300 es
+ precision highp float;
+ uniform sampler2D uSource;
+ uniform vec2 uOffset;
+ out vec4 pixel;
+ void main(){pixel=texelFetch(uSource,ivec2(gl_FragCoord.xy-uOffset),0);}`;
+  UNIFORMS.copy = ['Source', 'Offset'];
+  const SOURCES = {direct, perturb, perturbBla, perturbCycle, perturbBlaCycle, present, copy};
 
   class TetraGPU {
     constructor(canvas) {
@@ -334,6 +374,8 @@ ${orbitLoop}` + perturbTail;
       this.gl = gl; this.canvas = canvas; this.kind = 'webgl2';
       this.failed = false;
       this.contextLoss = gl.getExtension('WEBGL_lose_context');
+      this.floatColor = !!gl.getExtension('EXT_color_buffer_float');
+      this.ultraScratch = null;
       this.bits = gl.getShaderPrecisionFormat(gl.FRAGMENT_SHADER, gl.HIGH_FLOAT)?.precision || 0;
       if (this.bits < 23) throw Error('Insufficient fragment precision');
       this.maxTexture = gl.getParameter(gl.MAX_TEXTURE_SIZE);
@@ -463,6 +505,7 @@ ${orbitLoop}` + perturbTail;
       gl.bindFramebuffer(gl.FRAMEBUFFER, buffer); gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
       gl.viewport(0, 0, 1, 1); gl.useProgram(program);
       gl.uniform2f(u.Size, 1, 1); gl.uniform1f(u.Aspect, 1); gl.uniform1i(u.Iterations, 0); gl.uniform1i(u.Samples, 1); gl.uniform1i(u.Adaptive, 0); gl.uniform1i(u.Accum, 0);
+      gl.uniform1i(u.Partial, 0);
       samplers.forEach((name, unit) => { gl.activeTexture(gl.TEXTURE0 + unit); gl.bindTexture(gl.TEXTURE_2D, this.empty); gl.uniform1i(u[name], unit); });
       gl.activeTexture(gl.TEXTURE0);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
@@ -594,7 +637,12 @@ ${orbitLoop}` + perturbTail;
       if (gl.isContextLost()) throw Error('GPU context lost');
       this.refreshFrame(frame);
       const levels = scene.mode === 'perturb' ? this.blaLevels(frame, scene, allowLink) : 0;
-      const {program, uniforms: u} = this.program(levels ? 'perturbBla' : scene.mode);
+      let name = levels ? 'perturbBla' : scene.mode;
+      if (scene.mode === 'perturb' && scene.iterations >= 8192) {
+        const cycleName = levels ? 'perturbBlaCycle' : 'perturbCycle';
+        if (allowLink || this.programs[cycleName]) name = cycleName;
+      }
+      const {program, uniforms: u} = this.program(name);
       if (scene.mode === 'perturb') this.perturbWarm = true;
       gl.bindFramebuffer(gl.FRAMEBUFFER, frame.buffer); gl.viewport(0, 0, frame.width, frame.height); gl.useProgram(program);
       gl.uniform2f(u.Size, frame.width, frame.height); gl.uniform1f(u.Aspect, scene.aspect || frame.height / frame.width); gl.uniform2f(u.Offset, 0, 0);
@@ -602,6 +650,7 @@ ${orbitLoop}` + perturbTail;
       if (scene.grid) { gl.uniform2f(u.Shift, scene.grid.shift[0], scene.grid.shift[1]); gl.uniform2f(u.Step, scene.grid.step[0], scene.grid.step[1]); }
       gl.uniform1i(u.Iterations, scene.iterations); gl.uniform1i(u.Palette, scene.palette);
       gl.uniform1i(u.Samples, samples); gl.uniform1i(u.Adaptive, frame.seed ? 1 : 0); gl.uniform1f(u.Threshold, threshold);
+      gl.uniform1i(u.Partial, 0); gl.uniform1i(u.PartialBase, 0); gl.uniform1i(u.PartialSource, 3);
       gl.uniform1f(u.LowA, scene.rules.lowA); gl.uniform1f(u.MaxB, scene.rules.maxB); gl.uniform1f(u.Tol, scene.rules.tol);
       /* scene.accum: live accumulation {mode: 0 none | 1 shifted | 2 resampled, frame, shift, scale,
        * offset, count, cap}; uSamples is then the number of new samples per pixel. */
@@ -630,11 +679,64 @@ ${orbitLoop}` + perturbTail;
           gl.uniform1i(u.BlaLevels, levels); gl.uniform1iv(u.BlaBase, this.bla.base);
         }
       }
+      return u;
     }
     drawTile(frame, tile) {
       const gl = this.gl;
       gl.enable(gl.SCISSOR_TEST); gl.scissor(tile.x, frame.height - tile.y - tile.height, tile.width, tile.height);
       gl.drawArrays(gl.TRIANGLES, 0, 3); gl.disable(gl.SCISSOR_TEST);
+    }
+    clearUltraScratch() {
+      if (!this.ultraScratch) return;
+      const gl = this.gl;
+      for (const frame of this.ultraScratch) { gl.deleteFramebuffer(frame.buffer); gl.deleteTexture(frame.texture); }
+      this.ultraScratch = null;
+    }
+    ultraFrames(size) {
+      if (this.ultraScratch?.[0].width >= size) return this.ultraScratch;
+      this.clearUltraScratch();
+      const gl = this.gl, frames = [];
+      try {
+        for (let i = 0; i < 2; i++) {
+          const texture = gl.createTexture(), buffer = gl.createFramebuffer();
+          const frame = {texture, buffer, width: size, height: size}; frames.push(frame);
+          gl.bindTexture(gl.TEXTURE_2D, texture); gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA32F, size, size); this.setNearest();
+          gl.bindFramebuffer(gl.FRAMEBUFFER, buffer); gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
+          if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) throw Error('GPU float image allocation failed');
+        }
+      } catch (error) {
+        for (const frame of frames) { gl.deleteFramebuffer(frame.buffer); gl.deleteTexture(frame.texture); }
+        throw error;
+      } finally { gl.bindFramebuffer(gl.FRAMEBUFFER, null); }
+      this.ultraScratch = frames; return frames;
+    }
+    // Long orbits and twelve AA samples in one invocation can starve the
+    // compositor. Preserve the sum in FP32, fence every four new samples, and
+    // round to RGBA8 only once, exactly as the ordinary Ultra pass does.
+    async drawUltraTile(frame, tile, scene, cancelled = () => false, threshold = 0.035) {
+      if (!this.floatColor) throw Error('GPU float image unavailable');
+      const gl = this.gl, scratch = this.ultraFrames(Math.max(tile.width, tile.height));
+      this.refreshFrame(frame.seed);
+      const u = this.prepare(frame, scene, 16, threshold);
+      gl.uniform1i(u.Partial, 1); gl.uniform2f(u.Offset, tile.x, frame.height - tile.y - tile.height);
+      for (let pass = 0; pass < 4; pass++) {
+        const target = scratch[pass & 1], source = pass ? scratch[(pass - 1) & 1] : null;
+        this.refreshFrame(source); this.refreshFrame(target);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, target.buffer); gl.viewport(0, 0, tile.width, tile.height);
+        gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D, source?.texture || this.empty); gl.activeTexture(gl.TEXTURE0);
+        gl.uniform1i(u.PartialBase, pass * 4); gl.drawArrays(gl.TRIANGLES, 0, 3);
+        await this.fence();
+        if (cancelled()) return false;
+      }
+      this.refreshFrame(scratch[1]); this.refreshFrame(frame);
+      const {program, uniforms: copyUniforms} = this.program('copy');
+      gl.bindFramebuffer(gl.FRAMEBUFFER, frame.buffer); gl.useProgram(program);
+      const y = frame.height - tile.y - tile.height;
+      gl.viewport(tile.x, y, tile.width, tile.height);
+      gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, scratch[1].texture);
+      gl.uniform1i(copyUniforms.Source, 0); gl.uniform2f(copyUniforms.Offset, tile.x, y);
+      gl.drawArrays(gl.TRIANGLES, 0, 3); await this.fence();
+      return !cancelled();
     }
     // Resolve once the GPU has finished all submitted work, without blocking the main thread.
     fence() {
@@ -737,6 +839,7 @@ ${orbitLoop}` + perturbTail;
     // Free every pooled frame (after an allocation failure); frames in use are released by their owners.
     releaseAll() {
       if (this.gl.isContextLost()) return;
+      this.clearUltraScratch();
       for (const frame of this.pool) { this.gl.deleteFramebuffer(frame.buffer); this.gl.deleteTexture(frame.texture); this.live--; }
       this.pool = [];
     }
@@ -751,6 +854,7 @@ ${orbitLoop}` + perturbTail;
     }
     destroy() {
       const gl = this.gl;
+      this.clearUltraScratch();
       for (const frame of this.pool) { gl.deleteFramebuffer(frame.buffer); gl.deleteTexture(frame.texture); }
       this.pool = [];
       for (const {program} of Object.values(this.programs)) gl.deleteProgram(program);
