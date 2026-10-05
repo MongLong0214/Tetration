@@ -28,7 +28,7 @@ jobs:
     needs: unit
     # The largest native Ultra scenes also exercise latency bounds. Use the
     # desktop macOS renderer for those; keep Linux pixel/recovery suites below.
-    runs-on: ${{ (matrix.suite == 'explorer' || matrix.suite == 'reuse') && 'macos-15' || 'ubuntu-latest' }}
+    runs-on: ${{ (matrix.suite == 'explorer' || matrix.suite == 'reuse' || matrix.suite == 'production') && 'macos-15' || 'ubuntu-latest' }}
     timeout-minutes: 45
     strategy:
       fail-fast: false
@@ -65,6 +65,7 @@ jobs:
           python3 tests/browser_${SUITE}.py
         env:
           TETRA_BASE_URL: http://127.0.0.1:4173
+          TETRA_HARDWARE_BROWSER: ${{ runner.os == 'macOS' && '1' || '0' }}
       - name: Preserve browser evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

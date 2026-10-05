@@ -179,7 +179,11 @@ QA의 Playwright를 로컬과 동일한 `1.63.0`으로 고정했다. 이동 중 
 
 `249f9f1`의 [후속 Linux CI](https://github.com/MongLong0214/Tetration/actions/runs/37310730310)에서 확대·WebKit 팬 재사용·WebKit PNG 복구 스위트는 통과했다. 큰 Chromium 기본 장면은 기존 240초 한도에서 Ultra 계산 중이었고 1440×872의 4샘플 이미지는 이미 표시되고 있었다. 정확한 기본 framebuffer 내부 포맷과 브라우저 구현 원인은 측정하지 않았다. 소프트웨어 GPU의 큰 장면 속도가 해결됐다고 해석하면 안 된다.
 
-대형 `explorer`와 Chromium `reuse`는 원래 입력·픽셀 조건·시간 한도로 `macos-15`에서도 검증한다. 실제 GL renderer 문자열을 보고서에 기록한다. OS 이름만으로 하드웨어 GPU라고 단정하지 않는다. Linux 확대·품질·팬(WebKit)·PNG·fallback 검사도 유지한다. macOS 러너의 브라우저 의존성은 가상 환경에 설치한다. 실패했던 Linux 실행과 Docker의 1280px 4샘플 단계 30초 시간 초과는 별도의 성능 한계로 보존한다.
+대형 `explorer`와 Chromium `reuse`·`production`은 원래 입력·픽셀 조건·시간 한도로 `macos-15`에서도 검증한다. `249f9f1`의 Linux Chromium production은 앞 16개 검사(이동 중 PNG 오차 0, 실제 GPU/CPU 복구, DPR·storage 포함)를 통과한 뒤 16,384회·AA16의 최종 Ultra 단계에서 240초를 초과했다. 이 최대 설정을 검사에서 제거하지 않는다. 실제 GL renderer 문자열을 보고서에 기록한다. OS 이름만으로 하드웨어 GPU라고 단정하지 않는다. Linux 확대·품질·팬(WebKit)·PNG·fallback 검사도 유지한다. macOS 러너의 브라우저 의존성은 가상 환경에 설치한다. 실패했던 Linux 실행과 Docker의 1280px 4샘플 단계 30초 시간 초과는 별도의 성능 한계로 보존한다.
+
+`d07f6cc`의 macOS Chromium 153도 기본 headless 설정에서는 SwiftShader를 사용했다. 팬의 첫 10개 픽셀 검사는 통과했지만 1280px의 4샘플 완료 30초 한도는 실패했다. macOS라는 이유로 Metal 결과라고 부르지 않는다. [Chromium의 현재 headless GPU 문서](https://chromium.googlesource.com/chromium/src/+/HEAD/docs/gpu/using-gpu-hardware-in-headless-chrome.md)에 따라 macOS QA에 `--enable-gpu`를 적용해 일반 드라이버 선택을 허용한다. 실제 renderer 기록으로 결과를 구분하고, 사용 가능한 GPU가 있다고 가정하지 않는다. Linux SwiftShader의 deep 성능 비교 경로는 유지한다.
+
+동일 후속 HTML `6fb08b74…`를 로컬 M4에서 고정하고 15개 스위트를 순차 실행해 249개 검사, 0 uncaught exception을 확인했다. 131개 단위 검사·ESLint도 통과했다. 이 실행의 Chromium은 149/ANGLE Metal M4 Pro이며, CI Chromium 153과 구분한다. WebKit 최대 16,384회·AA16은 context loss 후 실제 FP64 AA16으로 75.563초, Chromium의 같은 설정은 GPU에서 27.075초였다. 물리 Safari·모바일과 네이티브 hidden 상태는 여전히 이 검사로 인증되지 않는다.
 
 ## 직접 실험하고 제외한 방법
 

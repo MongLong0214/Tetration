@@ -59,7 +59,8 @@ class Suite:
 def launch(playwright, extra=()):
     if os.environ.get('TETRA_BROWSER') == 'webkit':
         return playwright.webkit.launch(headless=True)
-    return playwright.chromium.launch(executable_path=os.environ.get('CHROMIUM_PATH'), headless=True, args=CHROMIUM_ARGS + list(extra))
+    hardware = ['--enable-gpu'] if os.environ.get('TETRA_HARDWARE_BROWSER') == '1' else []
+    return playwright.chromium.launch(executable_path=os.environ.get('CHROMIUM_PATH'), headless=True, args=CHROMIUM_ARGS + hardware + list(extra))
 
 
 def ready(page, mode=None, timeout=240000):
@@ -68,7 +69,7 @@ def ready(page, mode=None, timeout=240000):
         page.wait_for_selector(selector, state='attached', timeout=timeout)
     except Exception:
         try:
-            print('RENDER_TIMEOUT_STATE', json.dumps(state(page)), flush=True)
+            print('RENDER_TIMEOUT_STATE', json.dumps({**state(page), 'graphics': graphics(page)}), flush=True)
         except Exception:
             pass  # Preserve the original timeout if the page itself is gone.
         raise

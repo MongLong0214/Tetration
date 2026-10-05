@@ -36,6 +36,7 @@ def body():
         context = browser.new_context(viewport={'width': 480, 'height': 320}, accept_downloads=True)
         page = suite.watch(context.new_page())
         open_app(page, SHALLOW)
+        suite.report['graphics'] = graphics(page)
         page.locator('#viewport').focus(); page.keyboard.press('ArrowRight'); settle(page)
         later = state(page)['view']
         page.keyboard.press('Alt+ArrowLeft'); settle(page)
