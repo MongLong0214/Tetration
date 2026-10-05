@@ -107,6 +107,11 @@ def body():
             page.on('console', lambda msg: print('MAX_CONSOLE', msg.text, flush=True))
         open_app(page, 'v=1&x=.5&y=0&s=.1&n=64&q=1&e=cpu')
         page.evaluate((ROOT / 'tests/browser_gpu_limits.js').read_text())
+        with browser_deadline(240000):
+            mask = page.evaluate('__gpuAdaptiveMaskComparison()')
+        assert mask['error'] == 0 and len(mask['rows']) == 2, mask
+        assert all(all(row[key] for key in ['flat', 'cancelled', 'forced', 'edge', 'invalidComputed']) for row in mask['rows']), mask
+        suite.record('Adaptive mask skips only flat AA tiles; forced strips, pooled edges and invalid queries still compute real samples', mask)
         for samples in [4, 16]:
             with browser_deadline(240000):
                 partial = page.evaluate('__gpuPartialComparison', samples)

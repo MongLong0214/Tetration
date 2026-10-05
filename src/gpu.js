@@ -46,6 +46,12 @@
   /* Alpha marks how a pixel was sampled: 1 = one sample or 16, 64/255 = the rotated-grid
    * 4 samples. The 4 rotated-grid points lie on the 4x4 grid, so a 16x pixel whose seed
    * was a 4x pixel reuses their average and computes only the 12 new samples. */
+  const adaptiveSeed = `
+ vec4 adaptiveSeed(vec2 point,out float contrast){
+  ivec2 p=ivec2(point),size=textureSize(uSource,0);vec4 seed=texelFetch(uSource,p,0);vec3 center=seed.rgb;contrast=0.;
+  for(int y=-1;y<=1;y++)for(int x=-1;x<=1;x++){vec3 delta=abs(center-texelFetch(uSource,clamp(p+ivec2(x,y),ivec2(0),size-1),0).rgb);contrast=max(contrast,max(delta.r,max(delta.g,delta.b)));}
+  return seed;
+ }`;
   const footer = `
  const vec2 RG[4]=vec2[4](${TetraCore.AA.offsets.slice(0, 4).map(p => `vec2(${p.join(',')})`).join(',')});
  const int RGROW[4]=int[4](${TetraCore.AA.rows.join(',')});
@@ -71,11 +77,7 @@
   }
   return vec4(0.);
  }
- vec4 adaptiveSeed(vec2 point,out float contrast){
-  ivec2 p=ivec2(point),size=textureSize(uSource,0);vec4 seed=texelFetch(uSource,p,0);vec3 center=seed.rgb;contrast=0.;
-  for(int y=-1;y<=1;y++)for(int x=-1;x<=1;x++){vec3 delta=abs(center-texelFetch(uSource,clamp(p+ivec2(x,y),ivec2(0),size-1),0).rgb);contrast=max(contrast,max(delta.r,max(delta.g,delta.b)));}
-  return seed;
- }
+ ${adaptiveSeed}
  void main(){
   vec2 point=gl_FragCoord.xy+uOffset;
   /* Every path ends in one sample loop: orbitColor is inlined by GPU compilers, so a single
@@ -363,7 +365,17 @@ ${orbitLoop}` + perturbTail;
  out vec4 pixel;
  void main(){pixel=texelFetch(uSource,ivec2(gl_FragCoord.xy-uOffset),0);}`;
   UNIFORMS.copy = ['Source', 'Offset'];
-  const SOURCES = {direct, perturb, perturbBla, perturbCycle, perturbBlaCycle, present, copy};
+  const adaptiveMask = `#version 300 es
+ precision highp float;
+ precision highp int;
+ precision highp sampler2D;
+ uniform sampler2D uSource;
+ uniform float uThreshold;
+ out vec4 pixel;
+ ${adaptiveSeed}
+ void main(){float contrast;adaptiveSeed(gl_FragCoord.xy,contrast);if(contrast<uThreshold)discard;pixel=vec4(1.);}`;
+  UNIFORMS.adaptiveMask = ['Source', 'Threshold'];
+  const SOURCES = {direct, perturb, perturbBla, perturbCycle, perturbBlaCycle, present, copy, adaptiveMask};
 
   class TetraGPU {
     constructor(canvas) {
@@ -605,6 +617,7 @@ ${orbitLoop}` + perturbTail;
         this.live++;
       }
       frame.seed = adaptive ? seed : null;
+      frame.aaMaskThreshold = null; frame.aaMaskFlat = false;
       if (seed) {
         gl.bindFramebuffer(gl.READ_FRAMEBUFFER, seed.buffer); gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, frame.buffer);
         gl.blitFramebuffer(0, 0, seed.width, seed.height, 0, 0, width, height, gl.COLOR_BUFFER_BIT, seed.width === width && seed.height === height ? gl.NEAREST : gl.LINEAR);
@@ -717,6 +730,20 @@ ${orbitLoop}` + perturbTail;
     // round to RGBA8 only once, exactly as the ordinary Ultra pass does.
     async drawAATile(frame, tile, scene, cancelled = () => false, threshold = 0.035, samples = 16) {
       if (!this.floatColor) throw Error('GPU float image unavailable');
+      if (frame.seed && threshold > 0) {
+        if (frame.aaMaskThreshold !== threshold) {
+          const all = {x: 0, y: 0, width: frame.width, height: frame.height};
+          const needsAA = await this.adaptiveTile(frame, all, threshold, cancelled);
+          if (cancelled()) return false;
+          frame.aaMaskThreshold = threshold; frame.aaMaskFlat = !needsAA;
+        }
+        if (frame.aaMaskFlat) return !cancelled();
+        const needsAA = await this.adaptiveTile(frame, tile, threshold, cancelled);
+        if (cancelled()) return false;
+        // beginFrame already copied the seed. Every pixel would return that
+        // exact seed on every AA pass, so no sum or copy needs submitting.
+        if (!needsAA) return true;
+      }
       const gl = this.gl, scratch = this.ultraFrames(Math.max(tile.width, tile.height));
       this.refreshFrame(frame.seed);
       const u = this.prepare(frame, scene, samples, threshold, true, true);
@@ -739,6 +766,42 @@ ${orbitLoop}` + perturbTail;
       gl.uniform1i(copyUniforms.Source, 0); gl.uniform2f(copyUniforms.Offset, tile.x, y);
       gl.drawArrays(gl.TRIANGLES, 0, 3); await this.fence();
       return !cancelled();
+    }
+    // Count only fragments that the existing adaptive predicate would refine.
+    // Queries are asynchronous even after GPU completion; never treat missing
+    // or invalid results as a flat tile. Colour writes stay disabled throughout.
+    async adaptiveTile(frame, tile, threshold, cancelled) {
+      const gl = this.gl, query = gl.createQuery();
+      if (!query) return true;
+      try {
+        this.refreshFrame(frame.seed); this.refreshFrame(frame);
+        const {program, uniforms: u} = this.program('adaptiveMask');
+        gl.bindFramebuffer(gl.FRAMEBUFFER, frame.buffer); gl.useProgram(program);
+        gl.viewport(tile.x, frame.height - tile.y - tile.height, tile.width, tile.height);
+        gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, frame.seed.texture);
+        gl.uniform1i(u.Source, 0); gl.uniform1f(u.Threshold, threshold);
+        gl.colorMask(false, false, false, false);
+        try {
+          gl.beginQuery(gl.ANY_SAMPLES_PASSED, query);
+          try { gl.drawArrays(gl.TRIANGLES, 0, 3); }
+          finally { gl.endQuery(gl.ANY_SAMPLES_PASSED); }
+        } finally { gl.colorMask(true, true, true, true); }
+        gl.flush();
+        return await new Promise((resolve, reject) => {
+          const started = performance.now();
+          const poll = () => {
+            if (this.lost()) { reject(Error('GPU context lost')); return; }
+            if (cancelled()) { resolve(true); return; }
+            if (gl.getQueryParameter(query, gl.QUERY_RESULT_AVAILABLE) === true) {
+              const result = gl.getQueryParameter(query, gl.QUERY_RESULT);
+              resolve(!Number.isInteger(result) || result !== 0); return;
+            }
+            if (performance.now() - started >= 10000) { resolve(true); return; }
+            nextTask(() => setTimeout(poll, 1));
+          };
+          nextTask(poll);
+        });
+      } finally { gl.deleteQuery(query); }
     }
     // Resolve once the GPU has finished all submitted work, without blocking the main thread.
     fence() {

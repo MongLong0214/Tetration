@@ -65,3 +65,42 @@ window.__gpuPartialComparison = async(samples=16)=>{
   }
   const error=r.gl.getError();r.destroy();return {cases,error};
  };
+window.__gpuAdaptiveMaskComparison = async()=>{
+ const r=new TetraGPU(document.createElement('canvas')),g=r.gl,W=17,H=13,tile={x:0,y:0,width:W,height:H},rows=[];
+ const scene={mode:'direct',center:[.5,0],span:.1,aspect:H/W,iterations:128,palette:0,rules:TetraCore.RULES.gpu};
+ const nativeFence=r.fence.bind(r),nativeQuery=g.getQueryParameter.bind(g);let fences=0,results=0;
+ r.fence=()=>{fences++;return nativeFence();};
+ g.getQueryParameter=(q,p)=>{if(p===g.QUERY_RESULT)results++;return nativeQuery(q,p);};
+ const equal=(a,b)=>a.length===b.length&&a.every((v,i)=>v===b[i]);
+ for(const samples of [4,16]){
+  const seed=r.beginFrame(W,H);r.refreshFrame(seed);g.bindFramebuffer(g.FRAMEBUFFER,seed.buffer);
+  g.clearColor(.2,.3,.4,64/255);g.clear(g.COLOR_BUFFER_BIT);
+  const a=r.beginFrame(W,H,seed,true),b=r.beginFrame(W,H,seed,true);
+  r.draw(a,tile,scene,samples);await r.fence();const expected=r.readFrame(a),start=fences,q=results;
+  const complete=await r.drawAATile(b,tile,scene,()=>false,.035,samples);
+  const flat=complete&&fences===start&&results===q+1&&equal(expected,r.readFrame(b));
+  const cancelled=!(await r.drawAATile(b,tile,scene,()=>true,.035,samples))&&equal(expected,r.readFrame(b));
+  // Forced new pan strips must compute real samples even for a flat seed.
+  const forcedStart=fences,forcedQuery=results;r.draw(a,tile,scene,samples,0);await r.fence();
+  await r.drawAATile(b,tile,scene,()=>false,0,samples);
+  const forced=fences===forcedStart+samples+2&&results===forcedQuery&&equal(r.readFrame(a),r.readFrame(b))&&!equal(expected,r.readFrame(b));
+  r.releaseFrame(a);r.releaseFrame(b);
+  // Reusing a pooled target must discard its prior all-flat result. A real
+  // seed edge inside the tile must trigger the original sample computation.
+  r.refreshFrame(seed);g.bindFramebuffer(g.FRAMEBUFFER,seed.buffer);g.enable(g.SCISSOR_TEST);g.scissor(8,6,1,1);
+  g.clearColor(1,1,1,64/255);g.clear(g.COLOR_BUFFER_BIT);g.disable(g.SCISSOR_TEST);
+  const edgeA=r.beginFrame(W,H,seed,true),edgeB=r.beginFrame(W,H,seed,true);r.draw(edgeA,tile,scene,samples);await r.fence();
+  const edgeStart=fences;await r.drawAATile(edgeB,tile,scene,()=>false,.035,samples);
+  const edge=fences===edgeStart+samples+1&&equal(r.readFrame(edgeA),r.readFrame(edgeB));
+  r.releaseFrame(edgeA);r.releaseFrame(edgeB);
+  // An API error result cannot certify the tile as flat.
+  const invalid=r.beginFrame(W,H,seed,true),invalidStart=fences;
+  g.getQueryParameter=(q,p)=>p===g.QUERY_RESULT?null:nativeQuery(q,p);
+  await r.drawAATile(invalid,tile,scene,()=>false,.035,samples);
+  const invalidComputed=fences===invalidStart+samples+1;
+  g.getQueryParameter=(q,p)=>{if(p===g.QUERY_RESULT)results++;return nativeQuery(q,p);};
+  rows.push({samples,flat,cancelled,forced,edge,invalidComputed});
+  r.releaseFrame(invalid);r.releaseFrame(seed);
+ }
+ const error=g.getError();r.destroy();return {rows,error};
+};
