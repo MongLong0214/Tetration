@@ -19,6 +19,9 @@
  precision highp sampler2D;
  uniform vec2 uSize,uOffset;
  uniform float uAspect;
+ // Grid-locked live frames: sample = origin + (integer pixel index) * step, the same bits every frame.
+ uniform int uGrid;
+ uniform vec2 uShift,uStep;
  uniform int uIterations,uPalette,uSamples,uAdaptive;
  uniform float uLowA,uMaxB,uTol,uThreshold;
  uniform sampler2D uSource;
@@ -64,7 +67,7 @@
  uniform float uSpan;
  vec3 orbitColor(vec2 point){
   // Every frame, whatever its rounded size, covers the viewport's exact world rectangle.
-  vec2 c=uCenter+(point/uSize-.5)*vec2(uSpan,uSpan*uAspect);
+  vec2 c=uGrid==1?uCenter+(point-uSize*.5+uShift)*uStep:uCenter+(point/uSize-.5)*vec2(uSpan,uSpan*uAspect);
   float radius=length(c);int kind=0;float steps=float(uIterations);
   if(radius<1e-30){return palette(4,0.,vec2(0.));}
   vec2 l=vec2(log(radius),c.y==0.&&c.x<0.?3.141592653589793:atan(c.y,c.x));
@@ -117,9 +120,9 @@
   return atan(y,x);
  }
  vec3 orbitColor(vec2 point){
-  vec2 q=(point/uSize-.5)*vec2(1.,uAspect);
-  bool mirrored=uImCenter+q.y*uSpanMant<0.;
-  vec2 dc=mirrored?uDeltaMirror+vec2(q.x,-q.y)*uSpanMant:uDelta+q*uSpanMant;
+  vec2 g=uGrid==1?(point-uSize*.5+uShift)*uStep:(point/uSize-.5)*vec2(1.,uAspect)*uSpanMant;
+  bool mirrored=uImCenter+g.y<0.;
+  vec2 dc=mirrored?uDeltaMirror+vec2(g.x,-g.y):uDelta+g;
   // x = dc * 2^uScale / c0 as mantissa and exponent; dL = log1p(x).
   vec2 xm=cmul(dc,uInv),dLm=vec2(0.);int xe=uScale+uInvExp,dLe=-1000;
   if(expOf(xm)!=-1000){
@@ -217,7 +220,7 @@
     queue.push(task); channel.port2.postMessage(0);
   }
 
-  const COMMON = ['Size', 'Aspect', 'Offset', 'Iterations', 'Palette', 'Samples', 'Adaptive', 'Source', 'LowA', 'MaxB', 'Tol', 'Threshold'];
+  const COMMON = ['Size', 'Aspect', 'Grid', 'Shift', 'Step', 'Offset', 'Iterations', 'Palette', 'Samples', 'Adaptive', 'Source', 'LowA', 'MaxB', 'Tol', 'Threshold'];
   const UNIFORMS = {
     direct: [...COMMON, 'Center', 'Span'],
     perturb: [...COMMON, 'Ref', 'RefLength', 'RefValues', 'Scale', 'InvExp', 'L0', 'Inv', 'Delta', 'DeltaMirror', 'ImCenter', 'SpanMant'],
@@ -397,7 +400,9 @@
       if (this.blaMode === 'off') return 0;
       // Largest |dL| over the frame plus 2% of the span for subpixel samples (half a pixel
       // at 25 px and wider), the same for every frame size so live frames share the table.
-      const offset = TetraCore.offsetBound(scene.delta[0], scene.delta[1], scene.deltaMirror[1], scene.imCenter,
+      // A grid-locked frame is the scene's origin frame moved by shift * step.
+      const sx = scene.grid ? scene.grid.shift[0] * scene.grid.step[0] : 0, sy = scene.grid ? scene.grid.shift[1] * scene.grid.step[1] : 0;
+      const offset = TetraCore.offsetBound(scene.delta[0] + sx, scene.delta[1] + sy, scene.deltaMirror[1] - sy, scene.imCenter + sy,
         scene.spanMant * 0.52, scene.spanMant * (0.5 * (scene.aspect || frame.height / frame.width) + 0.02));
       const dL = TetraCore.logOffsetBound(offset * Math.hypot(scene.inv[0], scene.inv[1]) * 2 ** (scene.scale + scene.invExp));
       if (!(dL < Infinity)) return 0;
@@ -448,6 +453,8 @@
       const {program, uniforms: u} = this.program(levels ? 'perturbBla' : scene.mode);
       gl.bindFramebuffer(gl.FRAMEBUFFER, frame.buffer); gl.viewport(0, 0, frame.width, frame.height); gl.useProgram(program);
       gl.uniform2f(u.Size, frame.width, frame.height); gl.uniform1f(u.Aspect, scene.aspect || frame.height / frame.width); gl.uniform2f(u.Offset, 0, 0);
+      gl.uniform1i(u.Grid, scene.grid ? 1 : 0);
+      if (scene.grid) { gl.uniform2f(u.Shift, scene.grid.shift[0], scene.grid.shift[1]); gl.uniform2f(u.Step, scene.grid.step[0], scene.grid.step[1]); }
       gl.uniform1i(u.Iterations, scene.iterations); gl.uniform1i(u.Palette, scene.palette);
       gl.uniform1i(u.Samples, samples); gl.uniform1i(u.Adaptive, frame.seed ? 1 : 0); gl.uniform1f(u.Threshold, threshold);
       gl.uniform1f(u.LowA, scene.rules.lowA); gl.uniform1f(u.MaxB, scene.rules.maxB); gl.uniform1f(u.Tol, scene.rules.tol);

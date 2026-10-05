@@ -217,9 +217,10 @@
   }
   function reproject() {
     if (!display.view) return;
-    if (same(display.view, visual)) { display.canvas.style.transform = 'none'; return; }
+    if (same(display.view, visual) && (display.canvas !== gpuCanvas || (display.sy || 1) === 1)) { display.canvas.style.transform = 'none'; return; }
     const {zoom, dx, dy} = transformFor(display.view, visual);
-    display.canvas.style.transform = Number.isFinite(zoom + dx + dy) && zoom < 1e6 && zoom > 1e-6 ? `translate(${dx}px,${dy}px) scale(${zoom})` : 'scale(0)';
+    const sy = display.canvas === gpuCanvas ? display.sy || 1 : 1;
+    display.canvas.style.transform = Number.isFinite(zoom + dx + dy) && zoom < 1e6 && zoom > 1e-6 ? `translate(${dx}px,${dy}px) scale(${zoom},${zoom * sy})` : 'scale(0)';
   }
   function setDisplay(canvas, renderView) {
     for (const c of [gpuCanvas, cpuCanvas]) c.style.display = c === canvas ? 'block' : 'none';
@@ -227,7 +228,9 @@
     display.canvas = canvas; display.view = clone(renderView);
     reproject(); applyHue(); document.body.dataset.ready = 'true';
   }
-  function show(renderer, frame, renderView, key) {
+  // sy: extra vertical scale of a grid-locked live frame (its vertical overscan differs slightly).
+  function show(renderer, frame, renderView, key, sy = 1) {
+    display.sy = sy;
     renderer.presentFrame(frame);
     if (display.frame !== frame) {
       const old = display.frame, oldRenderer = display.renderer;
@@ -322,12 +325,33 @@
   // Display-resolution target within the pixel budget and the device's texture limit.
   let budgetScale = 1;
   function targetSize(renderer) { return TetraRender.size(dims.w, dims.h, dims.dpr, 8294400 * budgetScale, Math.min(8192, renderer?.maxTexture || 8192)); }
-  function interactiveSize(renderer, scene, target = targetSize(renderer)) {
-    const rate = rates.get(rateKey(scene, 1)) ?? rates.get('tile|' + rateKey(scene, 1)) ?? 60;
+  /* Live-frame plan during a gesture: size and samples stay fixed (one sampling grid) and
+   * change only when frames run far over or under budget. 4 samples are used when they
+   * still leave at least 60% of display resolution: averaged samples flicker far less. */
+  let livePlan = null;
+  function livePlanFor(renderer, scene) {
+    const target = targetSize(renderer), key = [scene.mode, scene.iterations, scene.palette, target.width, target.height].join('|');
+    if (livePlan && livePlan.key === key && !livePlan.stale) return livePlan;
+    const one = interactiveSize(renderer, scene, target, 1), four = interactiveSize(renderer, scene, target, 4);
+    const useFour = four.width >= target.width * 0.6, pick = useFour ? four : one, samples = useFour ? 4 : 1;
+    // An unchanged size keeps the existing plan, and with it the sampling grid.
+    if (livePlan && livePlan.key === key && livePlan.width === pick.width && livePlan.height === pick.height && livePlan.samples === samples) { livePlan.stale = false; return livePlan; }
+    livePlan = {key, ...pick, samples, full: pick.width >= target.width};
+    return livePlan;
+  }
+  // Snap the frame centre to the world grid of its pixels, so consecutive live frames of a pan
+  // sample the same fractal points (no shimmer); the sub-pixel rest is a compositor translate.
+  function snapView(v, size) {
+    const px = v.span / BigInt(size.width), py = v.span * BigInt(Math.round(dims.h / dims.w * 1e12)) / 1000000000000n / BigInt(size.height);
+    const snap = (value, step) => { if (step <= 0n) return value; const q = value >= 0n ? (value + step / 2n) / step : -((-value + step / 2n) / step); return q * step; };
+    return {x: snap(v.x, px), y: snap(v.y, py), span: v.span};
+  }
+  function interactiveSize(renderer, scene, target = targetSize(renderer), samples = 1) {
+    const rate = (rates.get(rateKey(scene, samples)) ?? (rates.get(rateKey(scene, 1)) ?? rates.get('tile|' + rateKey(scene, 1)) ?? 60) / samples);
     // Slow GPUs (deep views on weak hardware) drop to coarser frames rather than stall the compositor.
     const floor = rate * FRAME_MS * 4 >= 8192 ? 8192 : 2048;
     // Cap one draw's orbit work so a sudden jump in cost cannot stall the GPU (driver watchdogs).
-    const pixels = Math.max(floor, Math.min(target.width * target.height, rate * FRAME_MS, 8e7 / renderer.effectiveIterations(scene, target.width, target.height)));
+    const pixels = Math.max(floor / samples, Math.min(target.width * target.height, rate * FRAME_MS, 8e7 / samples / renderer.effectiveIterations(scene, target.width, target.height)));
     // Quantised so consecutive frames reuse pooled textures instead of reallocating.
     const scale = Math.min(1, Math.round(Math.sqrt(pixels / (target.width * target.height)) * 24) / 24 || 1 / 24);
     return {width: Math.max(32, Math.round(target.width * scale)), height: Math.max(20, Math.round(target.height * scale))};
@@ -359,23 +383,52 @@
         if (!ref) return;
       }
     }
-    const renderer = gpu, scene = buildScene(v, mode, ref), key = sceneKey(scene, v);
+    const renderer = gpu;
+    let scene = buildScene(v, mode, ref);
     if (ref && scene.iterations > ref.iterations) scene.iterations = ref.iterations;
+    const plan = livePlanFor(renderer, scene);
+    // Grid-locked live frame (always, also at full resolution): one live pixel of overscan on every
+    // side hides the sub-pixel shift.
+    let at, size, sy;
+    {
+      // Zoom levels of 1/8 octave: within a level the grid stays put and the compositor scales
+      // the frame by at most 9%, so zooming does not resample the fractal every frame either.
+      const level = Math.ceil(Math.log2(num(v.span)) * 8), levelSpan = F.parse((2 ** (level / 8)).toPrecision(17));
+      const lv = {x: v.x, y: v.y, span: levelSpan > v.span ? levelSpan : v.span};
+      const W = plan.width, H = plan.height, snapped = snapView(lv, plan), span = lv.span * BigInt(W + 2) / BigInt(W);
+      size = {width: W + 2, height: H + 2};
+      at = {x: snapped.x, y: snapped.y, span};
+      sy = ((H + 2) / H) / ((W + 2) / W);
+      // The grid (origin, step, reference) stays fixed while the span does; frames differ only by an integer shift.
+      const px = lv.span / BigInt(W), py = lv.span * BigInt(Math.round(dims.h / dims.w * 1e12)) / 1000000000000n / BigInt(H);
+      let grid = plan.grid;
+      if (!grid || grid.span !== lv.span || grid.ref !== ref || grid.mode !== mode) {
+        const iterations = scene.iterations, origin = buildScene(at, mode, ref);
+        origin.iterations = iterations; origin.aspect = dims.h / dims.w * sy;
+        const step = mode === 'gpu' ? [origin.span / size.width, origin.span * origin.aspect / size.height] : [origin.spanMant / size.width, origin.spanMant * origin.aspect / size.height];
+        grid = plan.grid = {span: lv.span, ref, mode, ox: snapped.x, oy: snapped.y, scene: origin, step};
+      }
+      const shift = [Number((snapped.x - grid.ox) / px), Number((snapped.y - grid.oy) / py)];
+      if (Math.abs(shift[0]) > 1e6 || Math.abs(shift[1]) > 1e6) { plan.grid = null; requestInteractive(); return; }
+      scene = {...grid.scene, grid: {shift, step: grid.step}};
+    }
+    const key = sceneKey(scene, at) + '|live' + plan.samples;
     if (mode === 'perturb') scheduleWarm();
     if (display.frame && display.key === key) return;
-    const size = interactiveSize(renderer, scene);
     setGPUBusy(true);
     const t0 = performance.now();
     let frame = null;
     try {
       frame = renderer.beginFrame(size.width, size.height);
-      renderer.prepare(frame, scene, 1, undefined, false);
+      renderer.prepare(frame, scene, plan.samples, undefined, false);
       renderer.drawTile(frame, {x: 0, y: 0, width: size.width, height: size.height});
       await renderer.fence();
       const ms = Math.max(0.5, performance.now() - t0);
-      const k = rateKey(scene, 1), measured = size.width * size.height / ms;
+      const k = rateKey(scene, plan.samples), measured = size.width * size.height / ms;
       rates.set(k, rates.has(k) ? rates.get(k) * 0.5 + measured * 0.5 : measured);
-      if (renderer === gpu) { show(renderer, frame, v, key); interactiveCount++; frame = null; }
+      // Re-plan only when far off budget (hysteresis keeps the sampling grid steady).
+      if (ms > FRAME_MS * 2.5 || (ms < FRAME_MS * 0.35 && !plan.full)) plan.stale = true;
+      if (renderer === gpu) { show(renderer, frame, at, key, sy); interactiveCount++; frame = null; }
     } catch (error) {
       setGPUBusy(false);
       if (frame && !renderer.lost()) renderer.releaseFrame(frame);
@@ -632,6 +685,7 @@
   async function finalRender() {
     clearTimeout(settleTimer);
     if (pointerMap.size || motion.raf) { settleTimer = setTimeout(finalRender, SETTLE_MS); return; }
+    livePlan = null;
     if (document.hidden || jobSerial === serial) return;
     jobSerial = serial;
     const id = serial, v = clone(view), mode = chooseMode(v);
@@ -1064,6 +1118,6 @@
     referencesComputed: references.computed,
     savedCount: savedViews.length, focus: document.body.classList.contains('focus-mode'), version: VERSION, renderStage, quality, colorPhase: hue(), flow,
     interactiveFrames: interactiveCount, animating: !!motion.raf, gpuFrames: gpu ? gpu.live : 0, gpuPooled: gpu ? gpu.pool.length : 0, displayWidth: display.canvas.width, displayHeight: display.canvas.height,
-    bla: gpu?.bla ? {levels: gpu.bla.levels, reach: gpu.bla.reach, compiled: !!gpu.programs.perturbBla, mode: gpu.blaMode} : null, blaReady: !!gpu?.programs.perturbBla, preciseTrig: !!gpu?.preciseTrig,
+    bla: gpu?.bla ? {levels: gpu.bla.levels, reach: gpu.bla.reach, compiled: !!gpu.programs.perturbBla, mode: gpu.blaMode} : null, blaReady: !!gpu?.programs.perturbBla, displayView: display.view && serialize(display.view), displayCanvas: display.canvas.id, liveSamples: livePlan ? livePlan.samples : 0, preciseTrig: !!gpu?.preciseTrig,
   })});
 })();

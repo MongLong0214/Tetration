@@ -49,12 +49,54 @@ def body():
         during = state(page)
         draws = page.evaluate('__draws')
         assert during['interactiveFrames'] - frames0 >= 12, during['interactiveFrames'] - frames0
-        assert draws['4'] == 0 and draws['16'] == 0 and not during['complete'], draws
+        assert draws['16'] == 0 and (draws['4'] == 0 or during['liveSamples'] == 4) and not during['complete'], draws
         assert page.evaluate("getComputedStyle(document.querySelector('#gpuCanvas')).transform") in ('none', 'matrix(1, 0, 0, 1, 0, 0)') or during['interactiveFrames'] > frames0
         page.mouse.up()
         settle(page)
         assert state(page)['lastCompleted']['samples'] == 4
         suite.record('Dragging shows live single-sample frames, then refines on release', {'frames': during['interactiveFrames'] - frames0, 'draws': draws})
+
+        # Grid-locked live frames: consecutive frames of a pan sample the same fractal points,
+        # so the overlapping pixels are identical (no shimmer while moving).
+        compared, frames = 0, []
+        for link, mode in [('v=1&x=-0.605137938972379900971816986088586258864125&y=0.437740442074800562969426507709712806289976004723289995229&s=7e-25&q=4', 'perturb'), ('v=1&x=-0.72&y=0.36&s=0.7&q=4', 'gpu')]:
+            open_app(page, link, mode)
+            grab = """() => { const c = document.querySelector('#gpuCanvas'), t = document.createElement('canvas'); t.width = c.width; t.height = c.height;
+              const g = t.getContext('2d'); g.drawImage(c, 0, 0); return {w: c.width, h: c.height, data: Array.from(g.getImageData(0, 0, c.width, c.height).data)}; }"""
+            page.mouse.move(cx, cy)
+            page.mouse.down()
+            shots = []
+            for step in [(31, 13), (77, 41), (113, -23)]:
+                count = state(page)['interactiveFrames']
+                page.mouse.move(cx + step[0], cy + step[1])
+                page.wait_for_function(f'() => tetraDiagnostics.interactiveFrames > {count} && tetraDiagnostics.displayCanvas === "gpuCanvas"', timeout=20000)
+                page.wait_for_timeout(60)
+                info = state(page)
+                shots.append((page.evaluate(grab), info['displayView']))
+            page.mouse.up()
+            for (a, va), (b, vb) in zip(shots, shots[1:]):
+                assert (a['w'], a['h']) == (b['w'], b['h']), 'live frame size changed during the gesture'
+                px = Decimal(va['span']) / a['w']
+                kx = (Decimal(vb['x']) - Decimal(va['x'])) / px
+                assert abs(kx - kx.to_integral_value()) < Decimal('1e-6'), kx
+                kx = int(kx.to_integral_value())
+                # Vertical step from the frame's own pixel grid: find the integer shift with identical overlap.
+                best = None
+                for ky in range(-a['h'] // 2, a['h'] // 2):
+                    diff = same_px = 0
+                    for y in range(max(0, ky), min(a['h'], a['h'] + ky), 3):
+                        for x in range(max(0, kx), min(a['w'], a['w'] + kx), 3):
+                            i, j = (y * a['w'] + x) * 4, ((y - ky) * a['w'] + (x - kx)) * 4
+                            if a['data'][i:i + 3] != b['data'][j:j + 3]: diff += 1
+                            else: same_px += 1
+                    if same_px > 50 and (best is None or diff < best[0]): best = (diff, ky, same_px)
+                assert best and best[0] == 0, best
+                compared += best[2]
+            frames.append([shots[0][0]['w'], shots[0][0]['h']])
+        suite.record('Panning is grid-locked at 10^25 and the overview: overlapping live-frame pixels are identical', {'compared_pixels': compared, 'frames': frames, 'depths': ['7e-25 perturbation', '0.7 direct']})
+        settle(page)
+        page.evaluate('''() => {window.__draws={1:0,4:0,16:0};const prepare=TetraGPU.prototype.prepare;
+          TetraGPU.prototype.prepare=function(frame,scene,samples,...rest){__draws[samples]=(__draws[samples]||0)+1;return prepare.call(this,frame,scene,samples,...rest);};}''')
 
         # Smooth wheel zoom: the displayed camera glides to the exact target.
         before = Decimal(state(page)['view']['span'])
