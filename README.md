@@ -6,7 +6,7 @@ A browser-native tetration explorer. Dive from the whole complex plane to 10²�
 
 [![Validate](https://github.com/MongLong0214/Tetration/actions/workflows/ci.yml/badge.svg)](https://github.com/MongLong0214/Tetration/actions)
 
-**1.0.0** · Live at **[tetration.vercel.app](https://tetration.vercel.app)**. Device qualification and device qualification are tracked in the [production review](docs/PRODUCTION_REVIEW.md). The app observes finite iterations; it does not prove convergence or divergence.
+**1.0.0** · Live at **[tetration.vercel.app](https://tetration.vercel.app)**. Device qualification is tracked in the [production review](docs/PRODUCTION_REVIEW.md). The app observes finite iterations; it does not prove convergence or divergence.
 
 ## Explore
 
@@ -151,6 +151,7 @@ npm run test:webkit
 | `src/index.html`, `src/style.css` | Interface around the map |
 | `tests/` | Numerical references, unit tests and browser suites |
 | `docs/review/v1.0.0/` | Current review evidence |
+| `docs/HANDOFF_PERFORMANCE.md`, `tools/perf/` | Performance handoff (architecture, baselines, bottlenecks, next optimizations) and measurement probes |
 
 Report bugs with a shared view URL, device/browser, iteration limit and engine. Numerical changes should include a reproducible case and independent reference values.
 
