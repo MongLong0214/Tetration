@@ -193,6 +193,10 @@ QA의 Playwright를 로컬과 동일한 `1.63.0`으로 고정했다. 이동 중 
 
 진단 실행 `37320489901`에서는 최대 설정의 마지막 draw·flush 뒤 약 10초까지 `clientWaitSync`가 계속 반환했고, 이후 출력이 끊겼다. 이는 코드의 10초 펜스 복구 시점과 일치하지만 파기 호출 자체를 아직 직접 관측한 것은 아니다. `suite=production-skip-loss`는 이 가설을 검사하기 위해 최대 설정에서만 native `loseContext()` 호출을 생략하는 반사실 진단이다. 원래 반복 수·AA16·240초 한도와 실제 CPU 계산은 유지하며, 성공하더라도 제품 복구나 처리량 인증으로 인정하지 않는다. 일반 production 진단은 파기 호출과 `deleteSync`·`isContextLost`의 전후 및 반환값도 기록한다. 기본 `all`에는 이 동작 변경과 계측을 적용하지 않는다.
 
+반사실 실행 `37323631737`도 실패했다. native 파기 호출을 생략한 뒤 `GPU renderer unavailable: GPU completion timed out`까지 진행했지만, 여전히 원래 240초 한도를 넘기고 페이지 진단이 응답하지 않았다. 따라서 파기 호출 하나가 원격 정지의 유일한 원인이라는 가설은 기각한다. CPU fallback의 2D Canvas도 기본적으로 GPU 가속을 사용할 수 있으므로 후속 진단은 Canvas·Worker의 실제 호출 전후를 함께 기록한다. 펜스 조회 로그는 256회당 한 번으로 제한한다. 그 의존성이 실제 정지 원인인지는 아직 확인하지 않았다.
+
+복구 순서 자체도 수정했다. 10초 한도에서 먼저 실패를 반환해 CPU 전환을 시작하고, 제출된 펜스가 실제 완료됐을 때만 native 컨텍스트를 파기한다. 진행 중인 작업은 새 draw 없이 하나의 컨텍스트와 낮은 빈도의 완료 조회로 보관한다. [Khronos의 파기·복원 명세](https://registry.khronos.org/webgl/extensions/WEBGL_lose_context/)와 [Chromium의 동기적인 ForceLostContext 정리 경로](https://github.com/chromium/chromium/blob/main/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc)를 참고했다. 미완료 자원 파기를 금지하는 회귀 검사는 기존 코드에서 실패하고 수정 후 통과했다. native 복원 검사는 강제 pending 전달을 해제하고 실제 loss 이벤트가 완료된 뒤 복원하며, 실제 FP64 AA16·반복 수·기존 렌더 시간 한도를 유지한다. 이 빌드 `eca11320…`는 로컬 단위 검사 132개·ESLint·production 18개를 통과했다. 원격 최대 설정의 정지와 새 빌드의 전체 브라우저 검증은 아직 미완료다.
+
 ## 직접 실험하고 제외한 방법
 
 | 실험 | 이 기기의 결과 | 판단 |

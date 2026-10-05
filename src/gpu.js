@@ -642,6 +642,18 @@ ${orbitLoop}` + perturbTail;
       gl.flush();
       return new Promise((resolve, reject) => {
         const started = performance.now();
+        const retire = () => {
+          if (gl.isContextLost()) return;
+          const status = gl.clientWaitSync(sync, 0, 0);
+          if (status === gl.ALREADY_SIGNALED || status === gl.CONDITION_SATISFIED) {
+            gl.deleteSync(sync);
+            this.contextLoss?.loseContext();
+            return;
+          }
+          // One abandoned context, no further draws. Keep pending driver work
+          // alive until completion; native teardown may wait synchronously.
+          setTimeout(retire, 1000);
+        };
         const poll = () => {
           if (gl.isContextLost()) { gl.deleteSync(sync); reject(Error('GPU context lost')); return; }
           const status = gl.clientWaitSync(sync, 0, 0);
@@ -649,11 +661,12 @@ ${orbitLoop}` + perturbTail;
           if (status === gl.TIMEOUT_EXPIRED) {
             // Some drivers leave a fence pending without a context-loss event.
             // Do not strand all future navigation behind it. Abandon this
-            // context and let the caller recompute with the CPU renderer.
+            // context and let the caller recompute with the CPU renderer. Do
+            // not destroy unfinished work before the caller can recover.
             if (performance.now() - started >= 10000) {
               this.failed = true;
-              this.contextLoss?.loseContext();
               reject(Error('GPU completion timed out'));
+              setTimeout(retire, 100);
               return;
             }
             // Catch short draws promptly, then poll at 1 ms without a busy loop. A task

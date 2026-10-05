@@ -140,6 +140,7 @@ def body():
 
         hung=browser.new_context(viewport={'width':480,'height':320})
         hung.add_init_script('''(()=>{window.__forceFencePending=true;
+         document.addEventListener('webglcontextlost',()=>{window.__nativeFenceLoss=true;},true);
          const wait=WebGL2RenderingContext.prototype.clientWaitSync;
          WebGL2RenderingContext.prototype.clientWaitSync=function(...a){const result=wait.apply(this,a);
           return __forceFencePending && !this.isContextLost()?this.TIMEOUT_EXPIRED:result;};})()''')
@@ -153,7 +154,11 @@ def body():
         one=pg.evaluate(grab_cpu)
         assert sum(a!=b for a,b in zip(aa,one))>500, 'CPU fallback advertised AA without changing actual pixels'
         controls(pg);pg.locator('#quality').select_option('16');close_controls(pg);settle(pg)
-        pg.evaluate('__forceFencePending=false;__restore.restoreContext()');ready(pg,'gpu');d=consistent(pg)
+        pg.evaluate('__forceFencePending=false')
+        # Retirement waits for actual completion. Restore only after the native
+        # loss event has run, as required by WEBGL_lose_context.
+        pg.wait_for_function('()=>window.__nativeFenceLoss===true')
+        pg.evaluate('__restore.restoreContext()');ready(pg,'gpu');d=consistent(pg)
         assert d['gpu'] and not d['gpuFailure'] and d['lastCompleted']['samples']==16, d
         suite.record('A fence that never reports completion switches to FP64 with real Ultra AA; native restore recomputes the GPU image')
         hung.close()
@@ -241,7 +246,7 @@ def body():
             suite.report['diagnostic_skip_pending_loss'] = skip_loss
             if skip_loss:
                 suite.report['limitations'].append('Counterfactual diagnostic: skips native loseContext only at the maximum setting. Not renderer recovery qualification.')
-            ctx.add_init_script('''(()=>{let sequence=0;
+            ctx.add_init_script('''(()=>{let sequence=0;const calls={};
              const extension=WebGL2RenderingContext.prototype.getExtension;
              WebGL2RenderingContext.prototype.getExtension=function(name){const e=extension.call(this,name);
               if(name==='WEBGL_lose_context'&&e&&!e.__traced){e.__traced=true;const lose=e.loseContext;
@@ -253,14 +258,28 @@ def body():
               const original=WebGL2RenderingContext.prototype[name];
               WebGL2RenderingContext.prototype[name]=function(...args){
                if(window.tetraDiagnostics?.iterations!==16384)return original.apply(this,args);
+               if((name==='clientWaitSync'||name==='isContextLost')&&((calls[name]=(calls[name]||0)+1)%256!==1))return original.apply(this,args);
                const id=++sequence;console.info('GPU_CALL',id,name,'begin',tetraDiagnostics.renderStage);
                const result=original.apply(this,args);console.info('GPU_CALL',id,name,'end',result);return result;
               };
              }
+             for(const [type,names] of [[CanvasRenderingContext2D,['drawImage','putImageData','fillRect','clearRect']],
+              [HTMLCanvasElement,['getContext']],[Worker,['postMessage']]]){
+              for(const name of names){const original=type.prototype[name];type.prototype[name]=function(...args){
+               if(window.tetraDiagnostics?.iterations!==16384)return original.apply(this,args);
+               const id=++sequence;console.info('CPU_CALL',id,name,'begin',this.canvas?.id||this.id||'',tetraDiagnostics.renderStage);
+               const result=original.apply(this,args);console.info('CPU_CALL',id,name,'end');return result;};}
+             }
+             for(const name of ['width','height']){const descriptor=Object.getOwnPropertyDescriptor(HTMLCanvasElement.prototype,name);
+              Object.defineProperty(HTMLCanvasElement.prototype,name,{...descriptor,set(value){
+               if(window.tetraDiagnostics?.iterations!==16384)return descriptor.set.call(this,value);
+               const id=++sequence;console.info('CPU_CALL',id,'canvas.'+name,'begin',this.id,value);
+               descriptor.set.call(this,value);console.info('CPU_CALL',id,'canvas.'+name,'end');}});
+             }
             })()'''.replace('SKIP_LOSS', 'true' if skip_loss else 'false'))
         page=suite.watch(ctx.new_page());open_app(page,SHALLOW)
         if os.environ.get('TETRA_TRACE_GPU') == '1':
-            page.on('console', lambda message: print(message.text, flush=True) if message.text.startswith(('GPU_CALL','GPU_LOSS','DIAGNOSTIC_')) else None)
+            page.on('console', lambda message: print(message.text, flush=True) if message.text.startswith(('GPU_CALL','GPU_LOSS','CPU_CALL','DIAGNOSTIC_')) else None)
         for engine, quality, palette, iterations in [('auto',1,1,64),('cpu',4,2,128),('exact',16,3,64),('auto',16,0,16384),('auto',4,2,'auto')]:
             print('PRODUCTION_SETTING_STAGE', engine, quality, palette, iterations, flush=True)
             controls(page); page.locator('#engine').select_option(engine); page.locator('#quality').select_option(str(quality))
