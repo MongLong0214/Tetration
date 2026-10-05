@@ -734,7 +734,9 @@
 
   // ---------- CPU rendering (persistent Worker pool) ----------
   const memory = navigator.deviceMemory || 8;
-  const poolLimit = Math.max(1, Math.min(8, (navigator.hardwareConcurrency || 2) - 1, memory <= 2 ? 2 : memory <= 4 ? 4 : 8));
+  // CPU passes start after navigation rests; Workers yield for cancellation.
+  // Reserving a whole logical processor underuses small machines during recovery.
+  const poolLimit = Math.max(1, Math.min(8, navigator.hardwareConcurrency || 2, memory <= 2 ? 2 : memory <= 4 ? 4 : 8));
   const pool = {workers: [], size: poolLimit, job: 0, pendingPaint: 0, active: 0};
   function ensurePool() {
     while (pool.workers.length < pool.size) {

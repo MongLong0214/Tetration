@@ -124,7 +124,8 @@ def graphics(page):
     return page.evaluate('''()=>{const gl=document.querySelector('#gpuCanvas').getContext('webgl2');
       if(!gl)return null;const e=gl.getExtension('WEBGL_debug_renderer_info');
       return {renderer:gl.getParameter(e?e.UNMASKED_RENDERER_WEBGL:gl.RENDERER),
-        vendor:gl.getParameter(e?e.UNMASKED_VENDOR_WEBGL:gl.VENDOR),version:gl.getParameter(gl.VERSION)};}''')
+        vendor:gl.getParameter(e?e.UNMASKED_VENDOR_WEBGL:gl.VENDOR),version:gl.getParameter(gl.VERSION),
+        processors:navigator.hardwareConcurrency,memory:navigator.deviceMemory||null};}''')
 
 
 def open_app(page, fragment='', mode=None, fresh=True):

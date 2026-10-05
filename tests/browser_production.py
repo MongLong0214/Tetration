@@ -10,7 +10,7 @@ from playwright.sync_api import sync_playwright
 WEBKIT = os.environ.get('TETRA_BROWSER') == 'webkit'
 suite = Suite('production-webkit' if WEBKIT else 'production',
               ['Playwright desktop browser; not physical Safari/iPhone/Android qualification.',
-               'Named Worker/allocation failures, GPU completion delivery and one visibility transition are injected.'])
+               'Named Worker/allocation failures, GPU completion delivery, a three-processor capacity and one visibility transition are injected.'])
 SHALLOW = 'v=1&x=-1.84&y=0.09&s=0.46&n=128&q=16'
 CLOSE = 'v=1&x=-2.2930579&y=0.3320804&s=0.00025&n=512&q=16'
 GRAB = '''() => {const c=document.querySelector('#gpuCanvas'),t=document.createElement('canvas');t.width=c.width;t.height=c.height;
@@ -137,6 +137,20 @@ def body():
         controls(page); page.locator('[data-palette="1"]').click(); close_controls(page); settle(page)
         d = consistent(page); assert d['gpu'] and d['lastCompleted']['samples'] == 16 and d['palette'] == 1
         suite.record('One allocation failure clears cache and retries without lowering AA or iterations')
+
+        capacity=browser.new_context(viewport={'width':320,'height':240})
+        capacity.add_init_script("Object.defineProperty(navigator,'hardwareConcurrency',{get:()=>3});Object.defineProperty(navigator,'deviceMemory',{get:()=>8})")
+        cp=suite.watch(capacity.new_page());cp.goto(BASE+'/#v=1&x=-1.84&y=0.09&s=0.46&n=16384&q=16&e=cpu')
+        cp.wait_for_function('()=>tetraDiagnostics.workers===3&&!tetraDiagnostics.complete')
+        previous=state(cp)['view'];cp.locator('#viewport').focus();cp.keyboard.press('ArrowRight')
+        cp.wait_for_function('(x)=>tetraDiagnostics.view.x!==x',arg=previous['x'])
+        coordinates(cp,'0.5','0','0.05');close_controls(cp);settle(cp);d=consistent(cp)
+        assert d['view']['x']=='0.5' and d['view']['y']=='0' and d['iterations']==16384 and d['lastCompleted']['samples']==16,d
+        image="()=>{const c=document.querySelector('#cpuCanvas');return Array.from(c.getContext('2d').getImageData(0,0,c.width,c.height).data)}"
+        final=cp.evaluate(image);cp.wait_for_timeout(250)
+        assert cp.evaluate(image)==final,'Superseded CPU tiles replaced the new completed camera'
+        suite.record('A three-processor CPU job remains navigable and cancellation preserves the new real AA16 image',{'injected_capacity':3,'workers':d['workers'],'iterations':d['iterations'],'samples':d['lastCompleted']['samples']})
+        capacity.close()
 
         hung=browser.new_context(viewport={'width':480,'height':320})
         hung.add_init_script('''(()=>{window.__forceFencePending=true;
