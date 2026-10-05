@@ -24,6 +24,14 @@ def body():
         browser = launch(p)
         suite.report['browser_version'] = browser.version
         context = browser.new_context(viewport={'width': 1440, 'height': 960}, permissions=['clipboard-read', 'clipboard-write'])
+        # CSS focus changes do not emit window.resize. Defer the native observer
+        # to exercise the interval in which stale pixels used to report complete.
+        context.add_init_script('''const NativeResizeObserver=ResizeObserver;
+          window.ResizeObserver=class extends NativeResizeObserver{constructor(callback){super((entries,observer)=>{
+            if(window.__holdViewportResize&&entries.some(e=>e.target.id==='viewport')){
+              window.__heldViewportResize=()=>callback(entries,observer);return;
+            }callback(entries,observer);
+          });}};''')
         page = suite.watch(context.new_page())
         initial = open_app(page)
         suite.report['graphics'] = graphics(page)
@@ -57,14 +65,44 @@ def body():
         suite.record('Back, forward and a new navigation branch preserve history')
 
         before = state(page)['view']
+        page.evaluate('''()=>{
+          window.__holdViewportResize=true;window.__focusTransitions=[];
+          window.__captureFocusResize=e=>{
+            const button=e.target.closest?.('button');
+            if(!window.__holdViewportResize||!(e.type==='keydown'&&e.key==='Escape'||
+              e.type==='click'&&['focusBtn','exitFocusBtn'].includes(button?.id)))return;
+            const d=tetraDiagnostics;
+            __focusTransitions.push({focus:d.focus,complete:d.complete,busy:document.querySelector('#viewport').getAttribute('aria-busy'),
+              height:document.querySelector('#viewport').getBoundingClientRect().height,previousHeight:d.lastCompleted.height,view:d.view});
+          };
+          document.addEventListener('click',__captureFocusResize);
+          document.addEventListener('keydown',__captureFocusResize);
+        }''')
         page.keyboard.press('f')
+        transition = page.evaluate('__focusTransitions.at(-1)')
+        assert transition['focus'] and not transition['complete'] and transition['busy'] == 'true', transition
         settle(page)
         assert state(page)['focus'] and page.locator('#viewport').bounding_box()['height'] == 960 and state(page)['view'] == before
         assert state(page)['lastCompleted']['height'] == 960
         page.keyboard.press('Escape')
+        transition = page.evaluate('__focusTransitions.at(-1)')
+        assert not transition['focus'] and not transition['complete'] and transition['busy'] == 'true', transition
         settle(page)
         assert not state(page)['focus'] and state(page)['view'] == before
         suite.record('Focus mode fills the screen at full resolution and preserves exact coordinates')
+        # Repeat with real buttons: both sizes are now cached, but neither old
+        # size may remain complete while the requested layout has changed.
+        page.locator('#focusBtn').click(); settle(page)
+        assert state(page)['lastCompleted']['height'] == 960
+        page.locator('#exitFocusBtn').click(); settle(page)
+        assert state(page)['lastCompleted']['height'] == 872
+        transitions = page.evaluate('__focusTransitions')
+        assert len(transitions) == 4 and all(not t['complete'] and t['busy'] == 'true' and t['view'] == before for t in transitions), transitions
+        assert [t['height'] for t in transitions] == [960, 872, 960, 872], transitions
+        page.wait_for_function('() => !!window.__heldViewportResize', timeout=30000)
+        page.evaluate('''()=>{__holdViewportResize=false;__heldViewportResize();
+          document.removeEventListener('click',__captureFocusResize);document.removeEventListener('keydown',__captureFocusResize);}''')
+        suite.record('Focus entry and exit invalidate stale completion before delayed resize delivery, including cached sizes', transitions)
 
         for key, span in [('2', '0.00025'), ('5', '0.00000000005'), ('7', '0.' + '0' * 99 + '7')]:
             page.keyboard.press(key)

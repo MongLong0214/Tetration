@@ -1314,6 +1314,9 @@
     document.body.classList.toggle('focus-mode', enabled);
     $('focusBtn').setAttribute('aria-pressed', String(enabled)); $('focusBtn').setAttribute('aria-label', enabled ? 'Exit focus mode' : 'Enter focus mode');
     $('exitFocusBtn').hidden = !enabled; viewport.focus({preventScroll: true});
+    // CSS changes can precede ResizeObserver delivery. Invalidate the old size
+    // before callers can treat its pixels as a completed focused view.
+    measure();
   }
   $('focusBtn').onclick = () => focusMode(!document.body.classList.contains('focus-mode'));
   $('exitFocusBtn').onclick = () => focusMode(false);
