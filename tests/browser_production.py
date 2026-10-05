@@ -96,12 +96,16 @@ def body():
         page.mouse.move(x, y); page.mouse.down(); page.mouse.move(x+23, y+9)
         page.wait_for_function('()=>tetraDiagnostics.interactiveFrames>0 && typeof window.__resumeFrame==="function"')
         assert state(page)['retainedDetail'] is None
-        expected = page.evaluate('''()=>{const c=document.querySelector('#gpuCanvas'),out=document.createElement('canvas'),r=document.querySelector('#viewport').getBoundingClientRect();
-         out.width=c.width;out.height=c.height;const g=out.getContext('2d'),m=new DOMMatrix(c.style.transform);
-         g.fillStyle='#060606';g.fillRect(0,0,out.width,out.height);g.translate(out.width/2+m.e/r.width*out.width,out.height/2+m.f/r.height*out.height);
-         g.scale(m.a,m.d);g.translate(-out.width/2,-out.height/2);g.drawImage(c,0,0);return {w:out.width,h:out.height,data:Array.from(g.getImageData(0,0,out.width,out.height).data),sy:m.d};}''')
+        # Capture the expected compositor and start export in the same task.
+        # A slow renderer can still be easing the camera between protocol calls.
+        with page.expect_download() as event:
+            expected = page.evaluate('''()=>{const c=document.querySelector('#gpuCanvas'),out=document.createElement('canvas'),r=document.querySelector('#viewport').getBoundingClientRect();
+             out.width=c.width;out.height=c.height;const g=out.getContext('2d'),m=new DOMMatrix(c.style.transform);
+             g.fillStyle='#060606';g.fillRect(0,0,out.width,out.height);g.translate(out.width/2+m.e/r.width*out.width,out.height/2+m.f/r.height*out.height);
+             g.scale(m.a,m.d);g.translate(-out.width/2,-out.height/2);g.drawImage(c,0,0);
+             const expected={w:out.width,h:out.height,data:Array.from(g.getImageData(0,0,out.width,out.height).data),sy:m.d};
+             document.querySelector('#exportBtn').click();return expected;}''')
         assert abs(expected['sy']-1) > 1e-5, 'Witness must exercise vertical overscan'
-        with page.expect_download() as event: page.locator('#exportBtn').evaluate('(e)=>e.click()')
         path = OUT / ('production-live-webkit.png' if WEBKIT else 'production-live.png'); event.value.save_as(str(path))
         png = Image.open(path).convert('RGBA')
         upper = (0, 0, png.width, png.height-43)

@@ -83,7 +83,12 @@ def body():
 
         # Explore as soon as native 4x detail is ready, without waiting for Ultra.
         page.set_viewport_size({'width': 1280, 'height': 800})
-        page.wait_for_function('''() => {const d=tetraDiagnostics;return !d.complete && d.renderStage==='ultra' && d.displayWidth===1280 && d.displaySmooth && !d.displaySoft;}''')
+        try:
+            page.wait_for_function('''() => {const d=tetraDiagnostics;return !d.complete && d.renderStage==='ultra' && d.displayWidth===1280 && d.displaySmooth && !d.displaySoft;}''')
+        except Exception:
+            suite.report['failure_state'] = state(page)
+            page.screenshot(path=str(OUT / f'{suite.name}-failure.png'))
+            raise
         box = page.locator('#viewport').bounding_box()
         x, y = box['x'] + box['width'] / 2, box['y'] + box['height'] / 2
         page.mouse.move(x, y); page.mouse.down(); page.mouse.move(x + 12, y + 5)

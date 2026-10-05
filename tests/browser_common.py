@@ -64,7 +64,14 @@ def launch(playwright, extra=()):
 
 def ready(page, mode=None, timeout=240000):
     selector = 'body[data-complete="true"]' + (f'[data-mode="{mode}"]' if mode else '')
-    page.wait_for_selector(selector, state='attached', timeout=timeout)
+    try:
+        page.wait_for_selector(selector, state='attached', timeout=timeout)
+    except Exception:
+        try:
+            print('RENDER_TIMEOUT_STATE', json.dumps(state(page)), flush=True)
+        except Exception:
+            pass  # Preserve the original timeout if the page itself is gone.
+        raise
 
 
 def settle(page, timeout=240000):

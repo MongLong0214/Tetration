@@ -161,9 +161,21 @@ PNG 문제는 같은 JS task에서 같은 화면의 저장을 두 번 시작하�
 
 최대 반복 수 16,384·Ultra의 조밀한 장면에서 이 M4 WebKit은 네이티브 GPU context를 잃거나 완료를 보고하지 않는 경우가 있었다. 작은 타일만으로 해결되지 않아 무한 대기 복구를 추가했다. 최종 실행의 640×354 이미지는 Chromium GPU에서 27.16초, WebKit FP64 fallback에서 71.726초 걸렸다. 양쪽 모두 상한 16,384·실제 AA 16을 유지했고 이어지는 Home/Back도 완료됐다. 이는 극단 설정의 빠른 완료를 뜻하지 않는다. CPU의 기존 계산 예산은 1.6 MP·가로 최대 2048이고 Exact는 별도의 작은 고정밀 격자다. fallback을 GPU의 8.3 MP 예산과 동일하다고 해석하면 안 된다.
 
-최종 로컬 HTML SHA256은 `32951abfc1929e13f2941afd5d3d391fd26c1c60da8752087898436c57fd078f`, 크기는 247,938 bytes다. 실제 4187 응답도 같은 SHA임을 확인했다. 이 빌드를 고정하고 GPU 검사를 순차 실행해 **15개 브라우저 스위트·247개 검사**, 단위 검사 **131개**, ESLint를 통과했다. 모든 보고서의 origin·bundle SHA가 같고 uncaught exception은 0이다. Metal Chromium, Playwright WebKit을 사용했으며 deep 가속 비교는 기존과 같은 SwiftShader로 실행했다. 실패했던 최대 반복 수/AA 검사의 조건과 기존 시간 한도를 완화하지 않았다. GitHub의 Linux CI 결과와 병합 여부는 해당 커밋의 Actions·Git 이력에서 확인할 수 있다.
+`43512ba`의 로컬 HTML SHA256은 `32951abfc1929e13f2941afd5d3d391fd26c1c60da8752087898436c57fd078f`, 크기는 247,938 bytes다. 실제 4187 응답도 같은 SHA임을 확인했다. 이 빌드를 고정하고 GPU 검사를 순차 실행해 **15개 브라우저 스위트·247개 검사**, 단위 검사 **131개**, ESLint를 통과했다. 모든 보고서의 origin·bundle SHA가 같고 uncaught exception은 0이다. Metal Chromium, Playwright WebKit을 사용했으며 deep 가속 비교는 기존과 같은 SwiftShader로 실행했다. 실패했던 최대 반복 수/AA 검사의 조건과 기존 시간 한도를 완화하지 않았다. GitHub의 Linux CI 결과와 병합 여부는 해당 커밋의 Actions·Git 이력에서 확인할 수 있다.
 
 네이티브 fullscreen·문서 이동/Back·다중 탭 storage는 실제 브라우저 API로 검사했다. 이 자동화 환경에서는 다른 탭 전환·창 최소화로도 네이티브 hidden 상태를 얻지 못했다. 위 visibility 검사는 주입한 앱 전환 검사이며 네이티브 백그라운드 동작의 실기기 검증이 아니다. WebKit의 hot DPR, Safari 앱, 물리 iPhone·Android·저사양 GPU와 모든 chaotic 픽셀의 정밀도 일치는 여전히 별도 검증 대상이다.
+
+## Linux 표시 경로 후속 재현
+
+`43512ba`의 [Linux CI 실행](https://github.com/MongLong0214/Tetration/actions/runs/37302481156)은 실패했다. macOS 로컬 통과만으로 병합하지 않았다. WebKit의 확대·팬 픽셀 오류, 양 브라우저의 이동 중 PNG 비교 오류, Chromium의 큰 Ultra 장면 시간 초과를 각각 조사했다. 위 `32951abf…` 247개 통과는 그 커밋의 로컬 기록이며, 후속 빌드의 통과를 대신하지 않는다.
+
+Linux Playwright WebKit에서 기본 drawing buffer로 `blitFramebuffer`하면 `INVALID_OPERATION`(1282)이 발생했다. 최종 표시를 작은 텍스처 복사 셰이더로 바꿨다. RGBA8 내부 프레임의 실제 AA 표시는 유지하고 화면 alpha만 1로 만든다. 궤도 수식·반복 수·최종 해상도를 변경하지 않는다.
+
+복사 오류를 고친 뒤에도 재사용한 framebuffer에서 이전 프리뷰 색이 남았다. 같은 context에서 새 프레임은 정상인데 pooled 프레임은 단색 offscreen clear 후 기본 화면을 clear하면 offscreen readback까지 바뀌었다. 재사용 시 attachment를 분리하고 원래 텍스처를 다시 연결하면 확대 재현이 통과했다. 팬·Back·새 영역의 픽셀 비교도 복사 원본과 readback을 함께 갱신해야 통과했다. 연결 갱신은 공통 `refreshFrame`으로 처리한다. 브라우저 내부의 정확한 원인은 확정하지 않았고, `gl.finish()` 대기·표시 전 resize·scissor 대신 viewport를 사용하는 실험은 이 오류를 해결하지 못해 적용하지 않았다.
+
+QA의 Playwright를 로컬과 동일한 `1.63.0`으로 고정했다. 이동 중 PNG의 기대 이미지와 export 클릭도 한 JavaScript 작업에서 잡도록 고쳤다. 기존 1-byte RGB 허용 범위와 장면·AA·시간 한도는 유지했다. ready 시간 초과 시 아직 열린 페이지에서 실제 렌더 상태를 출력하고, 확대 픽셀 실패 시 상태와 PNG를 보존한다.
+
+부분 수정 HTML `61ec03df…`(249,142 bytes)의 결과와 최종 후속 HTML `6fb08b745b4dd4cf4e3e9ce0b7fe37a84b32832b006821408946810806f41b52`(249,466 bytes)을 구분한다. 단위 검사 131개와 ESLint를 통과했다. 부분 수정 빌드는 Linux x86_64 Playwright 컨테이너의 확대 재현 7개 검사를 통과했다. 공통 갱신 함수의 실험에서는 팬 재사용 12개 검사도 원래 픽셀·시간 조건으로 통과했다. 최종 후속 빌드의 확대·팬·PNG 및 전체 브라우저 실행은 별도로 재검증한다. 이 컨테이너는 Mac에서 에뮬레이션한 환경으로 GitHub의 네이티브 Linux 성능을 인증하지 않는다. 전체 후속 브라우저 실행과 해당 head의 CI 결과는 별도로 확인해야 한다.
 
 ## 직접 실험하고 제외한 방법
 

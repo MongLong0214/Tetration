@@ -314,7 +314,17 @@ ${orbitLoop}` + perturbTail;
     perturb: [...COMMON, 'Ref', 'RefLength', 'RefValues', 'Scale', 'InvExp', 'L0', 'Inv', 'Delta', 'DeltaMirror', 'ImCenter', 'SpanMant'],
   };
   UNIFORMS.perturbBla = [...UNIFORMS.perturb, 'Bla', 'BlaLevels', 'BlaBase'];
-  const SOURCES = {direct, perturb, perturbBla};
+  // Default drawing buffers need not have the offscreen RGBA8 format. Some
+  // WebKit drivers reject a framebuffer blit to them with INVALID_OPERATION.
+  // Draw the computed texture instead, keeping sample-count alpha off screen.
+  const present = `#version 300 es
+ precision highp float;
+ uniform vec2 uSize;
+ uniform sampler2D uSource;
+ out vec4 pixel;
+ void main(){pixel=vec4(texture(uSource,gl_FragCoord.xy/uSize).rgb,1.);}`;
+  UNIFORMS.present = ['Size', 'Source'];
+  const SOURCES = {direct, perturb, perturbBla, present};
 
   class TetraGPU {
     constructor(canvas) {
@@ -521,12 +531,27 @@ ${orbitLoop}` + perturbTail;
       if (this.parallel && !this.pendingBla && this.blaMode !== 'on') { this.pendingBla = this.startLink(perturbBla); return 0; }
       return (allowLink || this.pendingBla) && this.blaProgram() ? bla.levels : 0;
     }
+    // WebKit can retain the drawing-buffer attachment for a recycled FBO.
+    // Reconnect its texture before reads, copies and draws; refreshing only the
+    // destination leaves cached source frames and readback affected as well.
+    refreshFrame(frame) {
+      if (!frame) return;
+      const gl = this.gl;
+      gl.bindFramebuffer(gl.FRAMEBUFFER, frame.buffer);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, null, 0);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, frame.texture, 0);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    }
     beginFrame(width, height, seed = null, adaptive = false) {
       const gl = this.gl;
       if (width > this.maxTexture || height > this.maxTexture) throw Error('GPU image limit');
+      this.refreshFrame(seed);
       let frame = null;
       const index = this.pool.findIndex(item => item.width === width && item.height === height);
-      if (index >= 0) frame = this.pool.splice(index, 1)[0];
+      if (index >= 0) {
+        frame = this.pool.splice(index, 1)[0];
+        this.refreshFrame(frame);
+      }
       else {
         const texture = gl.createTexture(), buffer = gl.createFramebuffer();
         gl.bindTexture(gl.TEXTURE_2D, texture); gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA8, width, height); this.setNearest();
@@ -553,6 +578,7 @@ ${orbitLoop}` + perturbTail;
       const w = frame.width - Math.abs(dx), h = frame.height - Math.abs(dy);
       if (w <= 0 || h <= 0) return;
       const gl = this.gl, sx = Math.max(0, dx), sy = Math.max(0, dy), x = Math.max(0, -dx), y = Math.max(0, -dy);
+      this.refreshFrame(source); this.refreshFrame(frame);
       gl.bindFramebuffer(gl.READ_FRAMEBUFFER, source.buffer); gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, frame.buffer);
       gl.blitFramebuffer(sx, sy, sx + w, sy + h, x, y, x + w, y + h, gl.COLOR_BUFFER_BIT, gl.NEAREST);
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
@@ -566,6 +592,7 @@ ${orbitLoop}` + perturbTail;
     prepare(frame, scene, samples, threshold = 0.035, allowLink = true) {
       const gl = this.gl;
       if (gl.isContextLost()) throw Error('GPU context lost');
+      this.refreshFrame(frame);
       const levels = scene.mode === 'perturb' ? this.blaLevels(frame, scene, allowLink) : 0;
       const {program, uniforms: u} = this.program(levels ? 'perturbBla' : scene.mode);
       if (scene.mode === 'perturb') this.perturbWarm = true;
@@ -643,27 +670,35 @@ ${orbitLoop}` + perturbTail;
     }
     /* soft: show a single-sample image without its noise, as the 2x2 average (an exact box
      * filter: a 2:1 linear blit) scaled back up bilinearly — four samples per pixel at half
-     * resolution, for two blits. */
+     * resolution. */
     presentFrame(frame, soft = false) {
       const gl = this.gl, c = this.canvas;
+      this.refreshFrame(frame);
       if (c.width !== frame.width || c.height !== frame.height) { c.width = frame.width; c.height = frame.height; }
       const hw = frame.width >> 1, hh = frame.height >> 1;
+      let source = frame;
       if (soft && hw >= 1 && hh >= 1) {
         const half = this.halfFrame(hw, hh);
         gl.bindFramebuffer(gl.READ_FRAMEBUFFER, frame.buffer); gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, half.buffer);
         gl.blitFramebuffer(0, 0, hw * 2, hh * 2, 0, 0, hw, hh, gl.COLOR_BUFFER_BIT, gl.LINEAR);
-        gl.bindFramebuffer(gl.READ_FRAMEBUFFER, half.buffer); gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
-        gl.blitFramebuffer(0, 0, hw, hh, 0, 0, frame.width, frame.height, gl.COLOR_BUFFER_BIT, gl.LINEAR);
-      } else {
-        gl.bindFramebuffer(gl.READ_FRAMEBUFFER, frame.buffer); gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
-        gl.blitFramebuffer(0, 0, frame.width, frame.height, 0, 0, frame.width, frame.height, gl.COLOR_BUFFER_BIT, gl.NEAREST);
+        source = half;
       }
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      const {program, uniforms: u} = this.program('present');
+      gl.viewport(0, 0, frame.width, frame.height); gl.useProgram(program);
+      gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, source.texture);
+      if (source !== frame) {
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      }
+      gl.uniform2f(u.Size, frame.width, frame.height); gl.uniform1i(u.Source, 0);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      if (source !== frame) this.setNearest();
+      gl.flush();
     }
     // One reusable half-size target for soft presentation (not part of the frame pool).
     halfFrame(width, height) {
       const gl = this.gl;
-      if (this.half && this.half.width === width && this.half.height === height) return this.half;
+      if (this.half && this.half.width === width && this.half.height === height) { this.refreshFrame(this.half); return this.half; }
       if (this.half) { gl.deleteFramebuffer(this.half.buffer); gl.deleteTexture(this.half.texture); }
       const texture = gl.createTexture(), buffer = gl.createFramebuffer();
       gl.bindTexture(gl.TEXTURE_2D, texture); gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA8, width, height); this.setNearest();
@@ -682,6 +717,7 @@ ${orbitLoop}` + perturbTail;
     // Synchronous RGBA readback (bottom row first); used by tests and diagnostics.
     readFrame(frame, x = 0, y = 0, width = frame.width, height = frame.height) {
       const gl = this.gl, out = new Uint8Array(width * height * 4);
+      this.refreshFrame(frame);
       gl.bindFramebuffer(gl.FRAMEBUFFER, frame.buffer); gl.readPixels(x, y, width, height, gl.RGBA, gl.UNSIGNED_BYTE, out); gl.bindFramebuffer(gl.FRAMEBUFFER, null);
       return out;
     }
