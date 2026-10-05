@@ -9,7 +9,7 @@ on:
         description: Full qualification or a production GPU diagnostic
         type: choice
         default: all
-        options: [all, production]
+        options: [all, production, production-skip-loss]
 permissions:
   contents: read
 concurrency:
@@ -41,7 +41,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        suite: ${{ fromJSON(inputs.suite == 'production' && '["production"]' || '["review","release","deep","quality","explorer","perf","reuse","interactions","production","zoom","webkit","reuse-webkit","interactions-webkit","production-webkit","zoom-webkit"]') }}
+        suite: ${{ fromJSON(startsWith(inputs.suite, 'production') && '["production"]' || '["review","release","deep","quality","explorer","perf","reuse","interactions","production","zoom","webkit","reuse-webkit","interactions-webkit","production-webkit","zoom-webkit"]') }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
@@ -74,8 +74,9 @@ jobs:
         env:
           TETRA_BASE_URL: http://127.0.0.1:4173
           TETRA_HARDWARE_BROWSER: ${{ runner.os == 'macOS' && '1' || '0' }}
-          TETRA_TRACE_GPU: ${{ inputs.suite == 'production' && '1' || '0' }}
-          DEBUG: ${{ inputs.suite == 'production' && 'pw:browser' || '' }}
+          TETRA_TRACE_GPU: ${{ startsWith(inputs.suite, 'production') && '1' || '0' }}
+          TETRA_SKIP_PENDING_LOSS: ${{ inputs.suite == 'production-skip-loss' && '1' || '0' }}
+          DEBUG: ${{ startsWith(inputs.suite, 'production') && 'pw:browser' || '' }}
       - name: Preserve browser evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

@@ -237,19 +237,30 @@ def body():
         if os.environ.get('TETRA_TRACE_GPU') == '1':
             suite.report['gpu_trace_enabled'] = True
             suite.report['limitations'].append('GPU call logging is enabled; this diagnostic run is not throughput qualification.')
+            skip_loss = os.environ.get('TETRA_SKIP_PENDING_LOSS') == '1'
+            suite.report['diagnostic_skip_pending_loss'] = skip_loss
+            if skip_loss:
+                suite.report['limitations'].append('Counterfactual diagnostic: skips native loseContext only at the maximum setting. Not renderer recovery qualification.')
             ctx.add_init_script('''(()=>{let sequence=0;
-             for(const name of ['drawArrays','flush','readPixels','getProgramParameter','clientWaitSync','framebufferTexture2D']){
+             const extension=WebGL2RenderingContext.prototype.getExtension;
+             WebGL2RenderingContext.prototype.getExtension=function(name){const e=extension.call(this,name);
+              if(name==='WEBGL_lose_context'&&e&&!e.__traced){e.__traced=true;const lose=e.loseContext;
+               e.loseContext=function(...args){const traced=window.tetraDiagnostics?.iterations===16384;
+                if(traced){console.info('GPU_LOSS_BEGIN');if(SKIP_LOSS){console.info('DIAGNOSTIC_SKIP_PENDING_LOSS');return;}}
+                const result=lose.apply(e,args);if(traced)console.info('GPU_LOSS_END');return result;};
+              }return e;};
+             for(const name of ['drawArrays','flush','readPixels','getProgramParameter','clientWaitSync','framebufferTexture2D','deleteSync','isContextLost']){
               const original=WebGL2RenderingContext.prototype[name];
               WebGL2RenderingContext.prototype[name]=function(...args){
                if(window.tetraDiagnostics?.iterations!==16384)return original.apply(this,args);
                const id=++sequence;console.info('GPU_CALL',id,name,'begin',tetraDiagnostics.renderStage);
-               const result=original.apply(this,args);console.info('GPU_CALL',id,name,'end');return result;
+               const result=original.apply(this,args);console.info('GPU_CALL',id,name,'end',result);return result;
               };
              }
-            })()''')
+            })()'''.replace('SKIP_LOSS', 'true' if skip_loss else 'false'))
         page=suite.watch(ctx.new_page());open_app(page,SHALLOW)
         if os.environ.get('TETRA_TRACE_GPU') == '1':
-            page.on('console', lambda message: print(message.text, flush=True) if message.text.startswith('GPU_CALL') else None)
+            page.on('console', lambda message: print(message.text, flush=True) if message.text.startswith(('GPU_CALL','GPU_LOSS','DIAGNOSTIC_')) else None)
         for engine, quality, palette, iterations in [('auto',1,1,64),('cpu',4,2,128),('exact',16,3,64),('auto',16,0,16384),('auto',4,2,'auto')]:
             print('PRODUCTION_SETTING_STAGE', engine, quality, palette, iterations, flush=True)
             controls(page); page.locator('#engine').select_option(engine); page.locator('#quality').select_option(str(quality))
