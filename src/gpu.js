@@ -26,7 +26,7 @@
  uniform float uLowA,uMaxB,uTol,uThreshold;
  uniform sampler2D uSource;
  uniform sampler2D uPartialSource;
- uniform int uPartialBase;
+ uniform int uPartial,uPartialBase;
  // Live accumulation: uSource is the previous live image, carried by an integer shift (mode 1)
  // or resampled from another sampling grid (mode 2) with at most uHistCap samples of trust.
  uniform int uAccum,uHistMode,uInterleave,uPhase;
@@ -81,7 +81,13 @@
   /* Every path ends in one sample loop: orbitColor is inlined by GPU compilers, so a single
    * call site keeps the program small and quick to compile. */
   vec4 seed=vec4(0.);vec3 rgb=vec3(0.);float alpha=1.,weight=1.;int first=0,count=1,mode=0;
-  if(uAccum==1){
+  if(uPartial==1){
+   if(uAdaptive==1){float contrast;seed=adaptiveSeed(point,contrast);if(contrast<uThreshold){pixel=seed;return;}}
+   bool reuse=uSamples==16&&uAdaptive==1&&abs(seed.a-64./255.)<.5/255.;
+   rgb=uPartialBase==0?(reuse?seed.rgb*4.:vec3(0.)):texelFetch(uPartialSource,ivec2(gl_FragCoord.xy),0).rgb;
+   first=(reuse?4:0)+uPartialBase;count=first<uSamples?1:0;mode=2;
+   weight=uPartialBase==uSamples-1?1./float(uSamples):1.;alpha=uSamples==4?64./255.:1.;
+  }else if(uAccum==1){
    // Running mean of up to 16 stratified samples; converged pixels are copied, not recomputed.
    seed=history(point);int n=int(seed.a);
    if(n>=16){pixel=vec4(seed.rgb,16./255.);return;}
@@ -110,20 +116,6 @@
   }
   pixel=vec4(rgb*weight,alpha);
  }`;
-  // One orbit per invocation: even four long orbits in an ordinary AA pass
-  // can strand native completion. Keep this out of ordinary/live programs.
-  const partialFooter = footer.slice(0, footer.indexOf(' void main(){')) + `
- void main(){
-  vec2 point=gl_FragCoord.xy+uOffset;vec4 seed=vec4(0.);
-  if(uAdaptive==1){float contrast;seed=adaptiveSeed(point,contrast);if(contrast<uThreshold){pixel=seed;return;}}
-  bool reuse=uSamples==16&&uAdaptive==1&&abs(seed.a-64./255.)<.5/255.;
-  vec3 rgb=uPartialBase==0?(reuse?seed.rgb*4.:vec3(0.)):texelFetch(uPartialSource,ivec2(gl_FragCoord.xy),0).rgb;
-  int n=(reuse?4:0)+uPartialBase;
-  if(n<uSamples)rgb+=orbitColor(point+cell(n));
-  float weight=uPartialBase==uSamples-1?1./float(uSamples):1.;
-  pixel=vec4(rgb*weight,uSamples==4?64./255.:1.);
- }`;
-
   const direct = header + `
  uniform vec2 uCenter;
  uniform float uSpan;
@@ -346,7 +338,7 @@ ${orbitLoop}` + perturbTail;
     queue.push(task); channel.port2.postMessage(0);
   }
 
-  const COMMON = ['Size', 'Aspect', 'Grid', 'Shift', 'Step', 'Offset', 'Iterations', 'Palette', 'Samples', 'Adaptive', 'Source', 'PartialSource', 'PartialBase', 'LowA', 'MaxB', 'Tol', 'Threshold', 'Accum', 'HistMode', 'Interleave', 'Phase', 'HistShift', 'HistScale', 'HistOffset', 'HistCount', 'HistCap'];
+  const COMMON = ['Size', 'Aspect', 'Grid', 'Shift', 'Step', 'Offset', 'Iterations', 'Palette', 'Samples', 'Adaptive', 'Source', 'Partial', 'PartialSource', 'PartialBase', 'LowA', 'MaxB', 'Tol', 'Threshold', 'Accum', 'HistMode', 'Interleave', 'Phase', 'HistShift', 'HistScale', 'HistOffset', 'HistCount', 'HistCap'];
   const UNIFORMS = {
     direct: [...COMMON, 'Center', 'Span'],
     perturb: [...COMMON, 'Ref', 'RefLength', 'RefValues', 'Scale', 'InvExp', 'L0', 'Inv', 'Delta', 'DeltaMirror', 'ImCenter', 'SpanMant'],
@@ -372,10 +364,6 @@ ${orbitLoop}` + perturbTail;
  void main(){pixel=texelFetch(uSource,ivec2(gl_FragCoord.xy-uOffset),0);}`;
   UNIFORMS.copy = ['Source', 'Offset'];
   const SOURCES = {direct, perturb, perturbBla, perturbCycle, perturbBlaCycle, present, copy};
-  for (const name of ['direct', 'perturb', 'perturbBla', 'perturbCycle', 'perturbBlaCycle']) {
-    SOURCES[name + 'Partial'] = SOURCES[name].replace(footer, partialFooter);
-    UNIFORMS[name + 'Partial'] = UNIFORMS[name];
-  }
 
   class TetraGPU {
     constructor(canvas) {
@@ -515,7 +503,8 @@ ${orbitLoop}` + perturbTail;
       gl.bindTexture(gl.TEXTURE_2D, texture); gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA8, 1, 1);
       gl.bindFramebuffer(gl.FRAMEBUFFER, buffer); gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
       gl.viewport(0, 0, 1, 1); gl.useProgram(program);
-      gl.uniform2f(u.Size, 1, 1); gl.uniform1f(u.Aspect, 1); gl.uniform1i(u.Iterations, 0); gl.uniform1i(u.Samples, 1); gl.uniform1i(u.Adaptive, 0); gl.uniform1i(u.Accum, 0);
+      gl.uniform2f(u.Size, 1, 1); gl.uniform1f(u.Aspect, 1); gl.uniform1i(u.Iterations, 0); gl.uniform1i(u.Samples, 1); gl.uniform1i(u.Adaptive, 0); gl.uniform1i(u.Accum, 0); gl.uniform1i(u.Partial, 0);
+      gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D, this.empty); gl.uniform1i(u.PartialSource, 3);
       samplers.forEach((name, unit) => { gl.activeTexture(gl.TEXTURE0 + unit); gl.bindTexture(gl.TEXTURE_2D, this.empty); gl.uniform1i(u[name], unit); });
       gl.activeTexture(gl.TEXTURE0);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
@@ -652,7 +641,6 @@ ${orbitLoop}` + perturbTail;
         const cycleName = levels ? 'perturbBlaCycle' : 'perturbCycle';
         if (allowLink || this.programs[cycleName]) name = cycleName;
       }
-      if (partial) name += 'Partial';
       const {program, uniforms: u} = this.program(name);
       if (scene.mode === 'perturb') this.perturbWarm = true;
       gl.bindFramebuffer(gl.FRAMEBUFFER, frame.buffer); gl.viewport(0, 0, frame.width, frame.height); gl.useProgram(program);
@@ -661,7 +649,10 @@ ${orbitLoop}` + perturbTail;
       if (scene.grid) { gl.uniform2f(u.Shift, scene.grid.shift[0], scene.grid.shift[1]); gl.uniform2f(u.Step, scene.grid.step[0], scene.grid.step[1]); }
       gl.uniform1i(u.Iterations, scene.iterations); gl.uniform1i(u.Palette, scene.palette);
       gl.uniform1i(u.Samples, samples); gl.uniform1i(u.Adaptive, frame.seed ? 1 : 0); gl.uniform1f(u.Threshold, threshold);
-      gl.uniform1i(u.PartialBase, 0); gl.uniform1i(u.PartialSource, 3);
+      gl.uniform1i(u.Partial, partial ? 1 : 0); gl.uniform1i(u.PartialBase, 0); gl.uniform1i(u.PartialSource, 3);
+      // Unbind a prior sum target even for ordinary draws: sampler feedback
+      // is invalid regardless of whether its uniform branch is taken.
+      gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D, this.empty); gl.activeTexture(gl.TEXTURE0);
       gl.uniform1f(u.LowA, scene.rules.lowA); gl.uniform1f(u.MaxB, scene.rules.maxB); gl.uniform1f(u.Tol, scene.rules.tol);
       /* scene.accum: live accumulation {mode: 0 none | 1 shifted | 2 resampled, frame, shift, scale,
        * offset, count, cap}; uSamples is then the number of new samples per pixel. */

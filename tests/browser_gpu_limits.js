@@ -43,10 +43,9 @@ window.__gpuPartialComparison = async(samples=16)=>{
    let seed=null;
    if(adaptive){seed=r.beginFrame(W,H);r.draw(seed,{x:0,y:0,width:W,height:H},scene,samples===4?1:4);await r.fence();}
    const a=r.beginFrame(W,H,seed,adaptive),b=r.beginFrame(W,H,seed,adaptive);
-   // The original multi-orbit shader stalls native WebKit even at 8x8/4096/16x.
-   // Keep its original per-pixel math and every sample, but submit one 2x2 quad
-   // at a time for the comparison. This is an oracle, not app throughput QA.
-   for(let y=0;y<H;y+=2)for(let x=0;x<W;x+=2){r.draw(a,{x,y,width:Math.min(2,W-x),height:Math.min(2,H-y)},scene,samples,threshold);await r.fence();}
+   // Keep the original bounded 8px baseline. Both paths now share the exact
+   // orbit call site; only sample count and FP32 sum storage differ.
+   for(let y=0;y<H;y+=8)for(let x=0;x<W;x+=8){r.draw(a,{x,y,width:Math.min(8,W-x),height:Math.min(8,H-y)},scene,samples,threshold);await r.fence();}
    const immediately=r.readFrame(a);
    // Production uses 64px partial tiles at 4096/16x and 32px at higher caps;
    // compare both sizes, including partial columns/heights, to the original.
