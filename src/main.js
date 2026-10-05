@@ -591,7 +591,9 @@
     const workCap = 8e7;
     const highCap = scene.iterations >= 8192;
     const partial = samples >= 4 && highCap && renderer.floatColor;
-    const edge = highCap ? Math.min(16, tileEdge(effective, samples)) : tileEdge(effective, samples);
+    // A partial pass evaluates one orbit per pixel. Use that per-pass work
+    // when sizing its tile; charging all AA samples here quadruples fences.
+    const edge = partial ? Math.min(32, tileEdge(effective, 1)) : highCap ? Math.min(16, tileEdge(effective, samples)) : tileEdge(effective, samples);
     const tiles = work ? TetraRender.exposedTiles(frame.width, frame.height, work.dx, work.dy, edge) : TetraRender.tiles(frame.width, frame.height, edge), key = rateKey(scene, samples);
     const area = frame.width * frame.height;
     // Cheap tiles can precede a dense, unresolved basin. Measured throughput

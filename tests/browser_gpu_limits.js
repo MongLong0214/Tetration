@@ -46,7 +46,9 @@ window.__gpuPartialComparison = async(samples=16)=>{
    // exceeds the app's worst-case work cap and can poison this native context.
    for(let y=0;y<H;y+=8)for(let x=0;x<W;x+=8){r.draw(a,{x,y,width:Math.min(8,W-x),height:Math.min(8,H-y)},scene,samples,threshold);await r.fence();}
    const immediately=r.readFrame(a);
-   for(let y=0;y<H;y+=8)for(let x=0;x<W;x+=8)await r.drawAATile(b,{x,y,width:Math.min(8,W-x),height:Math.min(8,H-y)},scene,()=>false,threshold,samples);
+   // Production partial passes use 32px tiles; this odd image also exercises
+   // the remaining 16px column and 30px height against the 8px baseline.
+   for(let y=0;y<H;y+=32)for(let x=0;x<W;x+=32)await r.drawAATile(b,{x,y,width:Math.min(32,W-x),height:Math.min(32,H-y)},scene,()=>false,threshold,samples);
    const before=r.readFrame(a),after=r.readFrame(b);let changed=0,max=0,priorChanged=0;
    for(let i=0;i<before.length;i++)if(before[i]!==immediately[i])priorChanged++;
    for(let i=0;i<before.length;i++){const d=Math.abs(before[i]-after[i]);if(d)changed++;max=Math.max(max,d);}
