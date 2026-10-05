@@ -30,6 +30,20 @@ def body():
             assert r['rmse4'] < r['rmse1'] * 0.85 and r['rmse16'] < r['rmse4'] * 0.95, (name, r)
             suite.record('Adaptive 4x and 16x antialiasing reduce error against a 64-sample reference: ' + name, r)
 
+        # Live temporal accumulation converges to the Ultra 16-sample image and pans copy it exactly.
+        for name, args in [('direct filaments, 1 sample per frame', ['-1.84', '0.09', '0.46', 160, 96, 384, 'direct', 1]),
+                           ('direct filaments, 4 samples per frame', ['-1.84', '0.09', '0.46', 160, 96, 384, 'direct', 4]),
+                           ('perturbation plume, 1 sample per frame', ['-2.2930579295624999999999991', '0.33208044555625', '5e-11', 120, 72, 768, 'perturb', 1])]:
+            r = page.evaluate('(a) => __tetraPixels.accumulate(...a)', args)
+            per = args[-1]
+            assert r['frames'] == 16 // per and r['notSixteen'] == 0, (name, r)
+            # 8-bit running means round once per frame: within 3 of 255 of the float 16-sample average.
+            assert r['worst'] <= 3 and r['mean'] < 0.6, (name, r)
+            assert r['stillDiff'] == 0 and r['overlapDiff'] == 0 and r['overlap'] > 0, (name, r)
+            assert r['revealed'] > 0 and r['revealedWrong'] == 0, (name, r)
+            assert r['resampledMax'] == 4 + per and r['resampledTrusted'] > r['pixels'] * 0.95, (name, r)
+            suite.record('Live accumulation converges to the 16-sample image, still and panned frames copy it: ' + name, r)
+
         worst = page.evaluate('() => __tetraPixels.seams("-2.5","0","1.8",192,128,384,"direct",4)')
         assert worst == 0, worst
         suite.record('Direct tiles with adaptive samples equal one full-frame draw', worst)
@@ -56,8 +70,9 @@ def body():
         assert state(page)['lastCompleted']['samples'] == 4
         suite.record('Dragging shows live single-sample frames, then refines on release', {'frames': during['interactiveFrames'] - frames0, 'draws': draws})
 
-        # Grid-locked live frames: consecutive frames of a pan sample the same fractal points,
-        # so the overlapping pixels are identical (no shimmer while moving).
+        # Grid-locked live frames: consecutive frames of a pan sample the same fractal points and
+        # carry their accumulated samples, so once converged the overlapping pixels are identical
+        # (no shimmer while moving, no noise when holding still).
         compared, frames = 0, []
         for link, mode in [('v=1&x=-0.605137938972379900971816986088586258864125&y=0.437740442074800562969426507709712806289976004723289995229&s=7e-25&q=4', 'perturb'), ('v=1&x=-0.72&y=0.36&s=0.7&q=4', 'gpu')]:
             open_app(page, link, mode)
@@ -70,7 +85,8 @@ def body():
                 count = state(page)['interactiveFrames']
                 page.mouse.move(cx + step[0], cy + step[1])
                 page.wait_for_function(f'() => tetraDiagnostics.interactiveFrames > {count} && tetraDiagnostics.displayCanvas === "gpuCanvas"', timeout=20000)
-                page.wait_for_timeout(60)
+                # Held still, every live pixel reaches its 16 samples.
+                page.wait_for_function('() => tetraDiagnostics.liveMin >= 16 && tetraDiagnostics.displaySmooth', timeout=60000)
                 info = state(page)
                 shots.append((page.evaluate(grab), info['displayView']))
             page.mouse.up()
@@ -93,8 +109,9 @@ def body():
                 assert best and best[0] == 0, best
                 compared += best[2]
             frames.append([shots[0][0]['w'], shots[0][0]['h']])
-        suite.record('Panning is grid-locked at 10^25 and the overview: overlapping live-frame pixels are identical', {'compared_pixels': compared, 'frames': frames, 'depths': ['7e-25 perturbation', '0.7 direct']})
+        suite.record('Panning is grid-locked at 10^25 and the overview: converged overlapping live-frame pixels are identical', {'compared_pixels': compared, 'frames': frames, 'depths': ['7e-25 perturbation', '0.7 direct']})
         settle(page)
+
         page.evaluate('''() => {window.__draws={1:0,4:0,16:0};const prepare=TetraGPU.prototype.prepare;
           TetraGPU.prototype.prepare=function(frame,scene,samples,...rest){__draws[samples]=(__draws[samples]||0)+1;return prepare.call(this,frame,scene,samples,...rest);};}''')
 
@@ -193,6 +210,31 @@ def body():
         b = page.screenshot(clip={'x': cx - 40, 'y': cy - 40, 'width': 80, 'height': 80})
         assert a != b and state(page)['lastCompleted']['palette'] == 2
         suite.record('Palette changes recolour the rendered view')
+
+        # From the first live frame to the finished image nothing noisier than an antialiased
+        # picture is shown: live frames start from the final image, and single-sample stages
+        # stay hidden behind them.
+        small = suite.watch(browser.new_page(viewport={'width': 640, 'height': 420}))
+        small.add_init_script(NO_WEBGPU)
+        open_app(small, 'v=1&x=-1.84&y=0.09&s=0.46&q=4')
+        small.evaluate('''() => { window.__shown = []; window.__on = true; let last = null;
+          const tick = () => { const d = tetraDiagnostics; const k = d.displaySmooth + '|' + d.interactiveFrames + '|' + d.renderStage;
+            if (k !== last) { __shown.push({smooth: d.displaySmooth, live: d.liveMin, stage: d.renderStage, complete: d.complete}); last = k; }
+            if (__on) requestAnimationFrame(tick); }; requestAnimationFrame(tick); }''')
+        sbox = small.locator('#viewport').bounding_box()
+        sx, sy = sbox['x'] + sbox['width'] / 2, sbox['y'] + sbox['height'] / 2
+        small.mouse.move(sx, sy)
+        small.mouse.down()
+        for i in range(30):
+            small.mouse.move(sx + i * 3, sy + i)
+            small.wait_for_timeout(30)
+        small.mouse.up()
+        settle(small)
+        shown = small.evaluate('() => { __on = false; return __shown; }')
+        rough = [s for s in shown if not s['smooth']]
+        assert len(shown) > 10 and not rough and state(small)['lastCompleted']['samples'] == 4, (rough[:5], len(shown))
+        suite.record('Dragging and settling never show a single-sample image over an antialiased one', {'observed_states': len(shown), 'live_frames_min_samples': min(s['live'] for s in shown if s['live'] is not None)})
+        small.close()
         suite.no_errors()
         browser.close()
 

@@ -184,5 +184,46 @@
       const m = n * n * 3;
       return {rmse1: Math.sqrt(e1 / m), rmse4: Math.sqrt(e4 / m), rmse16: Math.sqrt(e16 / m), changed4, changed16, pixels: n * n, reference: `${factor * factor} samples per pixel`};
     },
+    /* Live temporal accumulation on one sampling grid: frames adding perFrame stratified samples
+     * converge to the 16-sample image; a still frame copies it bit for bit; a pan copies every
+     * overlapping pixel and starts revealed ones afresh; a resampled history is trusted for at
+     * most its cap. */
+    accumulate(cx, cy, span, W, H, iterations, mode, perFrame) {
+      const built = scene(cx, cy, span, iterations, 0, mode), r = gpu();
+      const unit = (mode === 'direct' ? built.scene.span : built.scene.spanMant) / W;
+      const at = (shift, accum) => ({...built.scene, aspect: H / W, grid: {shift, step: [unit, unit]}, ...(accum ? {accum} : {})});
+      const render = (sc, samples) => { const f = r.beginFrame(W, H); r.draw(f, {x: 0, y: 0, width: W, height: H}, sc, samples); return f; };
+      const take = f => { const out = r.readFrame(f); r.releaseFrame(f); return out; };
+      const reference = take(render(at([0, 0]), 16));
+      let prev = render(at([0, 0], {mode: 0}), perFrame), frames = 1;
+      while (frames * perFrame < 16) {
+        const next = render(at([0, 0], {mode: 1, frame: prev, shift: [0, 0]}), perFrame);
+        r.releaseFrame(prev); prev = next; frames++;
+      }
+      const converged = r.readFrame(prev);
+      let worst = 0, sum = 0, notSixteen = 0;
+      for (let k = 0; k < converged.length; k += 4) {
+        for (let c = 0; c < 3; c++) { const d = Math.abs(converged[k + c] - reference[k + c]); worst = Math.max(worst, d); sum += d; }
+        if (converged[k + 3] !== 16) notSixteen++;
+      }
+      const still = take(render(at([0, 0], {mode: 1, frame: prev, shift: [0, 0]}), perFrame));
+      let stillDiff = 0;
+      for (let k = 0; k < still.length; k++) if (still[k] !== converged[k]) stillDiff++;
+      const dx = 7, dy = -3, moved = take(render(at([dx, dy], {mode: 1, frame: prev, shift: [dx, dy]}), perFrame));
+      let overlap = 0, overlapDiff = 0, revealed = 0, revealedWrong = 0;
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        const i = (y * W + x) * 4, sx = x + dx, sy = y + dy;
+        if (sx >= 0 && sy >= 0 && sx < W && sy < H) {
+          overlap++;
+          const j = (sy * W + sx) * 4;
+          for (let c = 0; c < 4; c++) if (moved[i + c] !== converged[j + c]) { overlapDiff++; break; }
+        } else { revealed++; if (moved[i + 3] !== perFrame) revealedWrong++; }
+      }
+      const resampled = take(render(at([0, 0], {mode: 2, frame: prev, scale: [1, 1], offset: [0, 0], count: 0, cap: 4}), perFrame));
+      let resampledMax = 0, resampledTrusted = 0;
+      for (let k = 3; k < resampled.length; k += 4) { resampledMax = Math.max(resampledMax, resampled[k]); if (resampled[k] === 4 + perFrame) resampledTrusted++; }
+      r.releaseFrame(prev);
+      return {frames, worst, mean: sum / (W * H * 3), notSixteen, stillDiff, overlap, overlapDiff, revealed, revealedWrong, resampledMax, resampledTrusted, pixels: W * H};
+    },
   };
 })();

@@ -10,7 +10,7 @@ A browser-native tetration explorer. Dive from the whole complex plane to 10¬≤‚Å
 
 ## Explore
 
-The map fills the workspace. Drag, scroll or pinch anywhere: the image follows immediately and keeps refining while you move. When you pause, it resolves at full display resolution and then smooths edges with up to 16 orbit samples per pixel.
+The map fills the workspace. Drag, scroll or pinch anywhere: the image follows immediately and keeps refining while you move. Live frames stay locked to the fractal's pixel grid and gather up to 16 orbit samples per pixel over successive frames, so moving neither shimmers nor turns noisy. When you pause, it resolves at full display resolution and then smooths edges with up to 16 orbit samples per pixel.
 
 | Action | Input |
 | --- | --- |
@@ -131,7 +131,7 @@ npm run test:webkit
 | `test:browser` | Core flows, CSP enforcement, exact links, limits, mobile focus and touch |
 | `test:release` | Served headers and bytes, reference pixels, engine switching, GPU loss/restore, degraded features, offline reload |
 | `test:deep` | GPU perturbation (plain and BLA) vs FP64 and exact orbits, BLA speed, full resolution at every depth, symmetry, seams, reference reuse, deep zoom session |
-| `test:quality` | Antialiasing error vs 64-sample references, live frames, glide, inertia, reduced motion, colour flow |
+| `test:quality` | Antialiasing error vs 64-sample references, live-frame accumulation, grid lock, glide, inertia, reduced motion, colour flow |
 | `test:explorer` | Saved views, history, shortcuts, discovery, sharing, fallbacks, viewports, axe-core |
 | `test:perf` | First frame, live-frame cadence, main-thread long tasks, reference speed, resource leaks |
 | `test:webkit` | Linux WebKit flows (CI) |

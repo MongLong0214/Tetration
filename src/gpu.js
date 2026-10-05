@@ -25,6 +25,11 @@
  uniform int uIterations,uPalette,uSamples,uAdaptive;
  uniform float uLowA,uMaxB,uTol,uThreshold;
  uniform sampler2D uSource;
+ // Live accumulation: uSource is the previous live image, carried by an integer shift (mode 1)
+ // or resampled from another sampling grid (mode 2) with at most uHistCap samples of trust.
+ uniform int uAccum,uHistMode;
+ uniform vec2 uHistShift,uHistScale,uHistOffset;
+ uniform float uHistCount,uHistCap;
  out vec4 pixel;
  const float LOG_R=23.025850929940457;
  ${polySinCos}
@@ -42,8 +47,38 @@
   const footer = `
  const vec2 RG[4]=vec2[4](vec2(-.125,-.375),vec2(.375,-.125),vec2(.125,.375),vec2(-.375,.125));
  const int RGROW[4]=int[4](1,3,0,2);
+ /* Progressive order of the 16 cells of the 4x4 pattern: four rook patterns, the first the
+  * rotated grid. Any prefix is stratified; all 16 equal the Ultra 16-sample average. */
+ const int RGSET[4]=int[4](0,2,1,3);
+ vec2 cell(int n){int j=n&3,i=(RGROW[j]+RGSET[n>>2])&3;return(vec2(float(i),float(j))+.5)*.25-.5;}
+ // Previous estimate of this pixel: mean colour and its sample count (alpha).
+ vec4 history(vec2 point){
+  ivec2 size=textureSize(uSource,0);
+  if(uHistMode==1){
+   ivec2 q=ivec2(floor(point+uHistShift));
+   if(any(lessThan(q,ivec2(0)))||any(greaterThanEqual(q,size)))return vec4(0.);
+   vec4 h=texelFetch(uSource,q,0);return vec4(h.rgb,floor(h.a*255.+.5));
+  }
+  if(uHistMode==2){
+   vec2 t=point*uHistScale+uHistOffset-.5;
+   if(t.x<0.||t.y<0.||t.x>float(size.x-1)||t.y>float(size.y-1))return vec4(0.);
+   ivec2 b=ivec2(floor(t)),e=min(b+1,size-1);vec2 f=t-vec2(b);
+   vec3 c=mix(mix(texelFetch(uSource,b,0).rgb,texelFetch(uSource,ivec2(e.x,b.y),0).rgb,f.x),mix(texelFetch(uSource,ivec2(b.x,e.y),0).rgb,texelFetch(uSource,e,0).rgb,f.x),f.y);
+   float n=uHistCount>0.?uHistCount:floor(texelFetch(uSource,ivec2(t+.5),0).a*255.+.5);
+   return vec4(c,min(n,uHistCap));
+  }
+  return vec4(0.);
+ }
  void main(){
   vec2 point=gl_FragCoord.xy+uOffset;
+  if(uAccum==1){
+   // Running mean of up to 16 stratified samples; converged pixels are copied, not recomputed.
+   vec4 h=history(point);int n=int(h.a);
+   if(n>=16){pixel=vec4(h.rgb,16./255.);return;}
+   int m=min(16,n+uSamples);vec3 sum=vec3(0.);
+   for(int i=n;i<m;i++)sum+=orbitColor(point+cell(i));
+   pixel=vec4((h.rgb*float(n)+sum)/float(m),float(m)/255.);return;
+  }
   vec4 seed=vec4(0.);
   if(uAdaptive==1){
    ivec2 p=ivec2(gl_FragCoord.xy),size=textureSize(uSource,0);seed=texelFetch(uSource,p,0);vec3 center=seed.rgb;float contrast=0.;
@@ -220,7 +255,7 @@
     queue.push(task); channel.port2.postMessage(0);
   }
 
-  const COMMON = ['Size', 'Aspect', 'Grid', 'Shift', 'Step', 'Offset', 'Iterations', 'Palette', 'Samples', 'Adaptive', 'Source', 'LowA', 'MaxB', 'Tol', 'Threshold'];
+  const COMMON = ['Size', 'Aspect', 'Grid', 'Shift', 'Step', 'Offset', 'Iterations', 'Palette', 'Samples', 'Adaptive', 'Source', 'LowA', 'MaxB', 'Tol', 'Threshold', 'Accum', 'HistMode', 'HistShift', 'HistScale', 'HistOffset', 'HistCount', 'HistCap'];
   const UNIFORMS = {
     direct: [...COMMON, 'Center', 'Span'],
     perturb: [...COMMON, 'Ref', 'RefLength', 'RefValues', 'Scale', 'InvExp', 'L0', 'Inv', 'Delta', 'DeltaMirror', 'ImCenter', 'SpanMant'],
@@ -458,7 +493,17 @@
       gl.uniform1i(u.Iterations, scene.iterations); gl.uniform1i(u.Palette, scene.palette);
       gl.uniform1i(u.Samples, samples); gl.uniform1i(u.Adaptive, frame.seed ? 1 : 0); gl.uniform1f(u.Threshold, threshold);
       gl.uniform1f(u.LowA, scene.rules.lowA); gl.uniform1f(u.MaxB, scene.rules.maxB); gl.uniform1f(u.Tol, scene.rules.tol);
-      gl.uniform1i(u.Source, 0); gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, frame.seed ? frame.seed.texture : this.empty);
+      /* scene.accum: live accumulation {mode: 0 none | 1 shifted | 2 resampled, frame, shift, scale,
+       * offset, count, cap}; uSamples is then the number of new samples per pixel. */
+      const accum = scene.accum, history = accum && accum.mode ? accum : null;
+      gl.uniform1i(u.Accum, accum ? 1 : 0); gl.uniform1i(u.HistMode, history ? history.mode : 0);
+      if (history) {
+        if (history.frame === frame) throw Error('Live history cannot be its own target');
+        const shift = history.shift || [0, 0], scale = history.scale || [1, 1], offset = history.offset || [0, 0];
+        gl.uniform2f(u.HistShift, shift[0], shift[1]); gl.uniform2f(u.HistScale, scale[0], scale[1]); gl.uniform2f(u.HistOffset, offset[0], offset[1]);
+        gl.uniform1f(u.HistCount, history.count || 0); gl.uniform1f(u.HistCap, history.cap ?? 16);
+      }
+      gl.uniform1i(u.Source, 0); gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, frame.seed ? frame.seed.texture : history ? history.frame.texture : this.empty);
       if (scene.mode === 'direct') {
         gl.uniform2f(u.Center, scene.center[0], scene.center[1]); gl.uniform1f(u.Span, scene.span);
       } else {
