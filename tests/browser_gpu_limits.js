@@ -27,7 +27,7 @@ window.__gpuPhaseComparison = async()=>{
   }
   const error=r.gl.getError();for(const p of Object.values(probes))r.gl.deleteProgram(p.program);r.destroy();return {rows,error};
  };
-window.__gpuPartialComparison = async()=>{
+window.__gpuPartialComparison = async(samples=16)=>{
   const r=new TetraGPU(document.createElement('canvas')),cases=[],W=48,H=30;
   r.program('perturb');
   for(const threshold of [0.035,0])for(const blaMode of ['off','on'])for(const n of [128,1024,4096])for(const mode of ['direct','perturb'])for(const adaptive of [false,true]){
@@ -40,23 +40,23 @@ window.__gpuPartialComparison = async()=>{
     scene.ref=TetraReference.compute({x:f.text(point.x),y:f.text(point.y),digits:60,iterations:n,maxRe:80});
    }
    let seed=null;
-   if(adaptive){seed=r.beginFrame(W,H);r.draw(seed,{x:0,y:0,width:W,height:H},scene,4);await r.fence();}
+   if(adaptive){seed=r.beginFrame(W,H);r.draw(seed,{x:0,y:0,width:W,height:H},scene,samples===4?1:4);await r.fence();}
    const a=r.beginFrame(W,H,seed,adaptive),b=r.beginFrame(W,H,seed,adaptive);
    // Both implementations submit bounded tiles; one full dense 16x draw
    // exceeds the app's worst-case work cap and can poison this native context.
-   for(let y=0;y<H;y+=8)for(let x=0;x<W;x+=8){r.draw(a,{x,y,width:Math.min(8,W-x),height:Math.min(8,H-y)},scene,16,threshold);await r.fence();}
+   for(let y=0;y<H;y+=8)for(let x=0;x<W;x+=8){r.draw(a,{x,y,width:Math.min(8,W-x),height:Math.min(8,H-y)},scene,samples,threshold);await r.fence();}
    const immediately=r.readFrame(a);
-   for(let y=0;y<H;y+=8)for(let x=0;x<W;x+=8)await r.drawUltraTile(b,{x,y,width:Math.min(8,W-x),height:Math.min(8,H-y)},scene,()=>false,threshold);
+   for(let y=0;y<H;y+=8)for(let x=0;x<W;x+=8)await r.drawAATile(b,{x,y,width:Math.min(8,W-x),height:Math.min(8,H-y)},scene,()=>false,threshold,samples);
    const before=r.readFrame(a),after=r.readFrame(b);let changed=0,max=0,priorChanged=0;
    for(let i=0;i<before.length;i++)if(before[i]!==immediately[i])priorChanged++;
    for(let i=0;i<before.length;i++){const d=Math.abs(before[i]-after[i]);if(d)changed++;max=Math.max(max,d);}
    const channelChanged=[0,0,0,0];for(let i=0;i<before.length;i++)if(before[i]!==after[i])channelChanged[i%4]++;
    const cancelledFrame=r.beginFrame(W,H,seed,adaptive),cancelBefore=r.readFrame(cancelledFrame);
-   const completed=await r.drawUltraTile(cancelledFrame,{x:0,y:0,width:8,height:8},scene,()=>true,threshold);
+   const completed=await r.drawAATile(cancelledFrame,{x:0,y:0,width:8,height:8},scene,()=>true,threshold,samples);
    const cancelAfter=r.readFrame(cancelledFrame);let cancelChanges=0;
    for(let i=0;i<cancelBefore.length;i++)if(cancelBefore[i]!==cancelAfter[i])cancelChanges++;
    r.releaseFrame(cancelledFrame);
-   cases.push({threshold,blaMode,n,mode,adaptive,changed,max,priorChanged,cancelled:!completed,cancelChanges,channelChanged,before:Array.from(before),after:Array.from(after)});
+   cases.push({samples,threshold,blaMode,n,mode,adaptive,changed,max,priorChanged,cancelled:!completed,cancelChanges,channelChanged,before:Array.from(before),after:Array.from(after)});
    r.releaseFrame(a);r.releaseFrame(b);r.releaseFrame(seed);
   }
   const error=r.gl.getError();r.destroy();return {cases,error};

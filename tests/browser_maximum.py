@@ -33,9 +33,9 @@ TRACE = '''(()=>{
 })();'''
 
 
-def check_requested(page, n):
+def check_requested(page, n, samples=16):
     d = state(page); last = d['lastCompleted']
-    assert d['complete'] and d['quality'] == last['samples'] == 16, d
+    assert d['complete'] and d['quality'] == last['samples'] == samples, d
     assert d['iterationSetting'] == n and last['iterations'] == (8192 if n == 'auto' else n), d
     assert (last['width'], last['height']) == (640, 354), d
     assert d['displayCanvas'] == ('gpuCanvas' if d['mode'] == 'perturb' else 'cpuCanvas'), d
@@ -81,6 +81,9 @@ def body():
         x, y = '-2.2930579295428124999999991', '0.3320804455471875'
         open_app(page, f'v=1&x={x}&y={y}&s=1e-50&n=16384&q=16')
         d = check_requested(page, 16384); assert d['mode'] == 'cpu-perturb', d
+        controls(page); page.locator('#quality').select_option('4'); close_controls(page); settle(page)
+        check_requested(page, 16384, 4)
+        assert state(page)['mode'] == 'cpu-perturb'
         navigate_after(page)
         suite.record('Missing float-color extension computes the full deep request on FP64 Workers and remains navigable')
         context.close(); browser.close()
@@ -92,12 +95,13 @@ def body():
           HTMLCanvasElement.prototype.getContext=function(type,...args){if(type==='webgl2'&&this.id==='gpuCanvas')return null;return get.call(this,type,...args);};''')
         page = suite.watch(context.new_page()); open_app(page, 'v=1&x=.5&y=0&s=.1&n=64&q=1&e=cpu')
         page.evaluate((ROOT / 'tests/browser_gpu_limits.js').read_text())
-        with browser_deadline(240000):
-            partial = page.evaluate('__gpuPartialComparison()')
-        assert partial['error'] == 0 and len(partial['cases']) == 48, partial
-        assert all(c['changed'] == c['priorChanged'] == c['cancelChanges'] == 0 and c['cancelled'] for c in partial['cases']), partial
-        suite.record('Bounded four-sample FP32 sums match every original AA16 RGBA byte and preserve prior frames',
-                     {'cases': 48, 'pixels': 48 * 48 * 30, 'forced_pan_strips': True, 'cancelled_frames_unchanged': True})
+        for samples in [4, 16]:
+            with browser_deadline(240000):
+                partial = page.evaluate('__gpuPartialComparison', samples)
+            assert partial['error'] == 0 and len(partial['cases']) == 48, partial
+            assert all(c['changed'] == c['priorChanged'] == c['cancelChanges'] == 0 and c['cancelled'] for c in partial['cases']), partial
+            suite.record(f'Single-orbit FP32 sums match every original AA{samples} RGBA byte and preserve prior frames',
+                         {'cases': 48, 'pixels': 48 * 48 * 30, 'forced_pan_strips': True, 'cancelled_frames_unchanged': True})
         with browser_deadline(240000):
             phase = page.evaluate('__gpuPhaseComparison()')
         assert phase['error'] == 0 and len(phase['rows']) == 24, phase

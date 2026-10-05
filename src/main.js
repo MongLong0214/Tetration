@@ -98,9 +98,9 @@
     const pixel = num(v.span) / Math.max(dims.w, 1), scale = magnitude(v);
     // Dense high-cap views around FP64 scales finish faster on Workers using
     // exact machine cycles. Very deep views keep GPU perturbation, with long
-    // Ultra passes split into four-sample submissions below.
+    // AA passes split into single-sample submissions below.
     if (engine === 'auto' && iterationsFor(v) >= 8192 &&
-        (num(v.span) >= scale * FP64_LIMIT || (quality === 16 && gpu && !gpu.floatColor))) return pixel >= scale * FP64_LIMIT ? 'cpu' : 'cpu-perturb';
+        (num(v.span) >= scale * FP64_LIMIT || (quality >= 4 && gpu && !gpu.floatColor))) return pixel >= scale * FP64_LIMIT ? 'cpu' : 'cpu-perturb';
     if (engine === 'auto' && gpu) return pixel >= scale * DIRECT_LIMIT ? 'gpu' : 'perturb';
     return pixel >= scale * FP64_LIMIT ? 'cpu' : 'cpu-perturb';
   }
@@ -590,7 +590,7 @@
     const effective = renderer.effectiveIterations(scene, frame.width, frame.height);
     const workCap = 8e7;
     const highCap = scene.iterations >= 8192;
-    const partial = samples === 16 && highCap && renderer.floatColor;
+    const partial = samples >= 4 && highCap && renderer.floatColor;
     const edge = highCap ? Math.min(16, tileEdge(effective, samples)) : tileEdge(effective, samples);
     const tiles = work ? TetraRender.exposedTiles(frame.width, frame.height, work.dx, work.dy, edge) : TetraRender.tiles(frame.width, frame.height, edge), key = rateKey(scene, samples);
     const area = frame.width * frame.height;
@@ -615,7 +615,7 @@
       const t0 = performance.now();
       try {
         if (partial) {
-          for (const t of batch) if (!(await renderer.drawUltraTile(frame, t, scene, () => id !== serial || renderer !== gpu, work ? 0 : undefined))) return false;
+          for (const t of batch) if (!(await renderer.drawAATile(frame, t, scene, () => id !== serial || renderer !== gpu, work ? 0 : undefined, samples))) return false;
         } else {
           renderer.prepare(frame, scene, samples, work ? 0 : undefined);
           for (const t of batch) renderer.drawTile(frame, t);
