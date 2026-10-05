@@ -4,7 +4,7 @@ PASS Automated WCAG checks: desktop controls {"passed_rules": 22, "incomplete": 
 PASS Back, forward and a new navigation branch preserve history 
 PASS Focus mode fills the screen at full resolution and preserves exact coordinates 
 PASS Starting-point shortcuts 1-7 include the deep perturbation places 
-PASS Discover (D and button) jumps to new detailed places and joins history {"x": "0.23443840295076371", "y": "1.1349746983498334", "span": "1.6"}
+PASS Discover (D and button) jumps to new detailed places and joins history {"x": "0.036152103357017046", "y": "1.2233775280416013", "span": "0.332628"}
 PASS Named views survive reload and restore sub-FP64 coordinates safely 
 PASS One-action clipboard sharing reopens the exact coordinates 
 PASS Removing a saved view persists 
@@ -16,7 +16,7 @@ PASS Controls reachable at 390x844 with 44px targets
 PASS Controls reachable at 320x568 with 44px targets 
 PASS Controls reachable at 844x390 with 44px targets 
 PASS Controls reachable at 1280x720 with 44px targets 
-PASS Touch devices share the link and the rendered PNG through native share (API stub) {"name": "tetra-1791158903441.png", "type": "image/png", "size": 116645, "text": "http://127.0.0.1:4173/#v=1&x=-2.5&y=0&s=1.8&n=auto&p=0&e=auto&g=0&q=1&c=0"}
+PASS Touch devices share the link and the rendered PNG through native share (API stub) {"name": "tetra-1791161492507.png", "type": "image/png", "size": 116645, "text": "http://127.0.0.1:4173/#v=1&x=-2.5&y=0&s=1.8&n=auto&p=0&e=auto&g=0&q=1&c=0"}
 PASS Automated WCAG checks: manual sharing {"passed_rules": 14, "incomplete": ["color-contrast"]}
 PASS Blocked clipboard and storage expose usable fallbacks 
 PASS No uncaught browser exceptions 

@@ -1,29 +1,29 @@
-PASS GPU perturbation equals FP64 pixel for pixel: threshold boundary at 1e-55 {"kinds": [0, 0, 0, 2560, 0], "total": 2560, "refLength": 513, "gpuMs": 2416}
-PASS GPU perturbation equals FP64 pixel for pixel: convergence boundary at 2e-6 {"kinds": [0, 2560, 0, 0, 0], "total": 2560, "refLength": 513, "gpuMs": 952}
-PASS GPU perturbation equals FP64 pixel for pixel: negative real axis at 1e-9 {"kinds": [0, 0, 0, 2560, 0], "total": 2560, "refLength": 7, "gpuMs": 8}
-PASS GPU perturbation equals FP64 pixel for pixel: lower half plane at 1e-30 {"kinds": [0, 2560, 0, 0, 0], "total": 2560, "refLength": 513, "gpuMs": 20}
-PASS GPU perturbation equals FP64 pixel for pixel: view containing the origin at 1e-20 {"kinds": [0, 0, 2560, 0, 0], "total": 2560, "refLength": 513, "gpuMs": 15}
+PASS GPU perturbation equals FP64 pixel for pixel: threshold boundary at 1e-55 {"kinds": [0, 0, 0, 2560, 0], "total": 2560, "refLength": 513, "gpuMs": 2564}
+PASS GPU perturbation equals FP64 pixel for pixel: convergence boundary at 2e-6 {"kinds": [0, 2560, 0, 0, 0], "total": 2560, "refLength": 513, "gpuMs": 1023}
+PASS GPU perturbation equals FP64 pixel for pixel: negative real axis at 1e-9 {"kinds": [0, 0, 0, 2560, 0], "total": 2560, "refLength": 7, "gpuMs": 4}
+PASS GPU perturbation equals FP64 pixel for pixel: lower half plane at 1e-30 {"kinds": [0, 2560, 0, 0, 0], "total": 2560, "refLength": 513, "gpuMs": 18}
+PASS GPU perturbation equals FP64 pixel for pixel: view containing the origin at 1e-20 {"kinds": [0, 0, 2560, 0, 0], "total": 2560, "refLength": 513, "gpuMs": 12}
 PASS GPU perturbation equals FP64 pixel for pixel: fixed-point interior at 1e-150 {"kinds": [0, 2560, 0, 0, 0], "total": 2560, "refLength": 513, "gpuMs": 18}
-PASS GPU perturbation equals FP64 pixel for pixel: reference above the axis at 3e-9 {"kinds": [0, 0, 0, 2560, 0], "total": 2560, "refLength": 57, "gpuMs": 17}
+PASS GPU perturbation equals FP64 pixel for pixel: reference above the axis at 3e-9 {"kinds": [0, 0, 0, 2560, 0], "total": 2560, "refLength": 57, "gpuMs": 16}
 PASS Chaotic view keeps FP64 structure and class statistics: Plume 10^11 {"fp64_kinds": [281, 0, 0, 1352, 927], "gpu_numeric": 961, "gpu_unresolved": 290, "block_diff": 9.19}
 PASS Chaotic view keeps FP64 structure and class statistics: Abyss 10^25 {"fp64_kinds": [46, 0, 0, 1441, 1073], "gpu_numeric": 1066, "gpu_unresolved": 46, "block_diff": 11.91}
 PASS Chaotic view keeps FP64 structure and class statistics: Horizon 10^100 {"fp64_kinds": [5, 0, 0, 1517, 1038], "gpu_numeric": 1027, "gpu_unresolved": 6, "block_diff": 12.98}
 PASS With BLA forced on, structured views still equal FP64 pixel for pixel {"views": 7}
 PASS BLA is as faithful to FP64 as plain FP32 perturbation in chaotic views {"Abyss 10^25": {"off": {"mismatch": 934, "block_diff": 11.36}, "on": {"mismatch": 856, "block_diff": 11.91}}, "Horizon 10^100": {"off": {"mismatch": 1299, "block_diff": 14.45}, "on": {"mismatch": 1015, "block_diff": 12.98}}}
-PASS Automatic BLA renders deep views several times faster {"Horizon 10^100": {"span": "7e-100", "levels": 10, "reach": 2344, "plainMs": 2508, "autoMs": 620, "onMs": 605, "speedup": 4.05, "differing": 7585, "total": 15360, "blockDiff": 14.07}, "threshold 1e-55": {"span": "1e-55", "levels": 8, "reach": 510, "plainMs": 496, "autoMs": 31, "onMs": 30, "speedup"
+PASS Automatic BLA renders deep views several times faster {"Horizon 10^100": {"span": "7e-100", "levels": 10, "reach": 2344, "plainMs": 2598, "autoMs": 568, "onMs": 553, "speedup": 4.57, "differing": 7585, "total": 15360, "blockDiff": 14.07}, "threshold 1e-55": {"span": "1e-55", "levels": 8, "reach": 510, "plainMs": 461, "autoMs": 25, "onMs": 25, "speedup"
 PASS GPU perturbation pixels equal exact 95-digit orbits at 1e-55 [{"i": 3, "j": 3, "kind": 3, "steps": 512.0000549992454, "diff": 0}, {"i": 10, "j": 20, "kind": 3, "steps": 512.0000549992454, "diff": 0}, {"i": 24, "j": 16, "kind": 3, "steps": 512.0000549992454, "diff": 0}, {"i": 40, "j": 5, "kind": 3, "steps": 512.0000549992454, "diff": 0}, {"i": 44, "j": 28, "ki
 PASS Views centred on the real axis are exactly conjugate-symmetric at depth 
 PASS Perturbation tiles are seamless at 1, 4 and 16 samples 
 PASS Perturbation is at least as faithful to FP64 as direct FP32 near the handover depth 
 PASS Direct FP32 matches FP64 within 15% of chaotic pixels (precise trig where builtins are imprecise) {"-1.84,0.09,0.0285": {"wrong": 1051, "total": 10240, "block_diff": 3.71}, "-2.5,0,1.8": {"wrong": 537, "total": 10240, "block_diff": 2.45}}
 PASS Full display resolution at span 5e-11 {"size": [480, 236], "iterations": 768, "ms": 4201, "bla": {"levels": 6, "reach": 12, "compiled": false, "mode": "auto"}}
-PASS Full display resolution at span 7e-25 {"size": [480, 236], "iterations": 1536, "ms": 6081, "bla": {"levels": 7, "reach": 232, "compiled": true, "mode": "auto"}}
-PASS Full display resolution at span 7e-100 {"size": [480, 236], "iterations": 4096, "ms": 7571, "bla": {"levels": 10, "reach": 2344, "compiled": true, "mode": "auto"}}
-PASS Full display resolution at span 1e-200 {"size": [480, 236], "iterations": 8192, "ms": 2037, "bla": {"levels": 12, "reach": 12, "compiled": false, "mode": "auto"}}
+PASS Full display resolution at span 7e-25 {"size": [480, 236], "iterations": 1536, "ms": 5903, "bla": {"levels": 7, "reach": 232, "compiled": true, "mode": "auto"}}
+PASS Full display resolution at span 7e-100 {"size": [480, 236], "iterations": 4096, "ms": 7333, "bla": {"levels": 10, "reach": 2344, "compiled": true, "mode": "auto"}}
+PASS Full display resolution at span 1e-200 {"size": [480, 236], "iterations": 8192, "ms": 2107, "bla": {"levels": 12, "reach": 12, "compiled": false, "mode": "auto"}}
 PASS Animated zoom at 1e-150 lands exactly on its target and completes "0.0000000000"
 PASS Auto iteration limit follows depth {"7": 384, "5e-11": 768, "7e-25": 1536, "7e-100": 4096, "1e-200": 8192}
-PASS Pans, zooms and history return reuse one exact reference orbit {"x": "-0.6051379389723799009718169860885862588", "y": "0.43774044207480056296942650770971280628", "digits": 65, "iterations": 2048, "length": 407, "elapsed": 13}
-PASS Continuous wheel zoom over eight decades keeps live perturbation frames {"span": "0.00000000000000000008781766442932356017", "frames": 209, "references": 3}
+PASS Pans, zooms and history return reuse one exact reference orbit {"x": "-0.6051379389723799009718169860885862588", "y": "0.43774044207480056296942650770971280628", "digits": 65, "iterations": 2048, "length": 407, "elapsed": 14}
+PASS Continuous wheel zoom over eight decades keeps live perturbation frames {"span": "0.00000000000000000008781766442932356017", "frames": 156, "references": 3}
 PASS CPU FP64 perturbation completes every pixel at full resolution [52848, 0, 0, 43438, 16994]
 PASS Exact per-pixel mode still renders deep views 64
 PASS No uncaught browser exceptions 

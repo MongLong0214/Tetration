@@ -1,12 +1,12 @@
-PASS First image appears quickly after navigation {"first_frame_ms": 446, "complete_s": 3.94}
-PASS Initial render keeps the main thread responsive {"long_tasks_ms": [68, 94, 115, 83, 54, 120, 79, 82, 71, 64, 161, 133]}
+PASS First image appears quickly after navigation {"first_frame_ms": 1072, "complete_s": 5.83}
+PASS Initial render keeps the main thread responsive {"long_tasks_ms": [93, 123, 170, 180, 96, 158, 86, 104, 83, 70, 126, 166]}
 PASS Shallow views never compile the deep-zoom (BLA) program 
-PASS Shallow drag: live frames and display cadence {"frames_in_2s": 60, "frame_gap_p95_ms": 16.8, "median_ms": 16.7}
+PASS Shallow drag: live frames and display cadence {"frames_in_2s": 43, "frame_gap_p95_ms": 16.7, "median_ms": 16.7}
 PASS Deep-zoom (BLA) program compiles in a quiet moment at perturbation depth {"long_tasks_ms": []}
-PASS Deep (10^25) drag keeps live perturbation frames {"frames_in_2s": 59, "frame_gap_p95_ms": 33.4}
-PASS Smooth wheel zoom keeps display cadence {"frames": 44, "frame_gap_p95_ms": 50}
-PASS Exact 10^100 reference orbit (6,144 steps, 140 digits) computes in a Worker {"x": "-0.6051379389723799009718170481321474982", "y": "0.43774044207480056296942658666911315580", "digits": 140, "iterations": 6144, "length": 2692, "elapsed": 83}
-PASS Deep (10^100) drag keeps live BLA perturbation frames {"frames_in_2s": 60, "frame_gap_p95_ms": 50, "complete_s": 24.9, "bla": {"levels": 10, "reach": 2344, "compiled": true, "mode": "auto"}}
-PASS Sixty-action session keeps GPU textures, Workers and heap bounded {"live_gpu_frames": 4, "pooled": 3, "workers": 0, "heap_growth_mb": 0.21}
+PASS Deep (10^25) drag keeps live perturbation frames {"frames_in_2s": 19, "frame_gap_p95_ms": 16.8}
+PASS Smooth wheel zoom keeps display cadence {"frames": 55, "frame_gap_p95_ms": 50}
+PASS Exact 10^100 reference orbit (6,144 steps, 140 digits) computes in a Worker {"x": "-0.6051379389723799009718170481321474982", "y": "0.43774044207480056296942658666911315580", "digits": 140, "iterations": 6144, "length": 2692, "elapsed": 81}
+PASS Deep (10^100) drag keeps live BLA perturbation frames {"frames_in_2s": 17, "frame_gap_p95_ms": 16.8, "complete_s": 24.9, "bla": {"levels": 10, "reach": 2344, "compiled": true, "mode": "auto"}}
+PASS Sixty-action session keeps GPU textures, Workers and heap bounded {"live_gpu_frames": 4, "pooled": 3, "workers": 0, "heap_growth_mb": 0.23}
 PASS No uncaught browser exceptions 
 ALL 11 PASSED

@@ -13,7 +13,7 @@ All suites ran sequentially against one production build served by `serve.cjs` w
 | `test:browser` (review) | 29 passed | Core flows, CSP enforcement, exact links, limits, mobile focus and touch |
 | `test:release` | 16 passed | Served headers and bytes, reference pixels, engine switching, real context loss and restoration, degraded features, offline reload |
 | `test:deep` | 29 passed | GPU perturbation (plain and BLA) against FP64 and exact orbits, BLA speed, full resolution at every depth, symmetry, seams, reference reuse, deep zoom session |
-| `test:quality` | 15 passed | Antialiasing error against 64-sample references, live frames, glide, inertia, reduced motion, colour flow |
+| `test:quality` | 16 passed | Antialiasing error against 64-sample references, live frames, glide, inertia, reduced motion, colour flow |
 | `test:explorer` | 22 passed | Saved views, history, shortcuts, discovery, sharing, fallbacks, four viewports, axe-core |
 | `test:perf` | 11 passed | First image, when the BLA program compiles (never in shallow views, without long tasks at depth), live-frame cadence at the overview, 10²⁵ and 10¹⁰⁰, reference speed, resource bounds |
 | `test:webkit` | Not run locally | The network policy of this workspace blocks the WebKit download; the suite runs in GitHub Actions |
@@ -21,7 +21,7 @@ All suites ran sequentially against one production build served by `serve.cjs` w
 
 No check was skipped or disabled. Six axe-core scans found no violations; colour contrast over the fractal is reported as incomplete, as before, which is not full WCAG certification.
 
-The final build is **203,273 bytes**, SHA-256 **`c3b4b9998ed9d7bcbcd3db6f1ee5b3ad8230860ef801184c3804b6b739dd662a`**. All six browser reports carry this hash.
+The final build is **208,530 bytes**, SHA-256 **`0d9ffde35f001f651ad741b00ceb922c7adbd726d2e2086385204676adb312a2`**. All six browser reports carry this hash.
 
 ## Numerical checks
 
@@ -59,8 +59,8 @@ Chromium 141.0.7390.37 on ANGLE/SwiftShader (software WebGL2, a 4-core CPU host)
 | Measurement | Result |
 | --- | --- |
 | First image after navigation | 375 ms (complete with adaptive 4× at 960 × 640: 3.9 s) |
-| Live frames while dragging, overview / 10²⁵ / 10¹⁰⁰ | 60 / 60 / 60 frames in 2 s |
-| Display frame-gap 95th percentile in those drags | 16.8 / 33.4 / 50 ms |
+| New live frames while dragging, overview / 10²⁵ / 10¹⁰⁰ | 43 / 19 / 17 in 2 s (frames are re-used while a move stays within one live pixel) |
+| Display frame-gap 95th percentile in those drags | 16.7 / 16.8 / 16.8 ms (grid-locked live frames) |
 | Wheel-zoom glide frame-gap 95th percentile | 66.7 ms |
 | Exact 10¹⁰⁰ reference orbit (6,144 steps, 140 digits) in a Worker | 73 ms |
 | Sixty-action session | 4 live GPU textures, 3 pooled, heap growth 0.22 MB |

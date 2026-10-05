@@ -1,7 +1,7 @@
 {
   "suite": "quality",
   "origin": "http://127.0.0.1:4173",
-  "bundle_sha256": "c3b4b9998ed9d7bcbcd3db6f1ee5b3ad8230860ef801184c3804b6b739dd662a",
+  "bundle_sha256": "0d9ffde35f001f651ad741b00ceb922c7adbd726d2e2086385204676adb312a2",
   "playwright": "1.56.0",
   "limitations": [
     "Software WebGL2; antialiasing error measured on sampled cameras.",
@@ -25,10 +25,10 @@
         "width": 1000,
         "height": 592,
         "counts": null,
-        "elapsed": 11570.599999999627,
+        "elapsed": 11331.700000000186,
         "samples": 16
       },
-      "seconds": 12.64
+      "seconds": 12.34
     },
     {
       "name": "Adaptive 4x and 16x antialiasing reduce error against a 64-sample reference: direct overview",
@@ -42,7 +42,7 @@
         "pixels": 25600,
         "reference": "64 samples per pixel"
       },
-      "seconds": 17.09
+      "seconds": 16.69
     },
     {
       "name": "Adaptive 4x and 16x antialiasing reduce error against a 64-sample reference: direct filaments",
@@ -56,7 +56,7 @@
         "pixels": 25600,
         "reference": "64 samples per pixel"
       },
-      "seconds": 20.06
+      "seconds": 19.66
     },
     {
       "name": "Adaptive 4x and 16x antialiasing reduce error against a 64-sample reference: perturbation plume",
@@ -70,26 +70,48 @@
         "pixels": 14400,
         "reference": "64 samples per pixel"
       },
-      "seconds": 49.9
+      "seconds": 49.95
     },
     {
       "name": "Direct tiles with adaptive samples equal one full-frame draw",
       "passed": true,
       "detail": 0,
-      "seconds": 50.31
+      "seconds": 50.4
     },
     {
       "name": "Dragging shows live single-sample frames, then refines on release",
       "passed": true,
       "detail": {
-        "frames": 39,
+        "frames": 30,
         "draws": {
-          "1": 39,
+          "1": 30,
           "4": 0,
           "16": 0
         }
       },
-      "seconds": 58.84
+      "seconds": 59.18
+    },
+    {
+      "name": "Panning is grid-locked at 10^25 and the overview: overlapping live-frame pixels are identical",
+      "passed": true,
+      "detail": {
+        "compared_pixels": 2173,
+        "frames": [
+          [
+            44,
+            27
+          ],
+          [
+            127,
+            76
+          ]
+        ],
+        "depths": [
+          "7e-25 perturbation",
+          "0.7 direct"
+        ]
+      },
+      "seconds": 153.61
     },
     {
       "name": "Wheel zoom eases the visible camera onto the exact target",
@@ -97,58 +119,58 @@
       "detail": {
         "target_span": "0.237716252204793110"
       },
-      "seconds": 61.3
+      "seconds": 158.81
     },
     {
       "name": "A flick keeps gliding with decaying inertia, then renders",
       "passed": true,
       "detail": null,
-      "seconds": 65.78
+      "seconds": 163.1
     },
     {
       "name": "Colour flow changes only presentation, without recomputing",
       "passed": true,
       "detail": null,
-      "seconds": 66.43
+      "seconds": 163.74
     },
     {
       "name": "A shared view keeps quality and hue and opens without motion",
       "passed": true,
       "detail": null,
-      "seconds": 68.72
+      "seconds": 166.04
     },
     {
       "name": "Reduced-motion preference stops colour flow",
       "passed": true,
       "detail": null,
-      "seconds": 68.73
+      "seconds": 166.06
     },
     {
       "name": "Reduced motion jumps directly and disables inertia",
       "passed": true,
       "detail": null,
-      "seconds": 75.3
+      "seconds": 171.74
     },
     {
       "name": "CPU keeps the reprojected image while replacement Workers are pending",
       "passed": true,
       "detail": 0,
-      "seconds": 80.74
+      "seconds": 177.2
     },
     {
       "name": "Palette changes recolour the rendered view",
       "passed": true,
       "detail": null,
-      "seconds": 84.77
+      "seconds": 181.07
     },
     {
       "name": "No uncaught browser exceptions",
       "passed": true,
       "detail": null,
-      "seconds": 84.77
+      "seconds": 181.07
     }
   ],
-  "count": 15,
+  "count": 16,
   "uncaught_errors": [],
-  "seconds": 84.9
+  "seconds": 181.2
 }

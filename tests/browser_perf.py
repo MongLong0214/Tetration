@@ -102,7 +102,9 @@ def body():
         gaps = frame_gaps(page, drag)
         frames = state(page)['interactiveFrames'] - frames0
         p95 = gaps[int(len(gaps) * .95)]
-        assert frames >= 25 and p95 < 150, (frames, p95)
+        # Grid-locked live frames are re-used while a move stays within one live pixel, so fewer
+        # draws are needed for the same motion; the display cadence (p95) is the smoothness measure.
+        assert frames >= 12 and p95 < 150, (frames, p95)
         suite.record('Deep (10^100) drag keeps live BLA perturbation frames', {'frames_in_2s': frames, 'frame_gap_p95_ms': round(p95, 1), 'complete_s': round(info['lastCompleted']['elapsed'] / 1000, 1), 'bla': info['bla']})
         settle(page)
 

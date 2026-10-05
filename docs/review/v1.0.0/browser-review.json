@@ -1,7 +1,7 @@
 {
   "suite": "review",
   "origin": "http://127.0.0.1:4173",
-  "bundle_sha256": "c3b4b9998ed9d7bcbcd3db6f1ee5b3ad8230860ef801184c3804b6b739dd662a",
+  "bundle_sha256": "0d9ffde35f001f651ad741b00ceb922c7adbd726d2e2086385204676adb312a2",
   "playwright": "1.56.0",
   "limitations": [
     "Touch input is emulated through CDP; no physical iPhone/Safari.",
@@ -25,64 +25,64 @@
         "width": 1200,
         "height": 712,
         "counts": null,
-        "elapsed": 5946.399999999441,
+        "elapsed": 5570.4000000003725,
         "samples": 4
       },
-      "seconds": 6.92
+      "seconds": 6.6
     },
     {
       "name": "CSP blocks unapproved inline JavaScript",
       "passed": true,
       "detail": null,
-      "seconds": 7.23
+      "seconds": 6.9
     },
     {
       "name": "CSP blocks outbound fetch",
       "passed": true,
       "detail": null,
-      "seconds": 7.31
+      "seconds": 6.99
     },
     {
       "name": "Wheel zoom keeps the point under the cursor fixed and glides to rest",
       "passed": true,
       "detail": null,
-      "seconds": 13.54
+      "seconds": 13.32
     },
     {
       "name": "Drag pans without changing scale",
       "passed": true,
       "detail": null,
-      "seconds": 19.49
+      "seconds": 19.1
     },
     {
       "name": "Keyboard zoom is exact and Home resets",
       "passed": true,
       "detail": null,
-      "seconds": 24.59
+      "seconds": 23.81
     },
     {
       "name": "Preset, iteration limit and palette complete a render",
       "passed": true,
       "detail": null,
-      "seconds": 28.32
+      "seconds": 27.1
     },
     {
       "name": "Coordinate grid toggles",
       "passed": true,
       "detail": null,
-      "seconds": 28.34
+      "seconds": 27.12
     },
     {
       "name": "Named guide dialog closes with Escape",
       "passed": true,
       "detail": null,
-      "seconds": 28.39
+      "seconds": 27.19
     },
     {
       "name": "Clipboard share returned without an uncaught error",
       "passed": true,
       "detail": null,
-      "seconds": 28.53
+      "seconds": 27.33
     },
     {
       "name": "PNG export has the rendered resolution and the fractal pixels",
@@ -91,13 +91,13 @@
         "width": 1200,
         "colours": 7169
       },
-      "seconds": 28.69
+      "seconds": 27.49
     },
     {
       "name": "Invalid coordinates do not replace the view",
       "passed": true,
       "detail": null,
-      "seconds": 28.85
+      "seconds": 27.66
     },
     {
       "name": "Deep coordinates render with perturbation at full resolution",
@@ -110,22 +110,22 @@
           "digits": 70,
           "iterations": 256,
           "length": 257,
-          "elapsed": 11
+          "elapsed": 12
         }
       },
-      "seconds": 32.74
+      "seconds": 31.62
     },
     {
       "name": "Deep pan keeps a sub-FP64 coordinate change",
       "passed": true,
       "detail": null,
-      "seconds": 36.36
+      "seconds": 35.31
     },
     {
       "name": "Cancelled exact work cannot replace the CPU result",
       "passed": true,
       "detail": null,
-      "seconds": 42.76
+      "seconds": 41.71
     },
     {
       "name": "Minimum span renders at full resolution with a 240-digit reference",
@@ -136,39 +136,39 @@
         "digits": 240,
         "iterations": 256,
         "length": 257,
-        "elapsed": 8
+        "elapsed": 7
       },
-      "seconds": 49.21
+      "seconds": 47.81
     },
     {
       "name": "Minimum zoom boundary does not drift off-anchor",
       "passed": true,
       "detail": null,
-      "seconds": 49.31
+      "seconds": 47.91
     },
     {
       "name": "Maximum zoom boundary does not drift off-anchor",
       "passed": true,
       "detail": null,
-      "seconds": 50.91
+      "seconds": 49.51
     },
     {
       "name": "Exact shared URL rehydrates and renders",
       "passed": true,
       "detail": null,
-      "seconds": 54.12
+      "seconds": 52.73
     },
     {
       "name": "Unsupported link schema does not replace the view",
       "passed": true,
       "detail": null,
-      "seconds": 54.23
+      "seconds": 52.85
     },
     {
       "name": "Links from earlier releases (e=big) keep working",
       "passed": true,
       "detail": null,
-      "seconds": 56.82
+      "seconds": 56.02
     },
     {
       "name": "Mobile layout: no horizontal overflow, 2x density rendering",
@@ -185,55 +185,55 @@
         "width": 780,
         "height": 1520,
         "counts": null,
-        "elapsed": 3848.7999999998137,
+        "elapsed": 3840.5,
         "samples": 1
       },
-      "seconds": 61.36
+      "seconds": 60.67
     },
     {
       "name": "Closed mobile drawer cannot receive focus",
       "passed": true,
       "detail": null,
-      "seconds": 61.37
+      "seconds": 60.69
     },
     {
       "name": "Open mobile drawer moves focus and inerts the background",
       "passed": true,
       "detail": null,
-      "seconds": 61.46
+      "seconds": 60.78
     },
     {
       "name": "Escape closes the drawer and restores focus",
       "passed": true,
       "detail": null,
-      "seconds": 61.48
+      "seconds": 60.8
     },
     {
       "name": "Mobile guide is reachable",
       "passed": true,
       "detail": null,
-      "seconds": 61.59
+      "seconds": 60.89
     },
     {
       "name": "Real touch dispatch: pinch zoom",
       "passed": true,
       "detail": null,
-      "seconds": 61.91
+      "seconds": 61.28
     },
     {
       "name": "Real touch dispatch: single-finger pan",
       "passed": true,
       "detail": null,
-      "seconds": 65.37
+      "seconds": 64.75
     },
     {
       "name": "No uncaught browser exceptions",
       "passed": true,
       "detail": null,
-      "seconds": 69.93
+      "seconds": 69.27
     }
   ],
   "count": 29,
   "uncaught_errors": [],
-  "seconds": 70.0
+  "seconds": 69.4
 }
