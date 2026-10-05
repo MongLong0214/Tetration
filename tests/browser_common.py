@@ -5,7 +5,9 @@ Software graphics (SwiftShader / Linux WebKit) are not hardware GPU or physical
 device qualification; timings here are bounds for that environment only.
 """
 from importlib.metadata import version
+from contextlib import contextmanager
 from pathlib import Path
+import faulthandler
 import hashlib
 import json
 import os
@@ -39,6 +41,9 @@ class Suite:
     def record(self, name, detail=None):
         self.checks.append({'name': name, 'passed': True, 'detail': detail, 'seconds': round(time.time() - self.started, 2)})
         print('PASS', name, json.dumps(detail, default=str)[:300] if detail is not None else '', flush=True)
+        # A stalled browser can prevent exception handling or teardown from
+        # completing. Preserve completed checks without claiming suite success.
+        self.write(False, 'Suite has not completed')
 
     def watch(self, page):
         page.on('pageerror', lambda error: self.errors.append(f'{self.name}: {error}'))
@@ -53,6 +58,8 @@ class Suite:
                             'uncaught_errors': self.errors, 'seconds': round(time.time() - self.started, 1)})
         if failure:
             self.report['failure'] = failure
+        else:
+            self.report.pop('failure', None)
         (OUT / f'browser-{self.name}.json').write_text(json.dumps(self.report, indent=2, ensure_ascii=False, default=str) + '\n')
 
 
@@ -64,21 +71,40 @@ def launch(playwright, extra=()):
                                       headless=True, args=CHROMIUM_ARGS + hardware + list(extra))
 
 
+@contextmanager
+def browser_deadline(timeout):
+    # Playwright's timeout cancellation can itself wait on a stuck renderer.
+    # Keep the requested deadline and allow five seconds to report a failure.
+    faulthandler.dump_traceback_later(timeout / 1000 + 5, exit=True)
+    try:
+        yield
+    finally:
+        faulthandler.cancel_dump_traceback_later()
+
+
 def ready(page, mode=None, timeout=240000):
     selector = 'body[data-complete="true"]' + (f'[data-mode="{mode}"]' if mode else '')
     try:
-        page.wait_for_selector(selector, state='attached', timeout=timeout)
-    except Exception:
+        with browser_deadline(timeout):
+            page.wait_for_selector(selector, state='attached', timeout=timeout)
+    except Exception as error:
+        print('RENDER_TIMEOUT', selector, str(error), flush=True)
+        # evaluate() has no timeout. A blocked renderer must not strand the
+        # failure diagnostic itself until the CI job is forcibly cancelled.
+        faulthandler.dump_traceback_later(5, exit=True)
         try:
             print('RENDER_TIMEOUT_STATE', json.dumps({**state(page), 'graphics': graphics(page)}), flush=True)
         except Exception:
             pass  # Preserve the original timeout if the page itself is gone.
+        finally:
+            faulthandler.cancel_dump_traceback_later()
         raise
 
 
 def settle(page, timeout=240000):
     """Wait for a render that started after the last interaction to complete."""
-    page.wait_for_function('() => !window.tetraDiagnostics.animating', timeout=timeout)
+    with browser_deadline(timeout):
+        page.wait_for_function('() => !window.tetraDiagnostics.animating', timeout=timeout)
     page.wait_for_timeout(30)
     ready(page, timeout=timeout)
 

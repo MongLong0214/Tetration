@@ -187,6 +187,8 @@ QA의 Playwright를 로컬과 동일한 `1.63.0`으로 고정했다. 이동 중 
 
 하드웨어 QA는 [Playwright의 `chromium` channel](https://playwright.dev/python/docs/browsers#chromium-new-headless-mode)로 실제 Chromium의 새 headless 모드를 사용한다. 기본 headless shell과 실행 파일을 지정한 로컬 Chrome은 다른 구현이었다. Chromium 153 바이너리도 로컬에 설치해 이 경로를 확인한다. 브라우저 라이브러리 버전이 같다는 이유만으로 바이너리·드라이버까지 같다고 가정하지 않는다.
 
+동일 HTML을 Chromium 153으로 다시 검증한 로컬 10개 스위트는 186개 검사와 0 uncaught exception으로 통과했다. 같은 HTML의 WebKit 5개 스위트 63개 검사와 합하면 249개다. 원격 실행 `37314566651`의 macOS 팬 재사용 12개·탐험 26개 검사는 실제 `ANGLE Metal Renderer: Apple Paravirtual device`로 통과했다. 그러나 production은 최대 설정 전 16개 검사 이후 출력이 멈췄으며, 이 실행을 전체 통과로 기록하지 않는다. Linux의 나머지 브라우저 작업은 통과했다. 자동화의 응답 없는 페이지 진단·타임아웃 취소가 무기한 기다릴 수 있어, 원래 렌더 시간 한도 뒤 5초의 실패 기록 유예를 두고 강제 실패 스택을 남긴다. 이미 완료한 검사도 미완료 상태로 저장하며 전체 본문이 끝나야 성공으로 바뀐다. 계산 품질·장면·개별 렌더 시간 한도는 그대로다.
+
 ## 직접 실험하고 제외한 방법
 
 | 실험 | 이 기기의 결과 | 판단 |

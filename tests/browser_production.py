@@ -236,6 +236,7 @@ def body():
         ctx=browser.new_context(viewport={'width':640,'height':430})
         page=suite.watch(ctx.new_page());open_app(page,SHALLOW)
         for engine, quality, palette, iterations in [('auto',1,1,64),('cpu',4,2,128),('exact',16,3,64),('auto',16,0,16384),('auto',4,2,'auto')]:
+            print('PRODUCTION_SETTING_STAGE', engine, quality, palette, iterations, flush=True)
             controls(page); page.locator('#engine').select_option(engine); page.locator('#quality').select_option(str(quality))
             page.locator('#iterations').select_option(str(iterations)); page.locator(f'[data-palette="{palette}"]').click(); close_controls(page)
             settle(page); d = consistent(page)
