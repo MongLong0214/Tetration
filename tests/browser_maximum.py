@@ -1,6 +1,8 @@
 """High-cap deep views must finish and remain actionable, with real AA pixels."""
 from browser_common import *
 from playwright.sync_api import sync_playwright
+import math
+import struct
 
 suite = Suite('maximum', ['Desktop Chromium/WebKit, not physical Safari or mobile qualification.',
                          'Float outputs compare finite FP32 states. No infinite-orbit proof is claimed.'])
@@ -12,6 +14,23 @@ CASES = [
      '0.437740442074800562969426586669113155808012201307319340609925561376648113051190710894591896027315034323404945092475', '7e-100', 16384),
     ('Minimum span Auto', '-2.2930579295428124999999991', '0.3320804455471875', '1e-200', 'auto'),
 ]
+
+TRACE = '''(()=>{
+ Object.defineProperty(window,'TetraGPU',{configurable:true,set(GPU){
+  Object.defineProperty(window,'TetraGPU',{configurable:true,writable:true,value:GPU});
+  const p=GPU.prototype,prepare=p.prepare,program=p.program,draw=p.drawTile,fence=p.fence;
+  p.program=function(name){this.__traceProgram=name;return program.call(this,name);};
+  p.prepare=function(frame,scene,samples,...args){this.__traceScene={mode:scene.mode,n:scene.iterations,samples,w:frame.width,h:frame.height};return prepare.call(this,frame,scene,samples,...args);};
+  p.drawTile=function(frame,tile){this.__traceTile=tile;return draw.call(this,frame,tile);};
+  p.fence=function(){const count=this.__traceCount=(this.__traceCount||0)+1,started=performance.now();
+   const detail={count,program:this.__traceProgram,scene:this.__traceScene,tile:this.__traceTile,stage:window.tetraDiagnostics?.renderStage};
+   if(count<=12)console.log('MAX_FENCE_START',JSON.stringify(detail));
+   return fence.call(this).then(value=>{const ms=performance.now()-started;if(count<=12||ms>1000)console.log('MAX_FENCE_DONE',JSON.stringify({...detail,ms}));return value;},error=>{
+    console.log('MAX_FENCE_ERROR',JSON.stringify({...detail,ms:performance.now()-started,error:String(error)}));throw error;});};
+ }});
+ let frames=0;const frame=()=>{frames++;requestAnimationFrame(frame);};requestAnimationFrame(frame);
+ setInterval(()=>{const d=window.tetraDiagnostics;if(d?.iterations>=8192&&!d.complete)console.log('MAX_PROGRESS',JSON.stringify({frames,mode:d.mode,stage:d.renderStage,gpuFailure:d.gpuFailure,progress:document.querySelector('#loadingText')?.textContent}));},1000);
+})();'''
 
 
 def check_requested(page, n):
@@ -39,6 +58,9 @@ def body():
             browser = launch(p); suite.report['browser_version'] = browser.version
             context = browser.new_context(viewport={'width': 640, 'height': 430})
             page = suite.watch(context.new_page())
+            if os.environ.get('TETRA_TRACE_GPU') == '1':
+                page.add_init_script(TRACE)
+                page.on('console', lambda msg: print('MAX_CONSOLE', msg.text, flush=True))
             open_app(page, f'v=1&x={x}&y={y}&s={span}&n={n}&q=16')
             d = check_requested(page, n)
             if name in ['Abyss', 'Horizon']:
@@ -80,6 +102,14 @@ def body():
             phase = page.evaluate('__gpuPhaseComparison()')
         assert phase['error'] == 0 and len(phase['rows']) == 24, phase
         assert all(r['changed'] == 0 for r in phase['rows']), phase
+        # Equal blank targets are not orbit evidence. Inspect actual finite
+        # states and logical steps as well as bit equality.
+        for row in phase['rows']:
+            for output in row['outputs']:
+                for at in range(0, len(output), 4):
+                    re, im, kind, steps = struct.unpack('!4f', struct.pack('!4I', *output[at:at+4]))
+                    assert math.isfinite(re) and math.isfinite(im), row
+                    assert kind in [0, 1, 2, 3, 4] and 0 < steps <= row['n'] + 1, row
         suite.record('GPU cycle skipping preserves every FP32 bit of phase, class and finite step across BLA modes and cap remainders',
                      {'cases': 24, 'points': 24 * 16 * 16})
         suite.no_errors(); context.close(); browser.close()

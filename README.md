@@ -17,6 +17,7 @@ The map fills the workspace. Drag, scroll or pinch anywhere: the image follows i
 | Pan | Drag (with inertia) / arrow keys; Shift + arrow for larger steps |
 | Zoom | Scroll / pinch / + and − |
 | Zoom into a point | Double-click |
+| Inspect a small structure | Detail / Shift-drag / Z then drag; Escape cancels |
 | Discover a new detailed place | D or the ✦ button |
 | Overview / starting points | Home / 1–7 |
 | Previous / next view | Alt + Left / Right |
@@ -24,7 +25,7 @@ The map fills the workspace. Drag, scroll or pinch anywhere: the image follows i
 | Saved views / share / save image | B / S / E |
 | Grid / guide | G / ? |
 
-Seven starting points range from the overview to **Plume** (10¹¹), **Abyss** (10²⁵) and **Horizon** (10¹⁰⁰). Palettes: **Aurora**, **Ember**, **Tidal** and **Mono**. Escape bands keep cycling through the palette at depth, where every pixel needs thousands of steps. Optional **Color flow** rotates hues without recomputing; it starts off, pauses in a hidden tab and stops when reduced motion is requested.
+The opening Bloom view focuses on internal petals (span 0.00025). Seven starting points range from the overview to **Plume** (10¹¹), **Abyss** (10²⁵) and **Horizon** (10¹⁰⁰). Palettes: **Aurora**, **Ember**, **Tidal** and **Mono**. Escape bands keep cycling through the palette at depth, where every pixel needs thousands of steps. Optional **Color flow** rotates hues without recomputing; it starts off, pauses in a hidden tab and stops when reduced motion is requested.
 
 **Share** copies the exact view link (or opens the native share sheet on touch devices). **Save image** downloads a PNG at the rendered resolution; on touch devices that support file sharing it opens the share sheet with the image. Up to 24 named views can be saved on the device. TETRA installs as an app and reopens offline.
 
@@ -65,7 +66,7 @@ Zero is excluded. This is finite, integer-height iteration, not an analytic exte
 
 ### Deep zoom by perturbation
 
-Shallow views are iterated directly in FP32 on the GPU. Below a pixel spacing of 2⁻¹⁶ of the coordinate scale, TETRA switches to perturbation:
+Automatic uses direct FP32 or perturbation on the GPU for ordinary views. At caps of 8192 or more, relative spans at FP64 scales use FP64 Workers; deeper GPU Ultra passes submit four new samples at a time through FP32 sum buffers. Missing float-color support uses full CPU perturbation for those high-cap Ultra requests. Below a pixel spacing of 2⁻¹⁶ of the coordinate scale, TETRA switches to perturbation:
 
 1. One **reference orbit** `V[k]` is computed in a Worker with binary fixed-point BigInt arithmetic at the view's precision (depth + 40 digits, up to 256).
 2. Every pixel iterates only its offset `d = w − V` on the GPU: `ε = V·δL + d·L`, `w' = V'·exp(ε)`, `d' = V'·expm1(ε)`, with `δL = log1p((z − z₀)/z₀)`.
@@ -74,7 +75,7 @@ Shallow views are iterated directly in FP32 on the GPU. Below a pixel spacing of
 5. A pixel rebases to the virtual start `V[0] = 0` when `|w| < |d|` or when the reference ends; lower-half pixels use the conjugate orbit of their mirror image, which handles the branch cut with one reference.
 6. **Bilinear approximation (BLA).** While the offset is tiny, a pixel follows the reference and runs of 2ʲ steps are linear: `d ← A·d + B·δL`. A table of such runs, built from the reference for the view's largest `δL`, stores for each run the largest `|d|` that keeps every covered step linear (to one FP32 rounding unit on the GPU, one FP64 unit in Workers). Pixels skip whole runs, then iterate normally. Runs never cover a step where the reference is near the escape threshold, a numerical limit, a fixed point or a period-2 cycle, so no skipped step could have ended the orbit (chaotic pixels still differ at the rounding level, as between any two finite-precision engines). At 10¹⁰⁰ about 90% of the steps of a typical orbit are skipped; the GPU switches to the BLA program only where it saves at least a quarter of an orbit.
 
-The reference is reused while panning and zooming (within 64 spans and 16 decades of extra depth). With **Auto** iterations the limit grows as `320 + 34 × decades` (quantised to 256 … 16,384), because escape times grow by about 30 steps per decade of zoom.
+The reference is reused while panning and zooming (within 64 spans and 16 decades of extra depth). With **Auto** iterations the limit grows as `320 + 34 × decades` (quantised to 256 … 16,384), because escape times grow by about 30 steps per decade of zoom. Raising Auto can resolve an area that was previously unresolved at the same coordinates; fix the iteration limit when comparing magnifications. Dark unresolved regions are not empty space.
 
 | Limit | Implementation |
 | --- | --- |
@@ -83,15 +84,15 @@ The reference is reused while panning and zooming (within 64 spans and 16 decade
 | Horizontal span | 1e−200 to 1e12 |
 | Each coordinate component | −1e12 to 1e12 |
 | Iteration limit | Auto, or 64 … 16,384 |
-| Display resolution | Every depth: display pixels up to 2× density, 8.3 MP and 8,192 px per side |
+| Display resolution | GPU: display pixels up to 3× density, 8.3 MP and 8,192 px per side; FP64: 1.6 MP / 2,048 across; Exact: 72 across |
 
 FP32 perturbation (with or without BLA) reproduces FP64 perturbation pixel for pixel in structured regions and keeps the same structure and class statistics in chaotic regions, where any finite precision changes individual pixels. **CPU · FP64** renders the same deep views with FP64 offsets (slower, higher numerical fidelity). **Exact · slow** evaluates each pixel with decimal BigInt orbits at up to 72 horizontal samples, as a check.
 
 ## Rendering, speed and privacy
 
-- **WebGL2 / GLSL ES 3.0** renders everything on the GPU. Frames are drawn in GPU-resident tiles whose batch size adapts to the measured speed (about 14 ms per batch), so input stays responsive and drivers are never asked for multi-second draws. Once you reach perturbation depths, the BLA program compiles in a quiet moment (or in the background where the driver supports parallel compilation), so deep views rarely wait for it and gestures are never interrupted by it.
+- **WebGL2 / GLSL ES 3.0** renders GPU views in bounded tiles. Batches adapt to the measured speed (about 14 ms); high-cap Ultra also fences each four-sample submission. Automatic selects FP64 Workers for dense high-cap views to avoid observed native compositor stalls. Once you reach perturbation depths, the BLA program compiles in a quiet moment (or in the background where the driver supports parallel compilation), so deep views rarely wait for it and gestures are never interrupted by it.
 - While the camera moves, single-sample frames are rendered at the resolution the GPU can finish within about 12 ms and displayed immediately; wheel zoom glides and drags carry inertia. After a pause the view refines: full-resolution single sample, then adaptive 4× and 16× samples where edges are detected.
-- Without WebGL2, or after a GPU loss, a persistent pool of 1–8 Workers renders FP64 (direct or perturbation); OffscreenCanvas/ImageBitmap tiles are used where available. A restored GPU context is used again automatically.
+- Without WebGL2, or after a GPU loss, a persistent pool of 1–8 Workers renders FP64 (direct or perturbation); pixel buffers and software-preferred Canvas2D keep CPU computation independent of a stalled GPU. A restored GPU context is used again automatically.
 - No framework, runtime dependency, external computation API, analytics or login. Saved views are written only after an explicit save/remove action. The service worker only caches the app's own files (network first).
 
 The build hashes the exact script and stylesheet bytes into its CSP: no `unsafe-inline` or `unsafe-eval`, `connect-src 'none'`, Workers from `blob:` and the same-origin service worker only. Do not modify the built inline code without rebuilding.
@@ -121,7 +122,7 @@ npm install --no-save --package-lock=false --ignore-scripts axe-core@4.11.0
 python3 -m playwright install --with-deps chromium webkit
 npm start &                      # serves dist on http://127.0.0.1:4173
 export TETRA_BASE_URL=http://127.0.0.1:4173
-npm run test:e2e                 # review, release, deep, quality, explorer, perf
+npm run test:e2e                 # all local suites, including zoom and maximum requests
 npm run test:webkit
 ```
 
@@ -134,9 +135,14 @@ npm run test:webkit
 | `test:quality` | Antialiasing error vs 64-sample references, live-frame accumulation, grid lock, glide, inertia, reduced motion, colour flow |
 | `test:explorer` | Saved views, history, shortcuts, discovery, sharing, fallbacks, viewports, axe-core |
 | `test:perf` | First frame, live-frame cadence, main-thread long tasks, reference speed, resource leaks |
-| `test:webkit` | Linux WebKit flows (CI) |
+| `test:reuse` | Native-resolution pan overlap, true AA16 exposed strips, cache return and Detail |
+| `test:interactions` | Region selection, cancellation, density/layout and input transitions |
+| `test:production` | Export pixels, history, storage, recovery, native input after cold maximum requests |
+| `test:zoom` | Repeated native Auto emergence and fixed-cap point stability through 62 zooms |
+| `test:maximum` | Cold deep maximum requests, native navigation, FP32 phase/AA bit comparisons and cancellation |
+| `test:webkit` | WebKit flows; affected suites also run with `TETRA_BROWSER=webkit` |
 
-`CHROMIUM_PATH` selects a Chromium executable and `AXE_CORE_PATH` an axe-core script. GitHub Actions runs every suite in parallel on a served origin and keeps the reports for 14 days. Software graphics, emulated touch and Linux WebKit are not physical GPU or iPhone/Safari qualification. See [validation evidence](docs/VALIDATION.md) and the [changelog](CHANGELOG.md).
+`CHROMIUM_PATH` selects a Chromium executable and `AXE_CORE_PATH` an axe-core script. Use `TETRA_HARDWARE_BROWSER=1` to select the full Chromium binary with native GPU support on macOS. Run local GPU suites sequentially. GitHub Actions runs suites in separate VMs on a served origin and keeps the reports for 14 days. Software graphics, emulated touch and Linux WebKit are not physical GPU or iPhone/Safari qualification. See [validation evidence](docs/VALIDATION.md) and the [changelog](CHANGELOG.md).
 
 ## Structure
 
