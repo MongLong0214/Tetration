@@ -1,5 +1,9 @@
 # Changelog
 
+### Focus resize repair — 2026-10-06
+
+- Focus entry and exit now measure the new viewport immediately, so an old-sized image cannot remain marked complete while resize notification is pending. Native keyboard/button and cached-size checks reproduce the previous stale-completion failure and verify the repair on Chromium and WebKit.
+
 ## Exploration performance update — 2026-10-06
 
 - Open Bloom inside its petals, add Detail/region zoom, and retain sharp completed detail during movement.

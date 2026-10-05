@@ -1,5 +1,13 @@
 # Validation — 1.0.0
 
+## 2026-10-06 Focus resize repair
+
+Qualified code head `573034e`, runtime SHA-256 `1f63f34d67ea7a2751c1da8b7b9f99eb400de22789d7b008af1d570c8e9dc329` (267,554 bytes), repairs a real post-merge failure. [Main run 37377430638](https://github.com/MongLong0214/Tetration/actions/runs/37377430638) passed 137 units/lint/build and 16 of 17 browser suites, but Explorer failed the original focused-render height assertion. Focus CSS had expanded the viewport to 960 px while the completed image still had 872 px. This is a retained code failure, not runner assignment trouble.
+
+The unchanged deterministic witness defers the native ResizeObserver callback and inspects completion during real keyboard/button events. Before the fix it captures `focus=true`, `complete=true`, `aria-busy=false`, viewport height 960 and previous completed height 872. Calling the existing `measure()` during Focus entry/exit invalidates that stale completion synchronously. Native Chromium Explorer passes 27 checks, including keyboard F/Escape, both real buttons and cached-size restoration. Native WebKit separately passes five focused checks at the same 1440×960 viewport. Unit tests remain 137/137 and lint passes. Iterations, AA, mathematical kernels, pixel tolerances and deadlines are unchanged.
+
+The frozen local run passed all 17 browser suites: 282 checks, zero uncaught browser errors, 726.8 seconds. [Remote run 37384074579](https://github.com/MongLong0214/Tetration/actions/runs/37384074579) passed all 18 jobs on its first attempt: 137 units/lint/build and the same 17 browser suites. Both native maximum suites retained the complete AA4/AA16 RGBA and finite FP32 comparisons. No wait, deadline, actionability or tolerance was relaxed. The preceding qualification below applies to the earlier runtime; the failed main run remains recorded.
+
 ## 2026-10-06 performance repair
 
 The qualified code head is `a5fb110`; its product runtime is `636eb64`, SHA-256 `416ff519e6ab9bb19a6f69419399c3accb350c61992ea60f765eb57d6166faf3` (267,387 bytes). Unit tests: 137 passed; ESLint/actionlint passed. Its frozen 17-suite local run passed all 281 checks with zero uncaught browser errors in 680 seconds, followed by four actual Ultra-cancel/navigation/cache-upgrade checks. Native Chromium and WebKit each passed 12 maximum checks, including actual cold 640×354 / 16,384 / AA16 requests and Settings/Home/Back. AA4/AA16 compare every byte of 138,240 RGBA pixels; finite phase/class/steps compare 6,144 FP32 states exactly. The unchanged native pan witness passed after the Auto 4096 BLA scheduling repair; no pixel tolerance was relaxed.
