@@ -1,5 +1,18 @@
 # Production review — TETRA 1.0.0
 
+## 2026-10-06 performance repair
+
+The qualified code head is `a5fb110`, implementation `636eb64`, runtime SHA-256 `416ff519e6ab9bb19a6f69419399c3accb350c61992ea60f765eb57d6166faf3` (267,387 bytes). The frozen 17-suite local run passed all 281 checks with zero uncaught browser errors, followed by four actual Ultra-cancel/navigation/cache-upgrade checks. Final remote qualification [37372511644, attempt 2](https://github.com/MongLong0214/Tetration/actions/runs/37372511644/attempts/2) passed all 17 browser suites and 137 units/lint/build. Both native maximum suites passed all 12 checks without tracing. Successful first-attempt jobs were retained; unsuccessful jobs reran at the same head. The incomplete first attempt remains documented in [VALIDATION.md](VALIDATION.md); its unknown host/driver cause is not asserted to be repaired. No runtime change occurred between attempts.
+
+The review found a real mask-draw failure that looked like a flat query and a separate fivefold cold-render regression at the Auto 4096 BLA boundary. Both have concrete reproductions and repairs. The unchanged failed-draw witness passes on Chromium/WebKit after the GL error guard. Prepared seeded BLA now uses ordinary AA at 4096; the measured Horizon pan improves from the previous public build's 2182 ms to 179 ms, while its cold median remains 19% slower (23% in the later 18-render experiment). Kernel, samples, native dimensions and pixel tolerances remain unchanged. The reproduced native WebKit reference-draw timeout is addressed only by splitting its four affected QA reference cases; actual app flows and all output comparisons pass. The temporary ARM software-WebKit resize throughput limit remains documented; the default x86 runner passes its original bound. See [PERFORMANCE_RESEARCH.md](PERFORMANCE_RESEARCH.md) for inputs, numerical evidence and limits.
+
+The preceding `66b1d78` runtime passed all 281 local browser checks and four additional actual-input/cache checks. Its remote run [37364951935](https://github.com/MongLong0214/Tetration/actions/runs/37364951935) failed before any test step: “The job was not acquired by Runner of type hosted even after multiple attempts.” Browser jobs were skipped. This infrastructure failure is not a passing qualification or a reproduced code failure. The earlier `4246550` diagnostic had the same runner-assignment failure.
+
+The changes and measured numerical/performance evidence are in [PERFORMANCE_RESEARCH.md](PERFORMANCE_RESEARCH.md). Physical Safari/mobile and a five-hour thermal soak remain unqualified. GPU resolution is bounded by 8.3 MP / 8192 per side; FP64 by 1.6 MP / 2048 across; Exact by 72 across. Automatic may select FP64 for high-cap requests.
+
+## Historical 1.0.0 review (2026-10-04)
+
+
 Review date: 2026-10-04. Scope: the complete source (`src/`), build, server, headers, tests and documentation, reviewed against one goal: explore an effectively unbounded tetration fractal quickly, comfortably and at maximum sharpness, then save and share it.
 
 ## Findings in 0.5.0 and what changed

@@ -1,6 +1,6 @@
 # TETRA
 
-A browser-native tetration explorer. Dive from the whole complex plane to 10²⁰⁰ magnification at full display resolution, discover new places, save coordinates and share exact views.
+A browser-native tetration explorer. Inspect internal fractal structure down to span `1e-200`, discover new places, save coordinates and share exact views.
 
 ![TETRA explorer](docs/review/v1.0.0/desktop.png)
 
@@ -10,7 +10,7 @@ A browser-native tetration explorer. Dive from the whole complex plane to 10²�
 
 ## Explore
 
-The map fills the workspace. Drag, scroll or pinch anywhere: the image follows immediately and keeps refining while you move. Live frames stay locked to the fractal's pixel grid and gather up to 16 orbit samples per pixel over successive frames, so moving neither shimmers nor turns noisy. When you pause, it resolves at full display resolution and then smooths edges with up to 16 orbit samples per pixel.
+The map fills the workspace. Drag, scroll or pinch anywhere: the image follows immediately and keeps refining while you move. Live frames stay locked to the fractal's pixel grid and gather up to 16 orbit samples per pixel over successive frames, to limit shimmer during movement. When you pause, it resolves within the selected engine’s pixel budget and then smooths edges with up to 16 orbit samples per pixel.
 
 | Action | Input |
 | --- | --- |
@@ -66,7 +66,7 @@ Zero is excluded. This is finite, integer-height iteration, not an analytic exte
 
 ### Deep zoom by perturbation
 
-Automatic uses direct FP32 or perturbation on the GPU for ordinary views. At caps of 8192 or more, relative spans at FP64 scales use FP64 Workers; deeper GPU Ultra passes submit four new samples at a time through FP32 sum buffers. Missing float-color support uses full CPU perturbation for those high-cap Ultra requests. Below a pixel spacing of 2⁻¹⁶ of the coordinate scale, TETRA switches to perturbation:
+Automatic uses direct FP32 or perturbation on the GPU for ordinary views. At caps of 8192 or more, relative spans at FP64 scales use FP64 Workers; GPU AA passes at 8192+ iterations (4×/16×) or 4096+ (16×) submit one new orbit at a time through FP32 sum buffers. Ordinary and split passes share the same compiled orbit kernel. Missing float-color support routes these Automatic requests to FP64 Workers. Below a pixel spacing of 2⁻¹⁶ of the coordinate scale, TETRA switches to perturbation:
 
 1. One **reference orbit** `V[k]` is computed in a Worker with binary fixed-point BigInt arithmetic at the view's precision (depth + 40 digits, up to 256).
 2. Every pixel iterates only its offset `d = w − V` on the GPU: `ε = V·δL + d·L`, `w' = V'·exp(ε)`, `d' = V'·expm1(ε)`, with `δL = log1p((z − z₀)/z₀)`.
@@ -90,7 +90,7 @@ FP32 perturbation (with or without BLA) reproduces FP64 perturbation pixel for p
 
 ## Rendering, speed and privacy
 
-- **WebGL2 / GLSL ES 3.0** renders GPU views in bounded tiles. Batches adapt to the measured speed (about 14 ms); high-cap Ultra also fences each four-sample submission. Automatic selects FP64 Workers for dense high-cap views to avoid observed native compositor stalls. Once you reach perturbation depths, the BLA program compiles in a quiet moment (or in the background where the driver supports parallel compilation), so deep views rarely wait for it and gestures are never interrupted by it.
+- **WebGL2 / GLSL ES 3.0** renders GPU views in bounded tiles. Batches adapt to the measured speed (about 14 ms); split AA also fences each orbit submission. An asynchronous GPU mask skips submissions only when the existing adaptive predicate rejects every pixel; forced new pan strips always calculate their samples. Automatic selects FP64 Workers for dense high-cap views to avoid observed native compositor stalls. Once you reach perturbation depths, the BLA program compiles in a quiet moment (or in the background where the driver supports parallel compilation), so deep views rarely wait for it and gestures are never interrupted by it.
 - While the camera moves, single-sample frames are rendered at the resolution the GPU can finish within about 12 ms and displayed immediately; wheel zoom glides and drags carry inertia. After a pause the view refines: full-resolution single sample, then adaptive 4× and 16× samples where edges are detected.
 - Without WebGL2, or after a GPU loss, a persistent pool of 1–8 Workers renders FP64 (direct or perturbation); pixel buffers and software-preferred Canvas2D keep CPU computation independent of a stalled GPU. A restored GPU context is used again automatically.
 - No framework, runtime dependency, external computation API, analytics or login. Saved views are written only after an explicit save/remove action. The service worker only caches the app's own files (network first).

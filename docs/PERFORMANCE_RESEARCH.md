@@ -304,17 +304,83 @@ production 검사는 콜드 최대 완료 후 실제 설정 클릭, 8192회/AA16
 
 `734749e`가 전체 검사를 통과한 뒤, 새 브라우저에서 Plume·Abyss·Horizon을 각각 16384회·AA16·640×354로 열어 완료 후 실제 설정·Home·Back을 조작했다. Plume은 GPU timeout 후 실제 FP64 계산을 약 135초에 끝냈지만 rAF가 멈추고 설정 클릭의 원래 30초 한도를 넘겼다. 기존 전체 통과는 유지하되 이 깊은 설정의 통과로 확대 해석하지 않는다.
 
-현재 Automatic은 8192회 이상에서 상대 span이 FP64 규모(`magnitude × 1e-13`) 이상이면 CPU를 사용한다. 픽셀 크기에 따라 direct FP64 또는 FP64 perturbation을 선택하므로 viewport 크기로 이 정책이 뒤집히지 않는다. 더 깊은 영역은 GPU perturbation을 유지한다. 고반복 AA16에서 선택적 float-color 확장이 없으면 실제 CPU perturbation으로 전체 요청을 계산한다. Exact 및 명시적 CPU 설정, 낮은 반복 수의 GPU 경로는 유지한다.
+현재 Automatic은 8192회 이상에서 상대 span이 FP64 규모(`magnitude × 1e-13`) 이상이면 CPU를 사용한다. 픽셀 크기에 따라 direct FP64 또는 FP64 perturbation을 선택하므로 viewport 크기로 이 정책이 뒤집히지 않는다. 더 깊은 영역은 GPU perturbation을 유지한다. 고반복 AA4/AA16에서 선택적 float-color 확장이 없으면 실제 CPU perturbation으로 전체 요청을 계산한다. Exact 및 명시적 CPU 설정, 낮은 반복 수의 GPU 경로는 유지한다.
 
-고반복 GPU Ultra는 최대 16×16 타일에서 한 번에 새 4샘플만 계산하고 매 제출의 native fence를 기다린다. 두 작은 RGBA32F 텍스처(16×16 기준 총 8 KiB)에 합을 보존한 뒤 마지막에 한 번만 RGBA8로 반올림한다. 기존 4샘플 seed, 대비 기반 선택과 팬의 강제 AA16 띠 계산을 그대로 반영한다. [EXT_color_buffer_float 표준](https://registry.khronos.org/webgl/extensions/EXT_color_buffer_float/)은 RGBA32F 색 출력의 비클램핑과 RGBA/FLOAT readback을 규정한다. 취소된 중간 합은 기존 완료 프레임에 복사하지 않는다. 실제 원본과 수정 경로를 같은 제한된 제출로 비교한 48개 조합·69,120픽셀에서 모든 RGBA 바이트, 이전 프레임, 취소 프레임이 일치했다. 원본 AA16을 제한 없이 큰 타일로 제출한 초기 비교는 native 컨텍스트의 이후 출력까지 바꾸었으므로 통과로 세지 않는다. 드라이버 내부 원인은 확정하지 않았다.
+`d31548f`의 고반복 GPU Ultra는 최대 16×16 타일에서 한 번에 새 4샘플만 계산하고 매 제출의 native fence를 기다린다. 두 작은 RGBA32F 텍스처(16×16 기준 총 8 KiB)에 합을 보존한 뒤 마지막에 한 번만 RGBA8로 반올림한다. 기존 4샘플 seed, 대비 기반 선택과 팬의 강제 AA16 띠 계산을 그대로 반영한다. [EXT_color_buffer_float 표준](https://registry.khronos.org/webgl/extensions/EXT_color_buffer_float/)은 RGBA32F 색 출력의 비클램핑과 RGBA/FLOAT readback을 규정한다. 취소된 중간 합은 기존 완료 프레임에 복사하지 않는다. 실제 원본과 수정 경로를 같은 제한된 제출로 비교한 48개 조합·69,120픽셀에서 모든 RGBA 바이트, 이전 프레임, 취소 프레임이 일치했다. 원본 AA16을 제한 없이 큰 타일로 제출한 초기 비교는 native 컨텍스트의 이후 출력까지 바꾸었으므로 통과로 세지 않는다. 드라이버 내부 원인은 확정하지 않았다.
 
 FP64 perturbation도 기준 인덱스·오프셋·현재/직전 복소 상태·고정점/주기 카운터·BLA phase가 완전히 같은 machine cycle만 건너뛴다. 실제 BLA 점프는 checkpoint를 무효화하고 모든 BLA 길이가 아직 허용되는 범위에서만 cycle을 확인한다. 변경 전후 6개 뷰·10개 cap·CPU/GPU 규칙·BLA on/off의 23,040개 결과 객체가 정확히 같다. signed zero와 이후 기준 threshold를 놓치는 가짜 주기는 단위 검사로 보존했다.
 
 GPU는 BLA 이후의 plain FP32 루프에만 완전한 상태 checkpoint를 적용한다. 저반복 셰이더의 register 비용을 늘리지 않도록 고반복 프로그램을 분리한다. 3개 깊이·BLA on/off·8192/8193/16383/16384의 6,144개 지점에서 FP32 최종 복소값·분류·논리 종료 단계를 uint 비트로 비교해 모두 일치했다. 유한 machine state의 반복이며 수학적 무한 주기의 증명은 아니다.
 
-실제 M4 Chromium의 새 브라우저에서 같은 640×354·16384회·AA16을 Plume FP64 perturbation 약 20.0초, Abyss GPU 약 33.0초, Horizon GPU 약 21.9초에 끝냈다. 최대 Auto span 1e-200은 8192회·AA16 약 3.68초였다. Abyss/Horizon 팬은 완료 샘플 90%를 보존하고 새 10% 띠를 AA16으로 약 3.05/2.00초에 계산했다. 각각 설정·Home·Back을 실제 actionable 조작으로 확인했다. 최초 방문의 이 시간이 모든 기기의 상한이라는 뜻은 아니다.
+`d31548f`의 실제 M4 Chromium 새 브라우저에서 같은 640×354·16384회·AA16을 Plume FP64 perturbation 약 20.0초, Abyss GPU 약 33.0초, Horizon GPU 약 21.9초에 끝냈다. 최대 Auto span 1e-200은 8192회·AA16 약 3.68초였다. Abyss/Horizon 팬은 완료 샘플 90%를 보존하고 새 10% 띠를 AA16으로 약 3.05/2.00초에 계산했다. 각각 설정·Home·Back을 실제 actionable 조작으로 확인했다. 최초 방문의 이 시간이 모든 기기의 상한이라는 뜻은 아니다.
 
-`browser_maximum.py`는 이 콜드 4개 뷰, 고반복 팬, 선택적 확장 부재, 실제 FP32 phase 및 AA 출력·취소를 검사한다. 기존 해상도·반복 수·AA·240초 한도·픽셀 허용 오차를 줄이지 않았다. 원래 15개 CI 스위트에 maximum/maximum-webkit을 추가한 17개 전체 검사와 137개 단위 검사로 최종 소스를 확인한다. 현재 최종 runtime SHA는 `b5730c08d20ac39b110ffb431b43900733f6e01c8894d8e9f424c92c85545e10`이며 전체 실행 결과는 완료 후 추가한다.
+`browser_maximum.py`는 이 콜드 4개 뷰, 고반복 팬, 선택적 확장 부재, 실제 FP32 phase 및 AA 출력·취소를 검사한다. 기존 해상도·반복 수·AA·240초 한도·픽셀 허용 오차를 줄이지 않았다. 원래 15개 CI 스위트에 maximum/maximum-webkit을 추가한 17개 전체 검사와 137개 단위 검사로 최종 소스를 확인한다. 이 runtime SHA `b5730c08d20ac39b110ffb431b43900733f6e01c8894d8e9f424c92c85545e10`은 로컬 17개 스위트·277개 검사를 통과했지만, 원격의 추가 실패로 최종 채택 상태가 아니다.
+
+### 원격 AA4 정지와 단일 궤도 제출
+
+전체 원격 `37350713780`은 137개 단위 검사·lint와 브라우저 16/17개를 통과했지만, Chromium maximum의 Abyss가 원래 240초 한도에서 실패했다. 같은 원격 WebKit maximum은 실제 GPU로 모두 통과했다. 원격 `37352604704`의 같은 입력 추적에서 미리보기와 AA1은 완료됐고, AA4의 465번째 fence(마지막 제출 타일 384,320의 16×16, 16384회)가 10002.9 ms 후 timeout을 냈다. rAF는 241에서 멈추고 CPU는 천천히 계속 계산했다. 첫 프로그램 연결이 원인이라는 초기 가설은 이 추적으로 기각했다. 각 고반복 타일을 하나씩 기다리는 `45e9502`도 원격 `37353784299`에서 실패했다. 두 실패와 원래 입력·한도는 유지한다.
+
+`fe9abb8`은 고반복 AA4와 AA16 모두 한 invocation당 **한 궤도 샘플**만 계산한다. RGBA32F 합을 매 샘플 후 보존하고 마지막에만 4 또는 16으로 나누어 RGBA8에 복사한다. 일반/라이브 셰이더에 이 분할 분기를 넣지 않도록 별도 프로그램을 생성한다. 캐시된 4샘플, 대비 판정, 강제 AA16 팬 띠와 취소는 보존한다. 고반복의 AA1도 타일 하나씩 fence를 기다린다. 이 변경은 반복·최종 해상도·AA를 낮추지 않으며 드라이버 내부 원인의 증명은 아니다.
+
+Chromium 비교의 AA4/AA16 각각 48개 조합, 총 138,240픽셀에서 기존 RGBA 전체와 이전/취소 프레임이 일치했다. raw FP32 검사에는 빈 버퍼끼리의 비교가 통과하지 않도록 실제 유한 상태와 양의 논리 반복 단계를 확인한다. 초기 한 번의 로컬 파일럿은 단위 검사의 deterministic rebuild와 겹쳤으므로 고정 빌드의 최종 검증 및 속도 증거로 사용하지 않는다. 단위 137개·lint 완료 후 고정한 runtime SHA는 `32003316ee5a8b6214a04ff4d30e3b87f60451df018db87b622cc0906a0950e8`이다.
+
+이 `fe9abb8` 빌드의 원격 전체 `37355382311`은 단위 검사와 브라우저 15/17개를 통과했지만 최대 설정 두 스위트는 실패했다. Chromium Abyss는 GPU timeout 없이 Ultra 계산 중 원래 240초를 넘었다. WebKit은 네 콜드 화면과 입력·팬 검사를 통과했으나 별도 AA16 픽셀 비교에서 native fence timeout을 냈다. 두 실패를 처리량 문제 하나로 합치지 않는다. 로컬 전체 검사는 앞의 15개를 통과한 뒤 이미 확인된 원격 실패를 수정하기 위해 중단했으며 전체 통과로 세지 않는다.
+
+`e01cd16`에서는 한 invocation당 한 샘플, 타일 하나씩 완료를 기다리는 방식은 유지하고, 분할 AA 타일을 한 pass의 계산량으로 산정해 최대 32×32로 조정했다. 16384회에서 한 제출은 최대 16,777,216 pixel-iterations이며 AA1 타일은 계속 최대 16×16이다. 두 RGBA32F scratch 텍스처는 32×32 기준 총 32 KiB다. 단위 137개·lint 완료 후 고정한 runtime SHA는 `045ba50d2c92daa361ed2e541632397f66f4305ab0d538508894d84d25deda8f`, HTML은 263,448 bytes다.
+
+이 빌드의 M4 Chromium 집중 maximum 11개 검사는 통과했다. 동일한 640×354·16384회·AA16 콜드 화면은 Plume 20.041초, Abyss 32.437초, Horizon 28.238초, 1e-200 Auto/8192회는 4.644초였다. 실제 설정·Home·Back 조작, AA4/AA16 96개 조합·138,240픽셀 전체 RGBA, 이전/취소 프레임 및 유한 FP32 상태 비교를 통과했다. 분할 경로는 실제 32픽셀 타일과 남은 16×30 띠를 원래 8픽셀 baseline과 비교했다. 전체 로컬 17개·279검사·예외 0이 통과했다. 원격 `37357646954`는 16/17개와 단위·lint를 통과했지만 WebKit AA16 비교의 GPU fence timeout으로 실패했다. 원래 시간·해상도·AA·픽셀 기준은 유지했다.
+
+### 네이티브 기준 셰이더 정지와 팬 픽셀 회귀
+
+`df939de`의 분리된 WebKit 커널 추적 `37359322574`에서 정확한 정지 지점을 확인했다. AA16·4096회·perturbation·BLA off·seed 없음의 **기존 일반 셰이더**가 원래 8×8 타일의 fence 597에서 10,003 ms pending을 보였다. 분할 AA 출력의 정지로 오인하지 않는다. `d01cea1`은 제품의 AA16 분할을 4096회까지 확장하고 기준 타일을 2×2로 줄였지만, 별도 진단 `37360669085`와 전체 `37360673606`의 최대 설정 비교는 원래 240초 처리량 조건을 넘었다. 전체는 14/17개와 단위·lint를 통과했고, 두 maximum과 reuse가 실패했다.
+
+이 수정은 Horizon의 새 팬 띠에서도 최대 RGB 차이 75라는 회귀를 만들었다. `4246550`은 별도의 분할 셰이더 프로그램을 제거하고 일반·분할·라이브 AA를 **같은 컴파일된 프로그램의 한 궤도 호출 지점**으로 통합했다. 팬 띠의 원래 ≤1 byte 검사가 같은 네이티브 Chromium에서 다시 통과했다. 내부 컴파일러 최적화가 원인이라는 증명은 아니다. 기준 비교는 원래 8×8로 되돌렸고, optional float-color가 없으면 Automatic의 4096회·AA16도 실제 FP64 Worker로 계산한다. 4096회 분할은 최대 64×64, 8192회 이상은 32×32이며, 각 제출은 여전히 최대 16,777,216 pixel-iterations다. 두 RGBA32F scratch의 최대 합은 128 KiB다.
+
+고정 runtime `976da2262ce0706b9d131c607e7ea0cfd3ab911d7a6d180b7e1f92d696228adc`에서 단위 137개·lint·actionlint와 로컬 17개 스위트·279검사·브라우저 예외 0이 통과했다. Chromium·WebKit 최대 설정도 각각 11개를 통과했다. 원격의 작은 CPU·paravirtual GPU 결과와 물리 M4 결과는 구분한다.
+
+### 평탄한 AA의 불필요한 GPU 제출 제거
+
+한 궤도씩 제출하는 경로는 평탄한 타일에서도 seed를 그대로 복사하는 명령을 AA4/AA16 횟수만큼 제출하고 기다렸다. `66b1d78`은 [WebGL2 occlusion query](https://registry.khronos.org/webgl/specs/latest/2.0/#3.7.12)와 기존의 동일한 9-texel 대비 판정을 공유한다. 색 쓰기를 끈 mask draw에서 살아남은 fragment가 0이면 `beginFrame`이 이미 복사한 seed를 유지한다. 화면 전체가 평탄하면 타일별 query도 생략한다. 경계가 있는 화면은 타일별로 확인한다. 조회는 event loop로 제어를 반환하며 기다리고, 결과가 없거나 잘못된 경우에는 실제 샘플을 계산한다. 취소·context loss, pooled frame의 판정 초기화, threshold 0인 강제 새 팬 띠를 확인했다.
+
+같은 물리 M4·Chromium·640×354·span 1e-200·Auto 8192회·AA16에서 mask off→on→on→off를 비교했다. off 중앙값 **4.657초**, on **0.723초**, 약 **6.4배**다. 네 화면 전체 RGBA가 동일하며 hash는 `6f88a1952cc97d10bfdd4749f2639f658a6d2bbf41bc0279d1ea91aa7f982fbc`다. mask off는 같은 빌드에서 새 mask 함수만 bypass한 비교이며 다른 계산 경로는 같다. 이는 평탄한 화면 한 사례의 완료 시간이고, 모든 혼돈 영역의 속도 예측이 아니다. 실제 Settings·Home·Back도 각 실행에서 확인했다.
+
+단위 137개·lint·actionlint와 Chromium/WebKit의 실제 flat/edge/강제 샘플/잘못된 query/취소 검사 모두 통과했다. 최종 runtime `8167f4f6683d9759d39b091ffb9eab4112ebe4ce51c287077e15d1c9d23dac1d`는 266,808 bytes다. 이 빌드의 전체 로컬 17개 스위트·281검사·예외 0이 통과했다. 두 maximum은 각각 12개를 통과했다. 원격 검증과 최종 전달 결과는 [VALIDATION.md](VALIDATION.md)에 기록한다. 기존 240초와 AA·표시 해상도·팬 ≤1 byte·AA 전체 byte equality를 완화하지 않았다.
+
+평탄 판정의 예외 경로에서 한 가지 결함을 더 확인했다. 실제 GL mask 제출을 실패시키자 query가 0으로 완료돼 새 경계 픽셀 계산을 생략했다. `7b7b076`은 완료된 query가 0이면서 GL 오류도 없을 때만 생략한다. 같은 실패 제출 검사가 수정 전 Chromium에서 실패하고 수정 후 Chromium·WebKit 모두에서 AA4/AA16의 원래 픽셀·실제 계산 제출을 확인했다. query 결과 없음과 GL 제출 실패를 별도로 검사한다.
+
+이 최종 빌드에서 같은 mask off→on→on→off 측정은 **4.614→0.728초**, 약 **6.3배**였고 네 전체 RGBA와 정상 입력은 동일했다. 단위 137개·lint·actionlint 통과 후 고정한 SHA는 `147e46a5c37bbd85afefad3d75f8cf6b484981f596f2478b3572fd2d6fc3d737`, HTML 266,991 bytes다. 마지막 전체 검증은 [VALIDATION.md](VALIDATION.md)에 기록한다. 이전 원격 `37364951935`와 별도 `37363827044`는 hosted runner를 배정받지 못해 테스트 시작 전 실패했으며, 제품 코드의 통과·실패로 분류하지 않는다.
+
+### Auto 4096의 BLA 처리량 회귀와 수정
+
+기능 검사만으로 놓친 회귀를 실제 공개 빌드와의 팬 비교에서 찾았다. 같은 M4·native Chromium 153·CSS 480×320·DPR 2(실제 960×472)·AA16에서 서비스 워커를 차단하고 HTML만 교대로 바꿔 각 장면을 세 번씩 열었다. 12×5 CSS px 이동 후 120 ms 기다려 관성을 제외했다. 공개 기준 HTML SHA는 `586d350ae2e452cceb14e9dd557c219e0f4f1dba5013a1deed628e67dabcabef`다. `7b7b076`의 Plume·Abyss는 빠르지만, Auto 4096의 Horizon 첫 렌더 중앙값은 공개 2.190초에서 10.936초로 약 5배 느려졌다. 팬은 공개 2.223초 대비 1.198초였고, 이동 중 presentation 간격 p95도 64.2→329 ms로 나빠졌다. 원래 240초 기능 검사 통과가 이 회귀를 부정하지 않는다.
+
+`636eb64`는 **seed가 있고 BLA가 실제 준비된 4096회 perturbation·AA16**만 일반 AA로 계산한다. seed가 없거나 BLA가 없는 4096회 및 8192회 이상의 분할은 유지한다. 준비 여부 조회는 shader link를 시작하지 않는다. 반복 수·모든 샘플·픽셀 크기·타일 work cap·취소·공유 orbit kernel은 그대로다.
+
+같은 조건으로 Horizon을 다시 3회씩 교대로 비교했다. 공개 첫 렌더 중앙값 **2.295초**, 수정 **2.728초**이고, 팬 계산 **2.182→0.179초**로 약 **12.2배** 빨랐다. 수정 중 presentation 간격 p95는 **52.4 ms**, 공개는 **62.3 ms**다. 수정은 453,120픽셀 중 432,432픽셀(95.43%)을 보존하고 새 띠 20,688픽셀을 계산했다. 6회 모두 uncaught exception은 0이다. 첫 실행은 공개 24.846초·수정 4.777초로 shader/driver 캐시 영향이 크므로 전체 측정과 중앙값을 구분한다. 수정의 첫 렌더 중앙값은 공개보다 약 19% 느리다. 이 잔여 비용과 최대 혼돈 장면의 수십 초 계산을 숨기거나 모든 탐험이 즉시 완료된다고 주장하지 않는다.
+
+수정 후 단위 137개·lint를 통과하고 고정한 HTML SHA는 `416ff519e6ab9bb19a6f69419399c3accb350c61992ea60f765eb57d6166faf3`, 267,387 bytes다. 변경은 GPU mask·수학 kernel을 바꾸지 않는다. 최종 전체 브라우저·원격·공개 배포 검증은 [VALIDATION.md](VALIDATION.md)에 기록한다.
+
+같은 최종 SHA로 Plume·Abyss·Horizon의 18회 비교도 완료했다. 원래 공개 HTML과 같은 origin·브라우저·표시 크기·반복 한도·AA16을 사용한 각 3회의 중앙값이다. 네트워크 시간은 제외하고 실제 카메라 이동 후 계산을 측정했다. 18회 모두 예외는 0이다.
+
+| 장면 | 공개 첫 렌더 | 수정 첫 렌더 | 공개 팬 계산 | 수정 팬 계산 |
+| --- | --- | --- | --- | --- |
+| Plume | 2427 ms | 1154 ms | 2491 ms | 67 ms |
+| Abyss | 5708 ms | 2511 ms | 5059 ms | 104 ms |
+| Horizon | 2209 ms | 2720 ms | 2082 ms | 163 ms |
+
+이 추가 실행에서도 Horizon 첫 렌더는 약 23% 느리다. 팬 개선 약 13–49배는 계산한 화면의 95.43%를 재사용하는 위의 작은 이동 조건이며, 임의 확대나 새 장면 전체의 속도 보장이 아니다. 4096회에서도 완전한 기계 주기를 검사하는 별도 off→on→on→off 실험은 첫 렌더 중앙값 3.747→4.341초로 약 16% 느려 채택하지 않았다. 차가운 셰이더/BLA 준비 여부에 따라 이미지가 달라질 수 있어 같은 준비 상태의 두 쌍만 전체 RGBA가 일치했다. 이 실험으로 모든 혼돈 픽셀의 동등성을 주장하지 않는다.
+
+### 원격 수치 비교의 참조 제출 한도
+
+최종 runtime의 임시 ARM CI `37370299070`은 단위·lint와 브라우저 15/17개를 통과했다. Chromium maximum은 모두 통과했다. native WebKit도 네 콜드 화면·실제 팬·설정·Home·Back·float 없음·mask 예외·AA4를 통과했지만, AA16의 기존 참조 셰이더 비교에서 GPU fence timeout을 냈다. 별도 동일 코드 추적 `37371854560`은 **BLA off·perturbation·4096회·AA16·seed 없음**, 원래 8×8 타일 `(8,0)`의 fence 524가 10,007 ms pending인 것을 확인했다. 제품은 이미 이 plain/unseeded 조건을 분할한다. 내부 드라이버 원인은 확정하지 않는다.
+
+`a5fb110`은 해당 plain perturbation·4096회·AA16의 네 참조 조합만 2×2 제출로 나눴다. 나머지 조합은 8×8을 유지한다. 참조 셰이더·48×30 전체 이미지·48개 조합씩·전체 138,240 RGBA·모든 샘플·반복 수·240초 조건은 그대로다. 모든 조합을 2×2로 제출해 240초를 넘겼던 실험과 구분한다. 제품 runtime SHA는 바뀌지 않는다. 수정 후 결과는 [VALIDATION.md](VALIDATION.md)에 기록한다.
+
+수정 후 물리 M4의 Chromium·WebKit maximum은 각각 12개 검사를 통과했다. 원격 native WebKit의 별도 커널 진단 `37373055467`도 5개 검사를 107초에 통과했다. AA4/AA16 138,240 RGBA와 6,144 유한 FP32 상태가 그대로 일치했다. 커널 진단은 콜드 앱 시나리오를 제외하므로 전체 qualification으로 세지 않는다.
+
+동일 임시 ARM 실행의 Linux WebKit 팬 검사는 앞의 열 가지 픽셀·히스토리·Detail 검사를 통과했지만, 1280×712로 resize한 뒤 30초 안에 native 4×를 준비하지 못했다. 실패 시 GPU 오류 없이 antialias 단계가 진행 중이고, 이전의 부드러운 1× 화면이 표시됐다. 이 실제 처리량 한계를 인프라 실패로 바꾸지 않는다. 원래 x86 Linux 구성의 `37372511644`에서는 동일한 입력·30초 조건으로 12개 검사를 전부 통과했다. ARM 처리량 한계를 모든 플랫폼의 해결로 표현하지 않는다.
+
+최종 동일 코드 `37372511644`의 두 번째 attempt는 기본 x86 Linux/native macOS의 17개 스위트·281검사·예외 0과 단위 137개·lint·build를 모두 통과했다. 이전에 통과한 작업은 보존하고 미완료 작업만 재실행했다. Chromium·WebKit maximum 각각 12개는 추적을 끈 일반 실행이다. 별도 Chromium 추적 `37375439166`도 12개를 통과했다. 첫 attempt에서 Chromium 수치 비교 로그가 멈춘 실행은 미완료로 남기며, 내부 host/driver 원인을 확정하거나 코드로 고쳤다고 주장하지 않는다. 두 attempt 사이 제품 코드 변경은 없다.
 
 ## 라이브러리와 외부 구현의 활용 판단
 

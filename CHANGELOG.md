@@ -5,7 +5,8 @@
 - Open Bloom inside its petals, add Detail/region zoom, and retain sharp completed detail during movement.
 - Preserve native pan overlaps and compute only exposed strips; bound completed-view cache memory.
 - Skip complete repeated FP64 states without changing finite results. One measured native CPU AA16 case improves 30.154 s → 2.209 s with every RGBA byte unchanged; this is not a speed forecast for every scene.
-- Select FP64 Workers for dense high-cap Automatic views. Split deep high-cap GPU Ultra into four-sample FP32 sums and preserve final rounding, full-state phase and cancellation.
+- Select FP64 Workers for dense high-cap Automatic views. Split deep high-cap GPU AA into single-orbit FP32 sums and preserve final rounding, full-state phase and cancellation. Share ordinary/split shader code and skip proven flat adaptive tiles without dropping forced pan samples.
+- Keep prepared seeded BLA at the Auto 4096 boundary on ordinary AA after reproducing a fivefold cold-render regression; the measured Horizon pan now completes in 179 ms against the previous public build's 2182 ms.
 - Repair WebKit presentation and pooled framebuffer refresh, visible/exported aspect and smoothing, history acceptance, cross-tab clear, density changes and GPU/Worker recovery.
 - Explain Auto-dependent emergence: the reproduced point remains unresolved at 768, crosses its threshold at step 838, and appears when Auto reaches 1024. Fixed 1024 preserves it through repeated zooms.
 - Add cold maximum input checks and exact FP32 phase/AA comparisons to Chromium and WebKit coverage. Measurements, rejected experiments and qualification limits are in [PERFORMANCE_RESEARCH.md](docs/PERFORMANCE_RESEARCH.md).
