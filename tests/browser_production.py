@@ -260,7 +260,11 @@ def body():
             suite.report['diagnostic_skip_pending_loss'] = skip_loss
             if skip_loss:
                 suite.report['limitations'].append('Counterfactual diagnostic: skips native loseContext only at the maximum setting. Not renderer recovery qualification.')
-            ctx.add_init_script('''(()=>{let sequence=0;const calls={};
+            ctx.add_init_script('''(()=>{let sequence=0,frames=0;const calls={};
+             const tick=()=>{frames++;requestAnimationFrame(tick);};requestAnimationFrame(tick);
+             setInterval(()=>{const d=window.tetraDiagnostics;if(d?.iterations===16384)
+              console.info('BROWSER_PROGRESS',JSON.stringify({frames,complete:d.complete,gpu:d.gpu,
+               stage:d.renderStage,progress:document.querySelector('#loadingText')?.textContent,time:performance.now()}));},1000);
              const extension=WebGL2RenderingContext.prototype.getExtension;
              WebGL2RenderingContext.prototype.getExtension=function(name){const e=extension.call(this,name);
               if(name==='WEBGL_lose_context'&&e&&!e.__traced){e.__traced=true;const lose=e.loseContext;
@@ -293,7 +297,7 @@ def body():
             })()'''.replace('SKIP_LOSS', 'true' if skip_loss else 'false'))
         page=suite.watch(ctx.new_page());open_app(page,SHALLOW)
         if os.environ.get('TETRA_TRACE_GPU') == '1':
-            page.on('console', lambda message: print(message.text, flush=True) if message.text.startswith(('GPU_CALL','GPU_LOSS','CPU_CALL','DIAGNOSTIC_')) else None)
+            page.on('console', lambda message: print(message.text, flush=True) if message.text.startswith(('GPU_CALL','GPU_LOSS','CPU_CALL','DIAGNOSTIC_','BROWSER_PROGRESS')) else None)
         for engine, quality, palette, iterations in [('auto',1,1,64),('cpu',4,2,128),('exact',16,3,64),('auto',16,0,16384),('auto',4,2,'auto')]:
             print('PRODUCTION_SETTING_STAGE', engine, quality, palette, iterations, flush=True)
             controls(page); page.locator('#engine').select_option(engine); page.locator('#quality').select_option(str(quality))
