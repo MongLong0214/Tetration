@@ -6,8 +6,8 @@
   const workerSource = __WORKER_SOURCE__;
   const workerURL = URL.createObjectURL(new Blob([workerSource], {type: 'text/javascript'}));
   const presets = [
-    {name: 'Overview', sub: 'COMPLEX PLANE', x: '-0.2', y: '0', span: '7'},
-    {name: 'Bloom', sub: 'RECURSIVE PETALS', x: '-2.5', y: '0', span: '1.8'},
+    {name: 'Overview', sub: 'COMPLEX PLANE', x: '-0.5', y: '0', span: '8'},
+    {name: 'Bloom', sub: 'RECURSIVE PETALS', x: '-1.9', y: '0', span: '3'},
     {name: 'Filaments', sub: 'BETWEEN THE BASINS', x: '-1.84', y: '0.09', span: '0.46'},
     {name: 'Feather', sub: 'FOLDS AND BRANCHES', x: '-0.72', y: '0.36', span: '0.7'},
     {name: 'Plume', sub: '10¹¹ · CORAL FEATHERS', x: '-2.2930579295624999999999991', y: '0.33208044555625', span: '5e-11'},

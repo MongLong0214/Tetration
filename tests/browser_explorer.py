@@ -60,13 +60,13 @@ def body():
         assert not state(page)['focus'] and state(page)['view'] == before
         suite.record('Focus mode fills the screen at full resolution and preserves exact coordinates')
 
-        for key, span in [('2', '1.8'), ('5', '0.00000000005'), ('7', '0.' + '0' * 99 + '7')]:
+        for key, span in [('2', '3'), ('5', '0.00000000005'), ('7', '0.' + '0' * 99 + '7')]:
             page.keyboard.press(key)
             page.wait_for_function(f"() => tetraDiagnostics.view.span === '{span}'")
         assert page.locator('#locationTag').inner_text() == '07 / Horizon'
         page.keyboard.press('1')
         settle(page)
-        assert state(page)['view']['span'] == '7'
+        assert state(page)['view']['span'] == '8'
         suite.record('Starting-point shortcuts 1-7 include the deep perturbation places')
 
         before = state(page)['view']

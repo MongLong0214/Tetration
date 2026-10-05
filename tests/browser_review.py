@@ -59,11 +59,11 @@ def body():
         page.locator('#homeBtn').click()
         page.locator('#viewport').focus()
         page.keyboard.press('+')
-        assert state(page)['view']['span'] == '3.5'
+        assert state(page)['view']['span'] == '4'
         page.keyboard.press('-')
-        assert state(page)['view']['span'] == '7'
+        assert state(page)['view']['span'] == '8'
         page.keyboard.press('Home')
-        assert state(page)['view'] == {'x': '-0.2', 'y': '0', 'span': '7'}
+        assert state(page)['view'] == {'x': '-0.5', 'y': '0', 'span': '8'}
         settle(page)
         suite.record('Keyboard zoom is exact and Home resets')
 
@@ -141,7 +141,7 @@ def body():
         close_controls(page)
         settle(page)
         info = state(page)
-        assert info['mode'] == 'cpu' and info['view']['span'] == '7' and info['engine'] == 'cpu'
+        assert info['mode'] == 'cpu' and info['view']['span'] == '8' and info['engine'] == 'cpu'
         suite.record('Cancelled exact work cannot replace the CPU result')
         controls(page)
         page.locator('#engine').select_option('auto')
