@@ -89,6 +89,9 @@ def body():
             controls(page); page.locator('#quality').select_option('4'); close_controls(page); settle(page)
             check_requested(page, 16384, 4)
             assert state(page)['mode'] == 'cpu-perturb'
+            controls(page); page.locator('#iterations').select_option('4096'); page.locator('#quality').select_option('16'); close_controls(page); settle(page)
+            check_requested(page, 4096)
+            assert state(page)['mode'] == 'cpu-perturb'
             navigate_after(page)
             suite.record('Missing float-color extension computes the full deep request on FP64 Workers and remains navigable')
             context.close(); browser.close()

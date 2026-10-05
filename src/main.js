@@ -93,14 +93,16 @@
     return AUTO_STEPS.find(n => n >= wanted) || AUTO_STEPS.at(-1);
   }
   function magnitude(v) { return Math.max(1, Math.abs(num(v.x)), Math.abs(num(v.y))); }
+  const splitAA = (iterations, samples) => (iterations >= 8192 && samples >= 4) || (iterations >= 4096 && samples >= 16);
   function chooseMode(v = view) {
     if (engine === 'exact') return 'exact';
     const pixel = num(v.span) / Math.max(dims.w, 1), scale = magnitude(v);
     // Dense high-cap views around FP64 scales finish faster on Workers using
     // exact machine cycles. Very deep views keep GPU perturbation, with long
     // AA passes split into single-sample submissions below.
-    if (engine === 'auto' && iterationsFor(v) >= 8192 &&
-        (num(v.span) >= scale * FP64_LIMIT || (quality >= 4 && gpu && !gpu.floatColor))) return pixel >= scale * FP64_LIMIT ? 'cpu' : 'cpu-perturb';
+    const n = iterationsFor(v);
+    if (engine === 'auto' && ((n >= 8192 && num(v.span) >= scale * FP64_LIMIT) ||
+        (splitAA(n, quality) && gpu && !gpu.floatColor))) return pixel >= scale * FP64_LIMIT ? 'cpu' : 'cpu-perturb';
     if (engine === 'auto' && gpu) return pixel >= scale * DIRECT_LIMIT ? 'gpu' : 'perturb';
     return pixel >= scale * FP64_LIMIT ? 'cpu' : 'cpu-perturb';
   }
@@ -590,16 +592,16 @@
     const effective = renderer.effectiveIterations(scene, frame.width, frame.height);
     const workCap = 8e7;
     const highCap = scene.iterations >= 8192;
-    const partial = samples >= 4 && highCap && renderer.floatColor;
+    const partial = splitAA(scene.iterations, samples) && renderer.floatColor;
     // A partial pass evaluates one orbit per pixel. Use that per-pass work
     // when sizing its tile; charging all AA samples here quadruples fences.
-    const edge = partial ? Math.min(32, tileEdge(effective, 1)) : highCap ? Math.min(16, tileEdge(effective, samples)) : tileEdge(effective, samples);
+    const edge = partial ? Math.min(highCap ? 32 : 64, tileEdge(effective, 1)) : highCap ? Math.min(16, tileEdge(effective, samples)) : tileEdge(effective, samples);
     const tiles = work ? TetraRender.exposedTiles(frame.width, frame.height, work.dx, work.dy, edge) : TetraRender.tiles(frame.width, frame.height, edge), key = rateKey(scene, samples);
     const area = frame.width * frame.height;
     // Cheap tiles can precede a dense, unresolved basin. Measured throughput
     // alone cannot bound that next batch: keep its worst-case orbit work below
     // the live-frame cap without changing the image, AA or iteration limit.
-    const maxPixels = highCap ? edge * edge : Math.max(edge * edge, Math.floor(workCap / (effective * samples)));
+    const maxPixels = highCap || partial ? edge * edge : Math.max(edge * edge, Math.floor(workCap / (effective * samples)));
     // Final tiles keep their own rate (live frames smooth theirs over whole frames). The first
     // batch is at most 4 tiles and a batch at most doubles, so a dense centre after cheap
     // corners cannot become seconds of GPU work.
