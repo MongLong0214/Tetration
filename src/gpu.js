@@ -45,11 +45,11 @@
    * 4 samples. The 4 rotated-grid points lie on the 4x4 grid, so a 16x pixel whose seed
    * was a 4x pixel reuses their average and computes only the 12 new samples. */
   const footer = `
- const vec2 RG[4]=vec2[4](vec2(-.125,-.375),vec2(.375,-.125),vec2(.125,.375),vec2(-.375,.125));
- const int RGROW[4]=int[4](1,3,0,2);
+ const vec2 RG[4]=vec2[4](${TetraCore.AA.offsets.slice(0, 4).map(p => `vec2(${p.join(',')})`).join(',')});
+ const int RGROW[4]=int[4](${TetraCore.AA.rows.join(',')});
  /* Progressive order of the 16 cells of the 4x4 pattern: four rook patterns, the first the
   * rotated grid. Any prefix is stratified; all 16 equal the Ultra 16-sample average. */
- const int RGSET[4]=int[4](0,2,1,3);
+ const int RGSET[4]=int[4](${TetraCore.AA.sets.join(',')});
  vec2 cell(int n){int j=n&3,i=(RGROW[j]+RGSET[n>>2])&3;return(vec2(float(i),float(j))+.5)*.25-.5;}
  // Previous estimate of this pixel: mean colour and its sample count (alpha).
  vec4 history(vec2 point){
@@ -322,6 +322,8 @@ ${orbitLoop}` + perturbTail;
       const gl = canvas.getContext('webgl2', {alpha: false, antialias: false, depth: false, stencil: false, preserveDrawingBuffer: true, powerPreference: 'high-performance'});
       if (!gl) throw Error('WebGL2 unavailable; using CPU.');
       this.gl = gl; this.canvas = canvas; this.kind = 'webgl2';
+      this.failed = false;
+      this.contextLoss = gl.getExtension('WEBGL_lose_context');
       this.bits = gl.getShaderPrecisionFormat(gl.FRAGMENT_SHADER, gl.HIGH_FLOAT)?.precision || 0;
       if (this.bits < 23) throw Error('Insufficient fragment precision');
       this.maxTexture = gl.getParameter(gl.MAX_TEXTURE_SIZE);
@@ -394,7 +396,7 @@ ${orbitLoop}` + perturbTail;
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     }
-    lost() { return this.gl.isContextLost(); }
+    lost() { return this.failed || this.gl.isContextLost(); }
     // Upload a reference orbit as RGBA32F texels (V.re, V.im, T, Re A), 1024 per row.
     useReference(ref) {
       if (this.reference === ref) return;
@@ -618,6 +620,15 @@ ${orbitLoop}` + perturbTail;
           const status = gl.clientWaitSync(sync, 0, 0);
           if (status === gl.WAIT_FAILED) { gl.deleteSync(sync); reject(Error('GPU fence failed')); return; }
           if (status === gl.TIMEOUT_EXPIRED) {
+            // Some drivers leave a fence pending without a context-loss event.
+            // Do not strand all future navigation behind it. Abandon this
+            // context and let the caller recompute with the CPU renderer.
+            if (performance.now() - started >= 10000) {
+              this.failed = true;
+              this.contextLoss?.loseContext();
+              reject(Error('GPU completion timed out'));
+              return;
+            }
             // Catch short draws promptly, then poll at 1 ms without a busy loop. A task
             // hop before each timer resets HTML's nesting level: recursively scheduling
             // timers alone clamps waits to 4 ms and strands the GPU between small batches.
@@ -661,8 +672,8 @@ ${orbitLoop}` + perturbTail;
       return this.half;
     }
     // Copy a frame into a 2D canvas (top row first) for export.
-    capture(frame) {
-      this.presentFrame(frame);
+    capture(frame, soft = false) {
+      this.presentFrame(frame, soft);
       if (typeof createImageBitmap === 'function') return createImageBitmap(this.canvas);
       const copy = document.createElement('canvas'); copy.width = frame.width; copy.height = frame.height;
       copy.getContext('2d').drawImage(this.canvas, 0, 0);
@@ -681,7 +692,7 @@ ${orbitLoop}` + perturbTail;
       this.pool = [];
     }
     releaseFrame(frame) {
-      if (!frame || this.gl.isContextLost() || this.pool.includes(frame)) return;
+      if (!frame || this.lost() || this.pool.includes(frame)) return;
       frame.seed = null;
       this.pool.push(frame);
       while (this.pool.length > 3) {

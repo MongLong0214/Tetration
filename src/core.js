@@ -4,6 +4,13 @@
 (function (root) {
   'use strict';
   const STATUS = { UNRESOLVED: 0, FIXED: 1, PERIOD2: 2, THRESHOLD: 3, NUMERIC: 4 };
+  // One sampling pattern for GPU AA and Worker fallback. The first four cells
+  // are the rotated grid; all sixteen form the stratified 4x4 Ultra pattern.
+  const aaRows = [1, 3, 0, 2], aaSets = [0, 2, 1, 3];
+  const AA = {rows: aaRows, sets: aaSets, offsets: Array.from({length: 16}, (_, n) => {
+    const j = n & 3, i = (aaRows[j] + aaSets[n >> 2]) & 3;
+    return [(i + 0.5) * 0.25 - 0.5, (j + 0.5) * 0.25 - 0.5];
+  })};
   function orbit64(cr, ci, iterations = 256, logR = Math.log(1e10)) {
     if (!Number.isFinite(cr + ci) || (cr === 0 && ci === 0)) return { kind: 4, steps: 0, re: NaN, im: NaN };
     const lr = Math.log(Math.hypot(cr, ci));
@@ -326,6 +333,6 @@
   /* Linearisation bounds per engine: about one rounding unit of the arithmetic that
    * applies the table (FP32 mantissas on the GPU, FP64 in Workers). */
   const BLA_EPS = { gpu: 2 ** -24, cpu: 2 ** -53 };
-  root.TetraCore = { STATUS, RULES, LOG_R, BLA_EPS, orbit64, orbitRules, perturb64, blaTable, blaReach, offsetBound, logOffsetBound, cdiv, discover, makePreciseOrbit, color, paletteGLSL };
+  root.TetraCore = { STATUS, AA, RULES, LOG_R, BLA_EPS, orbit64, orbitRules, perturb64, blaTable, blaReach, offsetBound, logOffsetBound, cdiv, discover, makePreciseOrbit, color, paletteGLSL };
   if (typeof module !== 'undefined') module.exports = root.TetraCore;
 })(globalThis);

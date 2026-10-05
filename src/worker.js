@@ -29,6 +29,7 @@ async function tileJob(job, token) {
   const cx = camera.parse(job.x), cy = camera.parse(job.y), span = camera.parse(job.span);
   const nx = Number(job.x), ny = Number(job.y), ns = Number(job.span);
   const exact = mode === 'exact' ? TetraCore.makePreciseOrbit(job.digits) : null;
+  const samples = exact ? 1 : job.samples === 16 ? 16 : job.samples === 4 ? 4 : 1;
   const rules = TetraCore.RULES.cpu, ref = job.ref || null;
   // Pixel centres; the exact mode keeps every coordinate as a decimal string.
   const xr = Array.from({length: w}, (_, x) => exact ? camera.text(cx + span * BigInt(2 * x + 1 - w) / BigInt(2 * w)) : (x + 0.5 - w / 2) * ns / w);
@@ -36,13 +37,14 @@ async function tileJob(job, token) {
   // Deep views skip linear runs of steps (BLA); the bound covers every pixel centre.
   const bla = ref && TetraCore.blaTable(ref, TetraCore.logOffsetBound(TetraCore.offsetBound(job.deltaRe, job.deltaIm, job.deltaMirror, job.imCenter, ns / 2, ns * h / w / 2) /
     Math.hypot(ref.c0[0], ref.c0[1])), rules, TetraCore.BLA_EPS.cpu);
-  const sample = ref ? (x, y) => {
+  const sample = ref ? (x, y, ox = 0, oy = 0) => {
     // Lower-half pixels use the conjugate orbit of their mirror image.
-    const mirrored = job.imCenter + yr[y] < 0;
-    const r = TetraCore.perturb64(ref, job.deltaRe + xr[x], mirrored ? job.deltaMirror - yr[y] : job.deltaIm + yr[y], job.iterations, rules, bla);
+    const dx = xr[x] + ox * ns / w, dy = yr[y] + oy * ns / w;
+    const mirrored = job.imCenter + dy < 0;
+    const r = TetraCore.perturb64(ref, job.deltaRe + dx, mirrored ? job.deltaMirror - dy : job.deltaIm + dy, job.iterations, rules, bla);
     if (mirrored && r.im !== undefined) r.im = -r.im;
     return r;
-  } : exact ? (x, y) => exact(xr[x], yr[y], job.iterations) : (x, y) => TetraCore.orbit64(nx + xr[x], ny + yr[y], job.iterations);
+  } : exact ? (x, y) => exact(xr[x], yr[y], job.iterations) : (x, y, ox = 0, oy = 0) => TetraCore.orbit64(nx + xr[x] + ox * ns / w, ny + yr[y] + oy * ns / w, job.iterations);
   const edge = exact ? 4 : 24;
   const tiles = [];
   for (let y = 0; y < h; y += edge) for (let x = 0; x < w; x += edge) tiles.push({x, y, width: Math.min(edge, w - x), height: Math.min(edge, h - y)});
@@ -59,15 +61,54 @@ async function tileJob(job, token) {
   for (const t of assigned) {
     if (token !== current) return;
     const pixels = new Uint8ClampedArray(t.width * t.height * 4);
+    // Tile-local caches include both AA passes' halos. Neighbour lookup uses
+    // world pixel indices, so worker/tile boundaries never change the result.
+    const centres = new Map(), four = new Map();
+    const bounded = (x, y) => [Math.max(0, Math.min(w - 1, x)), Math.max(0, Math.min(h - 1, y))];
+    const color = r => TetraCore.color(r.kind, r.steps, job.palette, r.re, r.im);
+    const centre = (x, y) => {
+      [x, y] = bounded(x, y); const key = y * w + x;
+      if (!centres.has(key)) { const result = sample(x, y); centres.set(key, {result, rgb: color(result), four: false}); }
+      return centres.get(key);
+    };
+    const edgeAt = (x, y, seed, lookup) => {
+      let contrast = 0;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        const rgb = lookup(x + dx, y + dy).rgb;
+        for (let c = 0; c < 3; c++) contrast = Math.max(contrast, Math.abs(seed.rgb[c] - rgb[c]));
+      }
+      return contrast >= 0.035 * 255;
+    };
+    const average = (x, y, first, count, seed = null) => {
+      const sum = seed ? seed.map(c => c * 4) : [0, 0, 0];
+      for (let n = first; n < first + count; n++) {
+        const [ox, oy] = TetraCore.AA.offsets[n], rgb = color(sample(x, y, ox, oy));
+        for (let c = 0; c < 3; c++) sum[c] += rgb[c];
+      }
+      return Array.from(new Uint8ClampedArray(sum.map(c => c / (count + (seed ? 4 : 0)))));
+    };
+    const aa4 = (x, y) => {
+      [x, y] = bounded(x, y); const key = y * w + x;
+      if (!four.has(key)) {
+        const seed = centre(x, y);
+        four.set(key, edgeAt(x, y, seed, centre) ? {rgb: average(x, y, 0, 4), four: true} : seed);
+      }
+      return four.get(key);
+    };
     let p = 0;
     for (let y = t.y; y < t.y + t.height; y++) {
       for (let x = t.x; x < t.x + t.width; x++) {
-        const result = sample(x, y);
+        const result = samples > 1 ? centre(x, y).result : sample(x, y);
         counts[result.kind]++;
-        const rgb = TetraCore.color(result.kind, result.steps, job.palette, result.re, result.im);
+        let rgb;
+        if (samples === 1) rgb = color(result);
+        else {
+          const seed = aa4(x, y);
+          rgb = samples === 16 && edgeAt(x, y, seed, aa4) ? average(x, y, seed.four ? 4 : 0, seed.four ? 12 : 16, seed.four ? seed.rgb : null) : seed.rgb;
+        }
         pixels[p++] = rgb[0]; pixels[p++] = rgb[1]; pixels[p++] = rgb[2]; pixels[p++] = 255;
         // Exact orbits take long each: check for a newer job after every pixel.
-        if (exact && performance.now() - lastYield > 12) {
+        if ((exact || samples > 1) && performance.now() - lastYield > 12) {
           await pause(); lastYield = performance.now();
           if (token !== current) return;
         }

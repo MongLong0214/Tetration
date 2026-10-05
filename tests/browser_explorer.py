@@ -135,7 +135,7 @@ def body():
             pg = suite.watch(context.new_page())
             open_app(pg, 'v=1&x=-2.5&y=0&s=1.8&q=1')
             assert pg.evaluate('document.documentElement.scrollWidth<=innerWidth')
-            for selector in ['#settingsBtn', '#discoverBtn', '#shareBtn', '#focusBtn', '#zoomIn', '#zoomOut', '#homeBtn', '#exportBtn']:
+            for selector in ['#settingsBtn', '#discoverBtn', '#shareBtn', '#focusBtn', '#zoomIn', '#zoomOut', '#homeBtn', '#exportBtn', '#detailBtn']:
                 box = pg.locator(selector).bounding_box()
                 assert box and box['x'] >= 0 and box['y'] >= 0 and box['x'] + box['width'] <= width + .5 and box['y'] + box['height'] <= height + .5, (width, selector, box)
                 assert box['width'] >= 44 and box['height'] >= 44, (selector, box)

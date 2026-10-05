@@ -19,5 +19,6 @@
 @media(min-width:761px){#sidebar::backdrop{background:transparent}}
 
 .detail-tool{position:absolute;left:24px;top:88px;z-index:3;background:#0a0a0ae6;border-color:#555;font:11px var(--mono);min-height:44px}#viewport.select-detail,#viewport.select-detail:active{cursor:crosshair}#detailBox{position:absolute;z-index:3;border:1px solid #fff;background:#ffffff0c;pointer-events:none;box-shadow:0 0 0 1px #0008}body.focus-mode .detail-tool{display:none}@media(max-width:760px){.detail-tool{left:12px;top:76px}}
+.precision-note{left:144px}@media(max-width:760px){.precision-note{left:128px}}
 
 #detailCanvas{z-index:1;transform-origin:50% 50%;will-change:transform}#gridCanvas{z-index:2}

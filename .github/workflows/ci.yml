@@ -31,7 +31,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        suite: [review, release, deep, quality, explorer, perf, reuse, interactions, webkit]
+        suite: [review, release, deep, quality, explorer, perf, reuse, interactions, production, zoom, webkit, reuse-webkit, interactions-webkit, production-webkit, zoom-webkit]
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
@@ -45,7 +45,7 @@ jobs:
         run: |
           npm install --no-save --package-lock=false --ignore-scripts axe-core@4.11.0
           python3 -m pip install -r tests/requirements.txt
-          if [ "${{ matrix.suite }}" = "webkit" ]; then python3 -m playwright install --with-deps webkit; else python3 -m playwright install --with-deps chromium; fi
+          if [[ "${{ matrix.suite }}" == *webkit ]]; then python3 -m playwright install --with-deps webkit; else python3 -m playwright install --with-deps chromium; fi
       - name: Browser suite on a served origin
         run: |
           node serve.cjs dist >/tmp/tetra-server.log 2>&1 &
@@ -56,7 +56,9 @@ jobs:
             sleep 1
           done
           curl -fsS http://127.0.0.1:4173/ >/dev/null
-          python3 tests/browser_${{ matrix.suite }}.py
+          SUITE="${{ matrix.suite }}"
+          if [[ "$SUITE" == *-webkit ]]; then export TETRA_BROWSER=webkit; SUITE="${SUITE%-webkit}"; fi
+          python3 tests/browser_${SUITE}.py
         env:
           TETRA_BASE_URL: http://127.0.0.1:4173
       - name: Preserve browser evidence

@@ -173,7 +173,7 @@
     $('scaleLabel').textContent = (span * ruler / dims.w).toExponential(2) + ' units';
     if (!coordinateDraft) { $('xInput').value = s.x; $('yInput').value = s.y; $('spanInput').value = s.span; }
     $('locationTag').textContent = locationIndex < 0 ? 'Custom view' : String(locationIndex + 1).padStart(2, '0') + ' / ' + presets[locationIndex].name;
-    $('viewSubtitle').textContent = locationIndex < 0 ? (depth > 13 ? 'DEEP · ' + iterationsFor().toLocaleString('en-US') + ' STEPS' : 'EXPLORING') : presets[locationIndex].sub;
+    $('viewSubtitle').textContent = locationIndex < 0 ? `${depth > 13 ? 'DEEP' : 'EXPLORING'} · ${iterationSetting === 'auto' ? 'AUTO ' : ''}${iterationsFor().toLocaleString('en-US')} STEPS` : presets[locationIndex].sub;
     currentMode = chooseMode();
     $('engineTag').textContent = engineLabel(currentMode);
     $('precisionNote').hidden = currentMode !== 'exact';
@@ -236,9 +236,9 @@
       detailCanvas.style.transform = Number.isFinite(zoom + dx + dy) && zoom < 1e6 && zoom > 1e-6 ? `translate(${dx}px,${dy}px) scale(${zoom},${zoom * sy})` : 'scale(0)';
     }
     if (!display.view) return;
-    if (same(display.view, visual) && (display.canvas !== gpuCanvas || (display.sy || 1) === 1)) { display.canvas.style.transform = 'none'; return; }
+    const sy = display.canvas === gpuCanvas ? (display.aspect || dims.h / dims.w) / (dims.h / dims.w) : 1;
+    if (same(display.view, visual) && sy === 1) { display.canvas.style.transform = 'none'; return; }
     const {zoom, dx, dy} = transformFor(display.view, visual);
-    const sy = display.canvas === gpuCanvas ? display.sy || 1 : 1;
     display.canvas.style.transform = Number.isFinite(zoom + dx + dy) && zoom < 1e6 && zoom > 1e-6 ? `translate(${dx}px,${dy}px) scale(${zoom},${zoom * sy})` : 'scale(0)';
   }
   function setDisplay(canvas, renderView) {
@@ -581,13 +581,20 @@
     return {accum: {mode: 2, frame, scale, offset, count: live ? 0 : Math.max(1, info.samples), cap: 4}, min: perFrame, typical: Math.min(16, trusted + perFrame / interleave), cycle: 0};
   }
   async function runStage(id, renderer, frame, scene, samples, onBatch, work = null) {
-    const edge = tileEdge(renderer.effectiveIterations(scene, frame.width, frame.height), samples), tiles = work ? TetraRender.exposedTiles(frame.width, frame.height, work.dx, work.dy, edge) : TetraRender.tiles(frame.width, frame.height, edge), key = rateKey(scene, samples);
+    const effective = renderer.effectiveIterations(scene, frame.width, frame.height);
+    const workCap = 8e7;
+    const edge = tileEdge(effective, samples);
+    const tiles = work ? TetraRender.exposedTiles(frame.width, frame.height, work.dx, work.dy, edge) : TetraRender.tiles(frame.width, frame.height, edge), key = rateKey(scene, samples);
     const area = frame.width * frame.height;
+    // Cheap tiles can precede a dense, unresolved basin. Measured throughput
+    // alone cannot bound that next batch: keep its worst-case orbit work below
+    // the live-frame cap without changing the image, AA or iteration limit.
+    const maxPixels = Math.max(edge * edge, Math.floor(workCap / (effective * samples)));
     // Final tiles keep their own rate (live frames smooth theirs over whole frames). The first
     // batch is at most 4 tiles and a batch at most doubles, so a dense centre after cheap
     // corners cannot become seconds of GPU work.
     const tileKey = 'tile|' + key;
-    let budget = Math.max(edge * edge, Math.min(4 * edge * edge, (rates.get(tileKey) ?? (rates.get(rateKey(scene, 1)) ?? 60) / samples) * BATCH_MS));
+    let budget = Math.max(edge * edge, Math.min(maxPixels, 4 * edge * edge, (rates.get(tileKey) ?? (rates.get(rateKey(scene, 1)) ?? 60) / samples) * BATCH_MS));
     let index = 0;
     while (index < tiles.length) {
       if (id !== serial || renderer !== gpu) return false;
@@ -605,7 +612,7 @@
       } finally { setGPUBusy(false); }
       const ms = Math.max(0.5, performance.now() - t0), measured = pixels / ms;
       rates.set(tileKey, measured);
-      budget = ms > 3 * BATCH_MS ? edge * edge : Math.min(area, 2 * pixels, Math.max(edge * edge, measured * BATCH_MS));
+      budget = ms > 3 * BATCH_MS ? edge * edge : Math.min(area, maxPixels, 2 * pixels, Math.max(edge * edge, measured * BATCH_MS));
       if (interactivePending) { interactivePending = false; requestInteractive(); }
       if (id !== serial) return false;
       onBatch?.(index / tiles.length, index === tiles.length);
@@ -776,6 +783,7 @@
   }
   function cpuJob(id, v, mode, ref) {
     seedCPUPreview(v); setDisplay(cpuCanvas, v); renderStage = 'detail';
+    const aa = mode === 'exact' ? 1 : quality;
     const workers = ensurePool();
     if (!workers.length) { renderError('Workers unavailable. Use HTTPS or a local server.'); return; }
     const job = ++pool.job; pool.active = job;
@@ -812,10 +820,10 @@
           if (completed.size === workers.length) {
             cancelAnimationFrame(pool.pendingPaint); paint(); activePass++;
             if (activePass < passes.length) setTimeout(startPass, 16);
-            else { pool.active = 0; finished(w, h, counts.reduce((a, c) => a.map((n, i) => n + c[i]), [0, 0, 0, 0, 0]), iterations, mode, 1); }
+            else { pool.active = 0; finished(w, h, counts.reduce((a, c) => a.map((n, i) => n + c[i]), [0, 0, 0, 0, 0]), iterations, mode, aa); }
           }
         };
-        worker.postMessage({...base, id: job, width: w, height: h, index, workers: workers.length});
+        worker.postMessage({...base, id: job, width: w, height: h, index, workers: workers.length, samples: activePass === passes.length - 1 ? aa : 1});
       });
     }
     startPass();
@@ -1210,13 +1218,14 @@
     if (detailCopy) { detailCopy.width = detailCanvas.width; detailCopy.height = detailCanvas.height; detailCopy.getContext('2d').drawImage(detailCanvas, 0, 0); }
     if (gridCopy) { gridCopy.width = gridCanvas.width; gridCopy.height = gridCanvas.height; gridCopy.getContext('2d').drawImage(gridCanvas, 0, 0); }
     const transform = display.view ? transformFor(display.view, capturedView) : null;
+    const sourceAspect = display.canvas === gpuCanvas ? display.aspect || capturedDims.h / capturedDims.w : capturedDims.h / capturedDims.w;
     const detailTransform = detailView ? transformFor(detailView, capturedView) : null;
     let source = display.canvas;
-    if (display.frame && display.canvas === gpuCanvas) source = await display.renderer.capture(display.frame);
+    if (display.frame && display.canvas === gpuCanvas) source = await display.renderer.capture(display.frame, display.soft);
     const out = document.createElement('canvas'); out.width = Math.max(1, source.width, detailCopy?.width || 0); out.height = Math.max(1, source.height, detailCopy?.height || 0);
     const c = out.getContext('2d');
     c.fillStyle = '#060606'; c.fillRect(0, 0, out.width, out.height); c.save();
-    if (transform) { c.translate(out.width / 2 + transform.dx / capturedDims.w * out.width, out.height / 2 + transform.dy / capturedDims.w * out.width); c.scale(transform.zoom, transform.zoom); c.translate(-out.width / 2, -out.height / 2); }
+    if (transform) { c.translate(out.width / 2 + transform.dx / capturedDims.w * out.width, out.height / 2 + transform.dy / capturedDims.h * out.height); c.scale(transform.zoom, transform.zoom * sourceAspect / (capturedDims.h / capturedDims.w)); c.translate(-out.width / 2, -out.height / 2); }
     if ('filter' in c) c.filter = `hue-rotate(${captured.hue}deg)`;
     c.drawImage(source, 0, 0, out.width, out.height); c.restore(); source.close?.();
     if (detailCopy) {
@@ -1298,7 +1307,7 @@
       const detail = document.createElement('small'), params = new URLSearchParams(item.hash); detail.textContent = 'span ' + params.get('s');
       open.append(name, detail);
       open.onclick = () => {
-        try { stopMotion(); saveHistory(); readHash(item.hash); closeSettings(); viewport.focus({preventScroll: true}); changed(); }
+        try { const before = clone(view); if (!readHash(item.hash)) throw Error('Invalid saved view'); stopMotion(); saveHistory(before); closeSettings(); viewport.focus({preventScroll: true}); changed(); }
         catch { toast('This saved view is not valid.'); }
       };
       const remove = document.createElement('button'); remove.className = 'saved-delete'; remove.type = 'button'; remove.textContent = '×'; remove.setAttribute('aria-label', 'Remove ' + item.name);
@@ -1314,7 +1323,7 @@
     if (writeSaved([...savedViews, item])) { $('bookmarkName').value = ''; toast('View saved on this device.'); }
   };
   $('saveViewBtn').onclick = () => { openSettings(); $('bookmarkName').focus(); };
-  window.addEventListener('storage', e => { if (e.key === TetraSaved.KEY) loadSaved(); });
+  window.addEventListener('storage', e => { if (e.key === TetraSaved.KEY || e.key === null) loadSaved(); });
   loadSaved();
   document.addEventListener('keydown', e => {
     if (document.querySelector('dialog[open]') || e.target.closest('input,select,textarea,[contenteditable=true]') || e.ctrlKey || e.metaKey || e.altKey) return;
@@ -1337,7 +1346,7 @@
       if (!lastRenderComplete) changed();
     }
   });
-  reducedMotion.addEventListener('change', e => { if (e.matches) { setFlow(false); stopMotion(); visual = clone(view); reproject(); } });
+  reducedMotion.addEventListener('change', e => { if (e.matches) { resumeFlow = false; setFlow(false); stopMotion(); visual = clone(view); reproject(); } });
   window.addEventListener('pagehide', () => { serial++; stopCPU(); });
   window.addEventListener('pageshow', e => { if (e.persisted) changed(); });
   window.addEventListener('hashchange', e => {
@@ -1346,15 +1355,17 @@
       // queued event is delivered. The event still owns the requested navigation.
       const hash = e.newURL ? new URL(e.newURL).hash : location.hash;
       if (hash === '#' + hashString()) return;
-      stopMotion(); saveHistory(); if (readHash(hash)) changed();
+      const before = clone(view);
+      if (readHash(hash)) { stopMotion(); saveHistory(before); changed(); }
     } catch (error) { toast(error.message); }
   });
   // A size change invalidates the image at once; live frames follow the new shape
   // and the full render starts once resizing pauses.
+  const displayDensity = () => Math.min(Math.max(devicePixelRatio || 1, 0.25), 3);
   function measure() {
     const r = viewport.getBoundingClientRect();
     if (!r.width || !r.height) return;
-    const next = {w: r.width, h: r.height, dpr: Math.min(Math.max(devicePixelRatio || 1, 0.25), 3)};
+    const next = {w: r.width, h: r.height, dpr: displayDensity()};
     if (next.w === dims.w && next.h === dims.h && next.dpr === dims.dpr) return;
     const first = dims.w === 1;
     cancelGesture();
@@ -1372,6 +1383,9 @@
   }
   function onDensity() { watchDensity(); measure(); }
   watchDensity();
+  // Some browsers omit resolution media events after fullscreen. Check one
+  // number per second while visible; only an actual density change reads layout.
+  window.setInterval(() => { if (!document.hidden && displayDensity() !== dims.dpr) onDensity(); }, 1000);
   function startGPU() {
     try { gpu = new TetraGPU(gpuCanvas); gpuFailure = ''; return true; }
     catch (error) { gpu = null; gpuFailure = String(error.message); console.warn('WebGL2 unavailable; using Worker FP64.', error.message); return false; }
@@ -1379,11 +1393,12 @@
   gpuCanvas.addEventListener('webglcontextlost', e => {
     e.preventDefault();
     if (!gpu) return;
+    const timedOut = gpu.failed;
     clearDetail();
     keepSnapshot();
     clearCompleted();
-    gpu = null; display.frame = null; display.renderer = null; display.key = ''; gpuFailure = 'context lost';
-    toast('GPU context lost. Switched to CPU.'); changed();
+    gpu = null; display.frame = null; display.renderer = null; display.key = ''; gpuFailure = timedOut ? 'GPU completion timed out' : 'context lost';
+    toast(timedOut ? 'GPU stopped responding. Switched to CPU.' : 'GPU context lost. Switched to CPU.'); changed();
   });
   gpuCanvas.addEventListener('webglcontextrestored', () => {
     if (gpu) return;

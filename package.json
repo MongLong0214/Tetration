@@ -17,8 +17,10 @@
     "test:perf": "python3 tests/browser_perf.py",
     "test:reuse": "python3 tests/browser_reuse.py",
     "test:interactions": "python3 tests/browser_interactions.py",
+    "test:production": "python3 tests/browser_production.py",
+    "test:zoom": "python3 tests/browser_zoom.py",
     "test:webkit": "python3 tests/browser_webkit.py",
-    "test:e2e": "python3 tests/browser_review.py && python3 tests/browser_release.py && python3 tests/browser_deep.py && python3 tests/browser_quality.py && python3 tests/browser_explorer.py && python3 tests/browser_perf.py && python3 tests/browser_reuse.py && python3 tests/browser_interactions.py"
+    "test:e2e": "python3 tests/browser_review.py && python3 tests/browser_release.py && python3 tests/browser_deep.py && python3 tests/browser_quality.py && python3 tests/browser_explorer.py && python3 tests/browser_perf.py && python3 tests/browser_reuse.py && python3 tests/browser_interactions.py && python3 tests/browser_production.py && python3 tests/browser_zoom.py && python3 tests/browser_webkit.py"
   },
   "engines": {
     "node": "22.x || 24.x"

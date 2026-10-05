@@ -27,6 +27,8 @@ class Suite:
     """Collects checks, browser errors and timing into one JSON report."""
 
     def __init__(self, name, limitations):
+        if os.environ.get('TETRA_BROWSER') == 'webkit' and not name.endswith('webkit'):
+            name += '-webkit'
         self.name = name
         self.started = time.time()
         self.checks = []
@@ -55,6 +57,8 @@ class Suite:
 
 
 def launch(playwright, extra=()):
+    if os.environ.get('TETRA_BROWSER') == 'webkit':
+        return playwright.webkit.launch(headless=True)
     return playwright.chromium.launch(executable_path=os.environ.get('CHROMIUM_PATH'), headless=True, args=CHROMIUM_ARGS + list(extra))
 
 

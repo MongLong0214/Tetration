@@ -50,6 +50,29 @@ for (const mode of ['cpu', 'exact']) test(`${mode} worker pool matches serial pi
   assert.ok(serial.yields + parallel.yields > 0);
 });
 
+for (const samples of [4, 16]) test(`FP64 ${samples}x adaptive AA has no seams between workers or partial tiles`, async () => {
+  const job = {...base, x: '-1.84', y: '0.09', span: '0.46', mode: 'cpu', samples, width: 51, height: 29, iterations: 128};
+  const serial = await render(job, 1, false), parallel = await render(job, 4, true), single = await render({...job, samples: 1}, 1, false);
+  assert.deepEqual(parallel.pixels, serial.pixels);
+  assert.deepEqual(parallel.counts, serial.counts);
+  assert.deepEqual(serial.counts, single.counts, 'counts still describe the centre orbits');
+  assert.notDeepEqual(serial.pixels, single.pixels, 'AA must actually compute subpixel orbits');
+});
+
+test('FP64 Ultra AA agrees with an independent 4x4 supersampled image at detected edges', async () => {
+  const job = {...base, x: '-1.84', y: '0.09', span: '0.46', mode: 'cpu', width: 29, height: 17, iterations: 128};
+  const one = await render({...job, samples: 1}, 1, false), ultra = await render({...job, samples: 16}, 3, true);
+  const fine = await render({...job, width: job.width * 4, height: job.height * 4, samples: 1}, 1, false);
+  let error1 = 0, error16 = 0;
+  for (let y = 0; y < job.height; y++) for (let x = 0; x < job.width; x++) for (let c = 0; c < 3; c++) {
+    let expected = 0;
+    for (let dy = 0; dy < 4; dy++) for (let dx = 0; dx < 4; dx++) expected += fine.pixels[((y * 4 + dy) * job.width * 4 + x * 4 + dx) * 4 + c] / 16;
+    const i = (y * job.width + x) * 4 + c;
+    error1 += (one.pixels[i] - expected) ** 2; error16 += (ultra.pixels[i] - expected) ** 2;
+  }
+  assert.ok(error16 < error1 * 0.2, `${error16} vs single-sample ${error1}`);
+});
+
 test('exact mode really evaluates decimal BigInt orbits, not FP64', async () => {
   // Below FP64 resolution: FP64 sees one point, the exact mode sees distinct coordinates.
   const deep = {...base, x: '0.500000000000000000000000000001', y: '0', span: '1e-28', width: 6, height: 4, digits: 70, iterations: 48};
@@ -71,6 +94,33 @@ test('FP64 perturbation tiles agree with exact per-pixel orbits at 1e-20', async
   let differing = 0;
   for (let i = 0; i < serial.pixels.length; i += 4) if (Math.max(...[0, 1, 2].map(c => Math.abs(serial.pixels[i + c] - exact.pixels[i + c]))) > 1) differing++;
   assert.ok(differing <= 2, `${differing} of 96 pixels differ from exact orbits`);
+});
+
+test('deep FP64 Ultra AA preserves parallel seams and improves against a supersampled orbit reference', async () => {
+  const x = '-0.605137938972379900971816986088586258864125', y = '0.437740442074800562969426507709712806289976004723289995229';
+  const ref = referenceFor(x, y, 80, 1536);
+  const job = {...base, x, y, span: '7e-25', width: 31, height: 19, iterations: 1536, palette: 0, mode: 'cpu-perturb',
+    ref, deltaRe: 0, deltaIm: 0, deltaMirror: -2 * Number(y), imCenter: Number(y)};
+  const one = await render({...job, samples: 1}, 1, false), ultra = await render({...job, samples: 16}, 4, true);
+  const serial = await render({...job, samples: 16}, 1, false);
+  assert.deepEqual(ultra.pixels, serial.pixels); assert.deepEqual(ultra.counts, one.counts);
+  const fine = await render({...job, width: job.width * 4, height: job.height * 4, samples: 1}, 1, false);
+  let error1 = 0, error16 = 0;
+  for (let y = 0; y < job.height; y++) for (let x = 0; x < job.width; x++) for (let c = 0; c < 3; c++) {
+    let expected = 0;
+    for (let dy = 0; dy < 4; dy++) for (let dx = 0; dx < 4; dx++) expected += fine.pixels[((y * 4 + dy) * job.width * 4 + x * 4 + dx) * 4 + c] / 16;
+    const i = (y * job.width + x) * 4 + c;
+    error1 += (one.pixels[i] - expected) ** 2; error16 += (ultra.pixels[i] - expected) ** 2;
+  }
+  assert.ok(error16 < error1 * 0.3, `${error16} vs single-sample ${error1}`);
+});
+
+test('a cancel supersedes an AA job before it can publish a completed image', async () => {
+  const posted = [];
+  const {self} = workerContext(d => posted.push(d), true);
+  const first = self.onmessage({data: {...base, x: '-1.84', y: '0.09', span: '0.46', mode: 'cpu', samples: 16, width: 51, height: 29, id: 1}});
+  await self.onmessage({data: {type: 'cancel'}}); await first;
+  assert.ok(!posted.some(d => d.id === 1 && d.complete));
 });
 
 test('a newer job supersedes a running one at the next yield', async () => {
