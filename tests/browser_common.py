@@ -60,7 +60,8 @@ def launch(playwright, extra=()):
     if os.environ.get('TETRA_BROWSER') == 'webkit':
         return playwright.webkit.launch(headless=True)
     hardware = ['--enable-gpu'] if os.environ.get('TETRA_HARDWARE_BROWSER') == '1' else []
-    return playwright.chromium.launch(executable_path=os.environ.get('CHROMIUM_PATH'), headless=True, args=CHROMIUM_ARGS + hardware + list(extra))
+    return playwright.chromium.launch(executable_path=os.environ.get('CHROMIUM_PATH'), channel='chromium' if hardware else None,
+                                      headless=True, args=CHROMIUM_ARGS + hardware + list(extra))
 
 
 def ready(page, mode=None, timeout=240000):

@@ -185,6 +185,8 @@ QA의 Playwright를 로컬과 동일한 `1.63.0`으로 고정했다. 이동 중 
 
 동일 후속 HTML `6fb08b74…`를 로컬 M4에서 고정하고 15개 스위트를 순차 실행해 249개 검사, 0 uncaught exception을 확인했다. 131개 단위 검사·ESLint도 통과했다. 이 실행의 Chromium은 149/ANGLE Metal M4 Pro이며, CI Chromium 153과 구분한다. WebKit 최대 16,384회·AA16은 context loss 후 실제 FP64 AA16으로 75.563초, Chromium의 같은 설정은 GPU에서 27.075초였다. 물리 Safari·모바일과 네이티브 hidden 상태는 여전히 이 검사로 인증되지 않는다.
 
+하드웨어 QA는 [Playwright의 `chromium` channel](https://playwright.dev/python/docs/browsers#chromium-new-headless-mode)로 실제 Chromium의 새 headless 모드를 사용한다. 기본 headless shell과 실행 파일을 지정한 로컬 Chrome은 다른 구현이었다. Chromium 153 바이너리도 로컬에 설치해 이 경로를 확인한다. 브라우저 라이브러리 버전이 같다는 이유만으로 바이너리·드라이버까지 같다고 가정하지 않는다.
+
 ## 직접 실험하고 제외한 방법
 
 | 실험 | 이 기기의 결과 | 판단 |
