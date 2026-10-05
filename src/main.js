@@ -589,14 +589,15 @@
   async function runStage(id, renderer, frame, scene, samples, onBatch, work = null) {
     const effective = renderer.effectiveIterations(scene, frame.width, frame.height);
     const workCap = 8e7;
-    const partial = samples === 16 && scene.iterations >= 8192 && renderer.floatColor;
-    const edge = partial ? Math.min(16, tileEdge(effective, samples)) : tileEdge(effective, samples);
+    const highCap = scene.iterations >= 8192;
+    const partial = samples === 16 && highCap && renderer.floatColor;
+    const edge = highCap ? Math.min(16, tileEdge(effective, samples)) : tileEdge(effective, samples);
     const tiles = work ? TetraRender.exposedTiles(frame.width, frame.height, work.dx, work.dy, edge) : TetraRender.tiles(frame.width, frame.height, edge), key = rateKey(scene, samples);
     const area = frame.width * frame.height;
     // Cheap tiles can precede a dense, unresolved basin. Measured throughput
     // alone cannot bound that next batch: keep its worst-case orbit work below
     // the live-frame cap without changing the image, AA or iteration limit.
-    const maxPixels = Math.max(edge * edge, Math.floor(workCap / (effective * samples)));
+    const maxPixels = highCap ? edge * edge : Math.max(edge * edge, Math.floor(workCap / (effective * samples)));
     // Final tiles keep their own rate (live frames smooth theirs over whole frames). The first
     // batch is at most 4 tiles and a batch at most doubles, so a dense centre after cheap
     // corners cannot become seconds of GPU work.
