@@ -331,6 +331,20 @@ def body():
         assert d['lastCompleted']['width']==640 and d['lastCompleted']['height']==354,d
         suite.report['cold_maximum_backend']={k:d[k] for k in ['backend','gpuFailure','lastCompleted']}
         suite.record('A cold maximum-quality shared URL completes with the full requested iterations, samples and dimensions')
+        # Completion alone can hide a stalled compositor: ordinary locator
+        # clicks wait for real animation frames and a stable, actionable button.
+        controls(cold_page)
+        cold_page.locator('#iterations').select_option('8192');close_controls(cold_page);settle(cold_page)
+        d=consistent(cold_page)
+        assert d['mode']=='cpu' and d['iterations']==8192 and d['lastCompleted']['samples']==16,d
+        assert d['lastCompleted']['width']==640 and d['lastCompleted']['height']==354,d
+        suite.record('The high direct-iteration boundary computes full native AA16 through FP64 Workers')
+        controls(cold_page)
+        cold_page.locator('#quality').select_option('4');cold_page.locator('#iterations').select_option('auto')
+        close_controls(cold_page);settle(cold_page);consistent(cold_page)
+        cold_page.locator('#homeBtn').click();settle(cold_page);consistent(cold_page)
+        cold_page.locator('#backBtn').click();settle(cold_page);consistent(cold_page)
+        suite.record('Settings, Home and Back remain actionable after a cold maximum-quality shared URL')
         cold_context.close();suite.no_errors();cold.close()
 
 

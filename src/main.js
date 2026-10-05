@@ -96,6 +96,10 @@
   function chooseMode(v = view) {
     if (engine === 'exact') return 'exact';
     const pixel = num(v.span) / Math.max(dims.w, 1), scale = magnitude(v);
+    // Long direct FP32 loops can stall the browser compositor, not just this
+    // renderer. FP64 Workers now skip exact machine cycles and finish these
+    // dense high-cap views faster, retaining full resolution, AA and the cap.
+    if (engine === 'auto' && pixel >= scale * DIRECT_LIMIT && iterationsFor(v) >= 8192) return 'cpu';
     if (engine === 'auto' && gpu) return pixel >= scale * DIRECT_LIMIT ? 'gpu' : 'perturb';
     return pixel >= scale * FP64_LIMIT ? 'cpu' : 'cpu-perturb';
   }
