@@ -4,6 +4,12 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+    inputs:
+      suite:
+        description: Full qualification or a production GPU diagnostic
+        type: choice
+        default: all
+        options: [all, production]
 permissions:
   contents: read
 concurrency:
@@ -26,6 +32,8 @@ jobs:
       - run: npm run build
   browser:
     needs: unit
+    env:
+      TETRA_SUITE: ${{ matrix.suite }}
     # The largest native Ultra scenes also exercise latency bounds. Use the
     # desktop macOS renderer for those; keep Linux pixel/recovery suites below.
     runs-on: ${{ (matrix.suite == 'explorer' || matrix.suite == 'reuse' || matrix.suite == 'production') && 'macos-15' || 'ubuntu-latest' }}
@@ -33,7 +41,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        suite: [review, release, deep, quality, explorer, perf, reuse, interactions, production, zoom, webkit, reuse-webkit, interactions-webkit, production-webkit, zoom-webkit]
+        suite: ${{ fromJSON(inputs.suite == 'production' && '["production"]' || '["review","release","deep","quality","explorer","perf","reuse","interactions","production","zoom","webkit","reuse-webkit","interactions-webkit","production-webkit","zoom-webkit"]') }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
@@ -49,23 +57,25 @@ jobs:
           python3 -m venv .browser-venv
           echo "$GITHUB_WORKSPACE/.browser-venv/bin" >> "$GITHUB_PATH"
           .browser-venv/bin/python -m pip install -r tests/requirements.txt
-          if [[ "${{ matrix.suite }}" == *webkit ]]; then .browser-venv/bin/python -m playwright install --with-deps webkit; else .browser-venv/bin/python -m playwright install --with-deps chromium; fi
+          if [[ "$TETRA_SUITE" == *webkit ]]; then .browser-venv/bin/python -m playwright install --with-deps webkit; else .browser-venv/bin/python -m playwright install --with-deps chromium; fi
       - name: Browser suite on a served origin
         run: |
           node serve.cjs dist >/tmp/tetra-server.log 2>&1 &
           SERVER_PID=$!
           trap 'kill "$SERVER_PID"' EXIT
-          for attempt in $(seq 1 30); do
+          for ((attempt = 0; attempt < 30; attempt++)); do
             if curl -fsS http://127.0.0.1:4173/ >/dev/null; then break; fi
             sleep 1
           done
           curl -fsS http://127.0.0.1:4173/ >/dev/null
-          SUITE="${{ matrix.suite }}"
+          SUITE="$TETRA_SUITE"
           if [[ "$SUITE" == *-webkit ]]; then export TETRA_BROWSER=webkit; SUITE="${SUITE%-webkit}"; fi
-          python3 tests/browser_${SUITE}.py
+          python3 "tests/browser_${SUITE}.py"
         env:
           TETRA_BASE_URL: http://127.0.0.1:4173
           TETRA_HARDWARE_BROWSER: ${{ runner.os == 'macOS' && '1' || '0' }}
+          TETRA_TRACE_GPU: ${{ inputs.suite == 'production' && '1' || '0' }}
+          DEBUG: ${{ inputs.suite == 'production' && 'pw:browser' || '' }}
       - name: Preserve browser evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

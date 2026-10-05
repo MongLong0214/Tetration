@@ -234,7 +234,22 @@ def body():
         # contexts. Run it last, after GPU-specific restoration witnesses, then
         # explicitly verify navigation continues with the available renderer.
         ctx=browser.new_context(viewport={'width':640,'height':430})
+        if os.environ.get('TETRA_TRACE_GPU') == '1':
+            suite.report['gpu_trace_enabled'] = True
+            suite.report['limitations'].append('GPU call logging is enabled; this diagnostic run is not throughput qualification.')
+            ctx.add_init_script('''(()=>{let sequence=0;
+             for(const name of ['drawArrays','flush','readPixels','getProgramParameter','clientWaitSync','framebufferTexture2D']){
+              const original=WebGL2RenderingContext.prototype[name];
+              WebGL2RenderingContext.prototype[name]=function(...args){
+               if(window.tetraDiagnostics?.iterations!==16384)return original.apply(this,args);
+               const id=++sequence;console.info('GPU_CALL',id,name,'begin',tetraDiagnostics.renderStage);
+               const result=original.apply(this,args);console.info('GPU_CALL',id,name,'end');return result;
+              };
+             }
+            })()''')
         page=suite.watch(ctx.new_page());open_app(page,SHALLOW)
+        if os.environ.get('TETRA_TRACE_GPU') == '1':
+            page.on('console', lambda message: print(message.text, flush=True) if message.text.startswith('GPU_CALL') else None)
         for engine, quality, palette, iterations in [('auto',1,1,64),('cpu',4,2,128),('exact',16,3,64),('auto',16,0,16384),('auto',4,2,'auto')]:
             print('PRODUCTION_SETTING_STAGE', engine, quality, palette, iterations, flush=True)
             controls(page); page.locator('#engine').select_option(engine); page.locator('#quality').select_option(str(quality))
