@@ -11,6 +11,14 @@
     const j = n & 3, i = (aaRows[j] + aaSets[n >> 2]) & 3;
     return [(i + 0.5) * 0.25 - 0.5, (j + 0.5) * 0.25 - 0.5];
   })};
+  function within64(dx, dy, tolerance) {
+    const x = Math.abs(dx), y = Math.abs(dy);
+    // max(|x|,|y|) <= hypot(x,y) <= |x|+|y|. Wide margins
+    // avoid changing the native rounding decision near the actual threshold.
+    if (x > 2 * tolerance || y > 2 * tolerance) return false;
+    if (x + y < 0.5 * tolerance) return true;
+    return Math.hypot(dx, dy) < tolerance;
+  }
   function orbit64(cr, ci, iterations = 256, logR = Math.log(1e10)) {
     if (!Number.isFinite(cr + ci) || (cr === 0 && ci === 0)) return { kind: 4, steps: 0, re: NaN, im: NaN };
     const lr = Math.log(Math.hypot(cr, ci));
@@ -24,8 +32,8 @@
       if (a < -700 || Math.abs(b) > 1e12) return { kind: 4, steps: n, re: wr, im: wi };
       const r = Math.exp(a), nr = r * Math.cos(b), ni = r * Math.sin(b);
       const tolerance = 1e-10 * (1 + r);
-      fixed = Math.hypot(nr - wr, ni - wi) < tolerance ? fixed + 1 : 0;
-      periodic = n > 2 && Math.hypot(nr - oldr, ni - oldi) < tolerance ? periodic + 1 : 0;
+      fixed = within64(nr - wr, ni - wi, tolerance) ? fixed + 1 : 0;
+      periodic = n > 2 && within64(nr - oldr, ni - oldi, tolerance) ? periodic + 1 : 0;
       oldr = wr; oldi = wi; wr = nr; wi = ni;
       if (fixed >= 8) return { kind: 1, steps: n, re: wr, im: wi };
       if (periodic >= 12) return { kind: 2, steps: n, re: wr, im: wi };

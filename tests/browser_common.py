@@ -94,7 +94,12 @@ def ready(page, mode=None, timeout=240000):
         # failure diagnostic itself until the CI job is forcibly cancelled.
         faulthandler.dump_traceback_later(5, exit=True)
         try:
-            print('RENDER_TIMEOUT_STATE', json.dumps({**state(page), 'graphics': graphics(page)}), flush=True)
+            diagnostic = state(page)
+            print('RENDER_TIMEOUT_STATE', json.dumps(diagnostic), flush=True)
+            # A failed/abandoned GL context can block even a driver-info query.
+            # Preserve the responsive app state before touching that driver.
+            if diagnostic.get('gpu'):
+                print('RENDER_TIMEOUT_GRAPHICS', json.dumps(graphics(page)), flush=True)
         except Exception:
             pass  # Preserve the original timeout if the page itself is gone.
         finally:

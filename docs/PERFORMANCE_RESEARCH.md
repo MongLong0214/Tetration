@@ -197,6 +197,12 @@ QA의 Playwright를 로컬과 동일한 `1.63.0`으로 고정했다. 이동 중 
 
 복구 순서 자체도 수정했다. 10초 한도에서 먼저 실패를 반환해 CPU 전환을 시작하고, 제출된 펜스가 실제 완료됐을 때만 native 컨텍스트를 파기한다. 진행 중인 작업은 새 draw 없이 하나의 컨텍스트와 낮은 빈도의 완료 조회로 보관한다. [Khronos의 파기·복원 명세](https://registry.khronos.org/webgl/extensions/WEBGL_lose_context/)와 [Chromium의 동기적인 ForceLostContext 정리 경로](https://github.com/chromium/chromium/blob/main/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc)를 참고했다. 미완료 자원 파기를 금지하는 회귀 검사는 기존 코드에서 실패하고 수정 후 통과했다. native 복원 검사는 강제 pending 전달을 해제하고 실제 loss 이벤트가 완료된 뒤 복원하며, 실제 FP64 AA16·반복 수·기존 렌더 시간 한도를 유지한다. 이 빌드 `eca11320…`는 로컬 단위 검사 132개·ESLint·production 18개를 통과했다. 원격 최대 설정의 정지와 새 빌드의 전체 브라우저 검증은 아직 미완료다.
 
+`84046b5`의 원격 진단 `37325536572`도 최대 설정에서 240초 한도를 넘겼지만, CPU 타일의 `drawImage`는 시간 제한 직전까지 계속 정상 반환했다. 따라서 이 실행은 Canvas 호출에서 CPU 복구가 멈췄다는 가설을 지지하지 않는다. 실패 진단이 앱 상태와 GPU 정보를 한 번에 출력해, 실패한 WebGL의 정보 조회가 앱 상태 기록까지 막을 수 있었다. 앱 상태를 먼저 보존하고 `gpu=false`일 때 그 GL을 다시 조회하지 않도록 고쳤다. 원래 시간 초과와 5초 진단 한도는 유지했다. 같은 `eca11320…`의 로컬 Chromium production 18개·WebKit production 17개·양 브라우저 zoom/reuse 38개는 통과했다. WebKit 최대 설정의 실제 CPU AA16 완료는 91.713초였다. 이 값은 앞선 75.563초와 별개 실행이며 보장값이 아니다.
+
+후속 CPU 최적화 `1d059035…`는 반복마다 두 번 계산하던 FP64 거리 판정을 줄인다. `max(|dx|,|dy|) <= hypot(dx,dy) <= |dx|+|dy|`에서 실제 임계값의 두 배 밖은 false, 절반 안은 true로 판정하고, 그 사이에서는 기존 native `Math.hypot`을 그대로 호출한다. 궤도 식·허용 오차·고정/주기 판정 횟수·반복 상한은 바꾸지 않았다. 직접 Euclidean 판정을 유지하는 `orbitRules`와 11,000개 입력의 분류·정확한 종료 단계·최종 복소 값이 일치하며 단위 검사 133개와 ESLint를 통과했다. Node의 960개 최대 반복 장면을 순서 교대로 6회 비교한 계산 구간은 중앙값 약 382→213 ms였다.
+
+같은 M4/Chromium 153 origin에서 HTML만 교대로 바꾸고 서비스 워커를 차단한 실제 CPU 전체 렌더 비교는 320×156, Filaments, 16,384회, AA16 조건으로 2회씩 수행했다. 기존 `eca11320…`는 20.582·22.103초, 후속 `1d059035…`는 14.808·15.001초였다. 중앙값 21.342→14.904초로 약 30% 단축됐고, 네 번의 전체 native RGBA 이미지 SHA256은 모두 `6034947c1d8be199a5d4efdbea19f983c27f4e9e59277efb769cc44520b6d38f`였다. 계산 구간의 1.8배를 페이지 전체 성능으로 부르지 않는다. 이 후속 빌드의 전체 브라우저 및 원격 최대 설정 검증은 아직 미완료다.
+
 ## 직접 실험하고 제외한 방법
 
 | 실험 | 이 기기의 결과 | 판단 |
