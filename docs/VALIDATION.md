@@ -13,7 +13,7 @@ All suites ran sequentially against one production build served by `serve.cjs` w
 | `test:browser` (review) | 29 passed | Core flows, CSP enforcement, exact links, limits, mobile focus and touch |
 | `test:release` | 16 passed | Served headers and bytes, reference pixels, engine switching, real context loss and restoration, degraded features, offline reload |
 | `test:deep` | 29 passed | GPU perturbation (plain and BLA) against FP64 and exact orbits, BLA speed, full resolution at every depth, symmetry, seams, reference reuse, deep zoom session |
-| `test:quality` | 16 passed | Antialiasing error against 64-sample references, live frames, glide, inertia, reduced motion, colour flow |
+| `test:quality` | 20 passed | Antialiasing error against 64-sample references, live-frame accumulation (converges to the 16-sample image within 3/255; still and panned frames copy converged pixels bit for bit), grid lock, no single-sample image over an antialiased one, glide, inertia, reduced motion, colour flow |
 | `test:explorer` | 22 passed | Saved views, history, shortcuts, discovery, sharing, fallbacks, four viewports, axe-core |
 | `test:perf` | 11 passed | First image, when the BLA program compiles (never in shallow views, without long tasks at depth), live-frame cadence at the overview, 10²⁵ and 10¹⁰⁰, reference speed, resource bounds |
 | `test:webkit` | Not run locally | The network policy of this workspace blocks the WebKit download; the suite runs in GitHub Actions |
@@ -59,8 +59,8 @@ Chromium 141.0.7390.37 on ANGLE/SwiftShader (software WebGL2, a 4-core CPU host)
 | Measurement | Result |
 | --- | --- |
 | First image after navigation | 375 ms (complete with adaptive 4× at 960 × 640: 3.9 s) |
-| New live frames while dragging, overview / 10²⁵ / 10¹⁰⁰ | 43 / 19 / 17 in 2 s (frames are re-used while a move stays within one live pixel) |
-| Display frame-gap 95th percentile in those drags | 16.7 / 16.8 / 16.8 ms (grid-locked live frames) |
+| Live frames while dragging, overview / 10²⁵ / 10¹⁰⁰ | 166 / 93 / 79 in 2 s (moves plus accumulation refinements; converged pixels are copied) |
+| Display frame-gap 95th percentile in those drags | 16.8 / 16.8 / 33.4 ms (grid-locked, accumulating live frames) |
 | Wheel-zoom glide frame-gap 95th percentile | 66.7 ms |
 | Exact 10¹⁰⁰ reference orbit (6,144 steps, 140 digits) in a Worker | 73 ms |
 | Sixty-action session | 4 live GPU textures, 3 pooled, heap growth 0.22 MB |
