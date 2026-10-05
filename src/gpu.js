@@ -794,7 +794,9 @@ ${orbitLoop}` + perturbTail;
             if (cancelled()) { resolve(true); return; }
             if (gl.getQueryParameter(query, gl.QUERY_RESULT_AVAILABLE) === true) {
               const result = gl.getQueryParameter(query, gl.QUERY_RESULT);
-              resolve(!Number.isInteger(result) || result !== 0); return;
+              // Zero also occurs if the mask draw failed. Only a completed,
+              // error-free query can justify keeping the existing seed.
+              resolve(!Number.isInteger(result) || result !== 0 || gl.getError() !== gl.NO_ERROR); return;
             }
             if (performance.now() - started >= 10000) { resolve(true); return; }
             nextTask(() => setTimeout(poll, 1));

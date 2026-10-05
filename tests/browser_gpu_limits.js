@@ -91,7 +91,8 @@ window.__gpuAdaptiveMaskComparison = async()=>{
   g.clearColor(1,1,1,64/255);g.clear(g.COLOR_BUFFER_BIT);g.disable(g.SCISSOR_TEST);
   const edgeA=r.beginFrame(W,H,seed,true),edgeB=r.beginFrame(W,H,seed,true);r.draw(edgeA,tile,scene,samples);await r.fence();
   const edgeStart=fences;await r.drawAATile(edgeB,tile,scene,()=>false,.035,samples);
-  const edge=fences===edgeStart+samples+1&&equal(r.readFrame(edgeA),r.readFrame(edgeB));
+  const edgeExpected=r.readFrame(edgeA);
+  const edge=fences===edgeStart+samples+1&&equal(edgeExpected,r.readFrame(edgeB));
   r.releaseFrame(edgeA);r.releaseFrame(edgeB);
   // An API error result cannot certify the tile as flat.
   const invalid=r.beginFrame(W,H,seed,true),invalidStart=fences;
@@ -99,7 +100,16 @@ window.__gpuAdaptiveMaskComparison = async()=>{
   await r.drawAATile(invalid,tile,scene,()=>false,.035,samples);
   const invalidComputed=fences===invalidStart+samples+1;
   g.getQueryParameter=(q,p)=>{if(p===g.QUERY_RESULT)results++;return nativeQuery(q,p);};
-  rows.push({samples,flat,cancelled,forced,edge,invalidComputed});
+  // A failed mask submission produces a real zero query result too. It
+  // must not be accepted as proof that this nonflat seed needs no samples.
+  const failed=r.beginFrame(W,H,seed,true),failedStart=fences,nativeProgram=r.program.bind(r),nativeDraw=g.drawArrays.bind(g);let current='';
+  r.program=name=>{current=name;return nativeProgram(name);};
+  g.drawArrays=(...args)=>nativeDraw(...(current==='adaptiveMask'?[g.TRIANGLES,0,-1]:args));
+  await r.drawAATile(failed,tile,scene,()=>false,.035,samples);
+  r.program=nativeProgram;g.drawArrays=nativeDraw;
+  const failedComputed=fences===failedStart+samples+1&&equal(edgeExpected,r.readFrame(failed));
+  rows.push({samples,flat,cancelled,forced,edge,invalidComputed,failedComputed});
+  r.releaseFrame(failed);
   r.releaseFrame(invalid);r.releaseFrame(seed);
  }
  const error=g.getError();r.destroy();return {rows,error};

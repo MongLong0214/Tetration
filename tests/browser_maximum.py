@@ -110,8 +110,8 @@ def body():
         with browser_deadline(240000):
             mask = page.evaluate('__gpuAdaptiveMaskComparison()')
         assert mask['error'] == 0 and len(mask['rows']) == 2, mask
-        assert all(all(row[key] for key in ['flat', 'cancelled', 'forced', 'edge', 'invalidComputed']) for row in mask['rows']), mask
-        suite.record('Adaptive mask skips only flat AA tiles; forced strips, pooled edges and invalid queries still compute real samples', mask)
+        assert all(all(row[key] for key in ['flat', 'cancelled', 'forced', 'edge', 'invalidComputed', 'failedComputed']) for row in mask['rows']), mask
+        suite.record('Adaptive mask skips only flat AA tiles; forced strips, pooled edges and invalid/failed queries still compute real samples', mask)
         for samples in [4, 16]:
             with browser_deadline(240000):
                 partial = page.evaluate('__gpuPartialComparison', samples)
