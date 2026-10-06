@@ -1,5 +1,11 @@
 # Validation — 1.0.0
 
+## 2026-10-06 parallel perturbation samples qualification
+
+Qualified code head `f8e544f`, runtime SHA-256 `11943a52cb55e3866311872d49ebb4bb3463965b711bf6d934a243c5ce6fcad4` (272,633 bytes). Final unit tests: 137 passed; lint passed. The frozen local run passes all 17 browser suites / 284 checks / zero uncaught browser errors in 765.7 seconds. [Remote run 37389964566](https://github.com/MongLong0214/Tetration/actions/runs/37389964566) passes all 18 jobs on its first attempt, including 137 units/lint/build and the same 17 suites / 284 checks; every downloaded report carries this exact runtime hash. Native Chromium/WebKit maximum suites each pass 13 checks.
+
+The maximum suites retain all original AA4/AA16 and finite FP32 comparisons, deadlines and pixel tolerances. They add 120 original-vs-atlas/direct-fallback conditions: 172,800 pixel pairs with every RGBA channel equal, four perturbation scenes, BLA on/off, 128/512/1024 caps, seed/no seed, normal/forced thresholds, odd and partial tiles. Null texture/framebuffer creation is refused while the existing atlas remains valid. The five original shader sources are byte-identical to the preceding deployed source; live frames and higher-cap scheduling remain unchanged. Actual native 4K existing/new/new/existing measurements pass every complete image comparison, with cold median 18,744.8 to 11,728.4 ms and 10%-width arrow-pan median 1,945.2 to 1,313.7 ms. See [PERFORMANCE_RESEARCH.md](PERFORMANCE_RESEARCH.md) for limits, GPU timers and rejected prototypes. These are qualification and benchmark results; public-domain delivery checks are separate.
+
 ## 2026-10-06 Focus resize repair
 
 Qualified code head `573034e`, runtime SHA-256 `1f63f34d67ea7a2751c1da8b7b9f99eb400de22789d7b008af1d570c8e9dc329` (267,554 bytes), repairs a real post-merge failure. [Main run 37377430638](https://github.com/MongLong0214/Tetration/actions/runs/37377430638) passed 137 units/lint/build and 16 of 17 browser suites, but Explorer failed the original focused-render height assertion. Focus CSS had expanded the viewport to 960 px while the completed image still had 872 px. This is a retained code failure, not runner assignment trouble.

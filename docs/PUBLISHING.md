@@ -2,6 +2,12 @@
 
 Target: [MongLong0214/Tetration](https://github.com/MongLong0214/Tetration), public, default branch `main`.
 
+## 2026-10-06 parallel perturbation samples qualification
+
+Qualified code head `f8e544f`, runtime SHA-256 `11943a52cb55e3866311872d49ebb4bb3463965b711bf6d934a243c5ce6fcad4` (272,633 bytes). The frozen local run passes all 17 suites / 284 checks with zero uncaught errors. [Remote qualification](https://github.com/MongLong0214/Tetration/actions/runs/37389964566) passes all 18 jobs on its first attempt, including 137 units/lint/build and both native 13-check maximum suites. [VALIDATION.md](VALIDATION.md) records the retained failures and platform limits.
+
+Delivery uses the existing fast-forward and Vercel Git integration. Verify this runtime hash, the real security headers and all offline asset bytes on the public domain; repeat native zoom, release, Explorer, deep Ultra cancellation and 3840×1682 / AA16 flows. Prepare an isolated persistent browser profile on the actual preceding public runtime `1f63f34d67ea7a2751c1da8b7b9f99eb400de22789d7b008af1d570c8e9dc329` before deployment, then verify its real service-worker/cache update and new offline reload without changing the exact camera. These public checks are separate from served local/CI qualification.
+
 ## 2026-10-06 Focus resize qualification
 
 Qualified code head: `573034e`, runtime SHA-256 `1f63f34d67ea7a2751c1da8b7b9f99eb400de22789d7b008af1d570c8e9dc329` (267,554 bytes). [Full CI qualification](https://github.com/MongLong0214/Tetration/actions/runs/37384074579) passes 137 units/lint/build and all 17 browser suites on its first attempt. The frozen local run passes 282 checks with zero uncaught errors; five additional native WebKit checks exercise Focus entry/exit with delayed ResizeObserver delivery. See [VALIDATION.md](VALIDATION.md) for the retained pre-fix main failure.

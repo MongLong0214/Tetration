@@ -1,5 +1,11 @@
 # Changelog
 
+### Parallel perturbation Ultra samples — 2026-10-06
+
+- Compute 512-step perturbation Ultra samples in a bounded tile atlas and sum them in the original FP32 order, preserving AA16, adaptive edges, native dimensions and iteration caps.
+- Keep the original direct shader after its separate atlas prototype failed pixel equality; preserve existing atlas resources if a new texture or framebuffer cannot be allocated.
+- Add 120 exact original-vs-atlas/fallback conditions to both native maximum suites; full qualification is recorded in [VALIDATION.md](docs/VALIDATION.md).
+
 ### Focus resize repair — 2026-10-06
 
 - Focus entry and exit now measure the new viewport immediately, so an old-sized image cannot remain marked complete while resize notification is pending. Native keyboard/button and cached-size checks reproduce the previous stale-completion failure and verify the repair on Chromium and WebKit.
