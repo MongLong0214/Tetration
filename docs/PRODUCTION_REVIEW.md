@@ -1,5 +1,17 @@
 # Production review — TETRA 1.0.0
 
+## 2026-10-06 first-visit link, pan strips and opening view follow-up
+
+This review pass re-examined the working tree on top of `7b27455` against the goal of a fast first visit. Findings and decisions:
+
+- **Real defect fixed:** the first link of an orbit program on ANGLE Metal gave a binary 2.2–3.7× slower than the program-cache hit returning visitors already received, with different pixels. Every orbit program, BLA included, is now linked twice; the second link reproduces the cached image byte for byte. WebKit and SwiftShader were unaffected and are neither improved nor degraded (SwiftShader pays about 30–120 ms of link time).
+- **Real defect fixed:** a native pan replaced a complete live image with blank pending tiles. The pending strips now show the resampled picture already on screen; the reuse suite asserts it.
+- **Product decision implemented:** the app opens on the Overview; the device-dependent quality default is unchanged.
+- **Test defect fixed, thresholds unchanged:** the deep suite's BLA speed assertions were measured on a 160×96 frame that the faster plain program renders in 1–3 ms, below timer resolution. They now use 960×576 and the best of five draws. Eleven hardware runs pass (Horizon 2.94–3.35×, 10⁻⁵⁵ at least 8.2× against thresholds 2.5× and 5×).
+- **Measured and left unchanged:** the BLA auto-selection policy is conservative (BLA was 19–47% faster than plain for Horizon at 10⁻¹⁸ to 10⁻⁵⁵ while the policy picks plain), but BLA and plain render chaotic pixels differently, so lowering the threshold changes the images of mid-depth views and widens the dependence on whether the BLA program is ready. The first-drag live frame shrinks from 1134×609 to 630×338 because the initial plan, taken from final-render tile speed, underestimates live-frame cost about twofold and the correction fires at the re-plan limit; it is not load noise and not a re-plan defect, and it is stable afterwards. A wheel zoom shows no new picture for about 0.33–0.37 s (Plume) and 0.87–0.93 s (Abyss) after the last live frame; a drag release shows one within 13–19 ms. All three are owner decisions; numbers are in [PERFORMANCE_RESEARCH.md](PERFORMANCE_RESEARCH.md).
+
+Qualification: `npm test` 138 passed, lint clean, 12 hardware browser suites / 217 checks with zero uncaught errors, five extra deep runs (see [VALIDATION.md](VALIDATION.md)). Single machine, one browser build; no physical Safari or mobile run.
+
 ## 2026-10-06 bounded parallel samples follow-up
 
 Qualified code head `f8e544f`, runtime SHA-256 `11943a52cb55e3866311872d49ebb4bb3463965b711bf6d934a243c5ce6fcad4` (272,633 bytes), addresses the newly measured native 4K AA16 cost. It evaluates low-cap perturbation samples in a small tile atlas and preserves the original FP32 sum order. Original kernels, logical caps, AA offsets, adaptive thresholds, native dimensions and work limits are retained. A separate direct-kernel prototype failed byte equality on Metal and is excluded; direct rendering keeps its original shader. Null texture/framebuffer allocation is refused without discarding the existing atlas. This is a bounded follow-up to the preserved review.

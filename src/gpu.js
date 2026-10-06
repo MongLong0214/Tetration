@@ -516,7 +516,17 @@ ${orbitLoop}` + perturbTail;
     }
     program(name) {
       if (name === 'perturbBla') return this.blaProgram();
-      return this.programs[name] || (this.programs[name] = this.link(SOURCES[name], UNIFORMS[name]));
+      return this.programs[name] || (this.programs[name] = this.relink(SOURCES[name], UNIFORMS[name]));
+    }
+    /* ANGLE Metal: a program's first link yields a binary measured 2.6-3.3x slower (direct and
+     * perturbation orbit loops, M2 Pro) than the same source linked again, which hits the program
+     * cache with a bit-identical image. Returning visitors got the fast binary from the disk cache;
+     * linking twice gives it to first visits too. The second link is a cache hit (a few ms).
+     * Every orbit program takes this path, the BLA one included: the two binaries round
+     * differently, and the Ultra atlas must match the plain draw byte for byte. */
+    relink(fragmentSource, names, first = this.link(fragmentSource, names)) {
+      this.gl.deleteProgram(first.program);
+      return this.link(fragmentSource, names);
     }
     /* The BLA program. With KHR_parallel_shader_compile it links in the background once
      * warm() starts it at perturbation depth, and is used once ready (the plain program draws until then); otherwise it
@@ -527,7 +537,7 @@ ${orbitLoop}` + perturbTail;
       const pending = this.pendingBla;
       if (pending && this.parallel && this.blaMode !== 'on' && !this.gl.getProgramParameter(pending.program, this.parallel.COMPLETION_STATUS_KHR)) return null;
       this.pendingBla = null;
-      try { this.programs.perturbBla = pending ? this.finishLink(pending, UNIFORMS.perturbBla) : this.link(perturbBla, UNIFORMS.perturbBla); }
+      try { this.programs.perturbBla = this.relink(perturbBla, UNIFORMS.perturbBla, pending ? this.finishLink(pending, UNIFORMS.perturbBla) : undefined); }
       catch (error) { this.blaError = String(error?.message || error); this.blaMode = 'off'; return null; }
       return this.programs.perturbBla;
     }
@@ -676,6 +686,15 @@ ${orbitLoop}` + perturbTail;
       this.refreshFrame(source); this.refreshFrame(frame);
       gl.bindFramebuffer(gl.READ_FRAMEBUFFER, source.buffer); gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, frame.buffer);
       gl.blitFramebuffer(sx, sy, sx + w, sy + h, x, y, x + w, y + h, gl.COLOR_BUFFER_BIT, gl.NEAREST);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    }
+    // Linear resample of a whole frame into this one: source texel edge u lands at target pixel (u - offset) / scale.
+    copyScaled(frame, source, scale, offset) {
+      const gl = this.gl, x0 = Math.round(-offset[0] / scale[0]), y0 = Math.round(-offset[1] / scale[1]);
+      const x1 = Math.round((source.width - offset[0]) / scale[0]), y1 = Math.round((source.height - offset[1]) / scale[1]);
+      this.refreshFrame(source); this.refreshFrame(frame);
+      gl.bindFramebuffer(gl.READ_FRAMEBUFFER, source.buffer); gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, frame.buffer);
+      gl.blitFramebuffer(0, 0, source.width, source.height, x0, y0, x1, y1, gl.COLOR_BUFFER_BIT, gl.LINEAR);
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     }
     // Issue one scissored draw into the frame. Returns immediately; use fence() to wait.

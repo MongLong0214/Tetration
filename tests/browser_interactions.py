@@ -8,6 +8,8 @@ from playwright.sync_api import sync_playwright
 
 suite = Suite('interactions', ['GPU completion delivery is deliberately delayed in the two race checks. Touch hardware is not qualified here.'])
 PLUME = 'v=1&x=-2.2930579295624999999999991&y=0.33208044555625&s=5e-11&q=16'
+# Bloom is off the Overview, so Home moves the camera, and heavy enough that live frames stay below native size (the detail image is retained during a drag).
+BLOOM = 'v=1&x=-2.2930579&y=0.3320804&s=0.00025&q=16'
 GRAB = '''() => {const c=document.querySelector('#gpuCanvas'),t=document.createElement('canvas');t.width=c.width;t.height=c.height;
  const g=t.getContext('2d');g.drawImage(c,0,0);return Array.from(g.getImageData(0,0,c.width,c.height).data);}'''
 LATCH = '''() => {const fence=TetraGPU.prototype.fence;
@@ -143,7 +145,7 @@ def body():
         assert state(page)['lastCompleted'] == completed
         suite.record('A late GPU frame cannot hide the completed CPU render after switching precision')
 
-        open_app(page)
+        open_app(page, BLOOM)
         x, y = center(page)
         page.mouse.move(x, y); page.mouse.down(); page.mouse.move(x+12, y+5)
         page.wait_for_function('() => tetraDiagnostics.retainedDetail && tetraDiagnostics.interactiveFrames>0')
@@ -163,7 +165,7 @@ def body():
         assert paths[0].read_bytes() == paths[1].read_bytes(), 'Navigation changed an already captured image'
         suite.record('Navigation and resize cannot change the camera or detail layer of an in-flight PNG export')
 
-        open_app(page)
+        open_app(page, BLOOM)
         page.evaluate('''()=>{const post=Worker.prototype.postMessage;let held=false;Worker.prototype.postMessage=function(msg,...rest){
          if(msg.type==='discover'&&!held){held=true;msg.seed=123456789;const worker=this;
           const spy=e=>{if(e.data.type==='discover'){window.__discoveredPlace=e.data.place;worker.removeEventListener('message',spy);}};

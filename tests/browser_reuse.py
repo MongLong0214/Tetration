@@ -7,7 +7,9 @@ suite = Suite('reuse', ['Chromium graphics on the local runner; no physical mobi
 VIEWS = json.loads((ROOT / 'tools/perf/views.json').read_text())
 HOOK = '''(() => {const timer=setInterval(()=>{if(!window.TetraGPU)return;clearInterval(timer);
  const prepare=TetraGPU.prototype.prepare;TetraGPU.prototype.prepare=function(f,s,n,...r){
- if(!s.accum){window.__nativeRenderer=this;window.__nativeScene=s;}return prepare.call(this,f,s,n,...r);};},1);})()'''
+ if(!s.accum){window.__nativeRenderer=this;window.__nativeScene=s;}return prepare.call(this,f,s,n,...r);};
+ const copy=TetraGPU.prototype.copyShifted;TetraGPU.prototype.copyShifted=function(f,...a){copy.call(this,f,...a);
+ const d=this.readFrame(f);let n=0;for(let i=0;i<d.length;i+=4)if(d[i]===6&&d[i+1]===6&&d[i+2]===6)n++;window.__blankPending=n;};},1);})()'''
 GRAB = '''() => {const c=document.querySelector('#gpuCanvas'),t=document.createElement('canvas');t.width=c.width;t.height=c.height;
  const g=t.getContext('2d');g.drawImage(c,0,0);return {w:c.width,h:c.height,data:Array.from(g.getImageData(0,0,c.width,c.height).data)};}'''
 
@@ -37,6 +39,8 @@ def body():
             reused = (before['w'] - 12) * (before['h'] - 5)
             assert last['reusedPixels'] == reused and last['samples'] == 16, last
             assert last['computedPixels'] == before['w'] * before['h'] - reused
+            # Pending strips show the picture already on screen, never blank (clear-colour) tiles.
+            assert page.evaluate('window.__blankPending') == 0, (name, page.evaluate('window.__blankPending'))
             # Compare the entire overlapping image, including all four shift signs.
             left, right = max(0, mx), min(after['w'], after['w'] + mx)
             top, bottom = max(0, my), min(after['h'], after['h'] + my)

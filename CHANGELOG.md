@@ -1,5 +1,15 @@
 # Changelog
 
+### Overview as the opening view — 2026-10-06
+
+- Opening without a URL hash shows the Overview (x −0.5, y 0, span 8, Auto iterations, palette 0, grid and colour flow off) instead of Bloom. The device-dependent quality default is unchanged: 16× for fine pointers, 4× for coarse ones.
+
+### First-visit shader speed and pan strips — 2026-10-06
+
+- Link every orbit program twice. On ANGLE Metal a program's first link gives a binary measured 2.2–3.7× slower than the program-cache hit returning visitors already got, with different pixels; the second link yields the cached binary's image bit for bit (M2 Pro, 1280×720 1×: Overview 45 → 14 ms, Bloom 103 → 39 ms, BLA Horizon 227 → 102 ms; BLA Abyss showed no difference, 81 vs 80 ms). WebKit's binary and SwiftShader's are the same either way; SwiftShader only pays about 30–120 ms more link time per program. In a cold-cache Bloom Ultra session at 3024×1624 (three alternating runs per build), the page completes in 7.3–8.3 s instead of 17.1–18.0 s, Ultra after an 8-tick wheel zoom in 7.2–7.7 s instead of 16.4–16.9 s and after a 300 px drag in 2.1–3.6 s instead of 5.1–5.3 s; live frames while moving are 21–38% of native width instead of 4–21%. The BLA program is linked twice as well: the two binaries round differently, and the Ultra atlas must stay byte-identical to the plain draw.
+- The deep suite's BLA speed check keeps its thresholds (Horizon ≥ 2.5×, 10⁻⁵⁵ ≥ 5×) and times a 960×576 frame, best of five, instead of 160×96: the faster plain program finished that in 1–3 ms, below timer resolution.
+- Pending strips of a native pan show the picture already on screen (usually the live frame), resampled into place, instead of blank tiles. Consecutive drags previously replaced a complete live image with up to 69% blank area that filled in tile by tile.
+
 ### Parallel perturbation Ultra samples — 2026-10-06
 
 - Compute 512-step perturbation Ultra samples in a bounded tile atlas and sum them in the original FP32 order, preserving AA16, adaptive edges, native dimensions and iteration caps.

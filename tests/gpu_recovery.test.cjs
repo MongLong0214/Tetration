@@ -24,3 +24,17 @@ test('a pending GPU fence rejects before teardown and retires only after complet
  await retired;
  assert.equal(deleted,1);assert.equal(lost,1);
 });
+
+test('orbit programs, the BLA one included, are linked twice so a first visit gets the program-cache binary',()=>{
+ const proto=globalThis.TetraGPU.prototype,made=[],deleted=[];
+ const renderer=()=>({gl:{deleteProgram:p=>deleted.push(p)},programs:{},blaMode:'auto',pendingBla:null,parallel:null,relink:proto.relink,link:()=>{const link={program:made.length};made.push(link);return link;}});
+ const plain=renderer(),bla=renderer(),pending=renderer();
+ assert.equal(proto.program.call(plain,'direct'),made[1]);
+ assert.deepEqual(deleted,[0]);
+ assert.equal(proto.program.call(plain,'direct'),made[1],'a linked program is reused');
+ assert.equal(proto.blaProgram.call(bla),made[3]);
+ assert.deepEqual(deleted,[0,2]);
+ pending.pendingBla={};pending.finishLink=()=>{const link={program:made.length};made.push(link);return link;};
+ assert.equal(proto.blaProgram.call(pending),made[5]);
+ assert.deepEqual(deleted,[0,2,4]);
+});

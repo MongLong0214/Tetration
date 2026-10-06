@@ -21,8 +21,8 @@
   const reducedMotion = matchMedia('(prefers-reduced-motion:reduce)');
   const coarsePointer = matchMedia('(pointer:coarse)').matches;
 
-  let view = parseView(presets[1]), visual = clone(view);
-  let palette = 0, iterationSetting = 'auto', engine = 'auto', quality = coarsePointer ? 4 : 16, grid = false, locationIndex = 1;
+  let view = parseView(presets[0]), visual = clone(view);
+  let palette = 0, iterationSetting = 'auto', engine = 'auto', quality = coarsePointer ? 4 : 16, grid = false, locationIndex = 0;
   let colorPhase = 0, flow = false, flowStarted = 0, flowFrame = 0, flowPaint = 0;
   let history = [], future = [], savedViews = [], coordinateDraft = false, toastTimer = 0;
   let dims = {w: 1, h: 1, dpr: 1};
@@ -577,16 +577,20 @@
       const cycle = live.cycle + 1, full = cycle >= interleave;
       return {accum: {mode: 1, frame, shift: [dx, dy]}, min: full ? Math.min(16, live.min + perFrame) : live.min, typical, cycle: full ? 0 : cycle};
     }
-    // Pixel centre of this frame -> texel coordinate of the shown frame, per axis (both images
-    // map world coordinates linearly with y up; spans as ratios keep this exact at any depth).
-    const hv = display.view, hsy = display.sy || 1, aspect = dims.h / dims.w, hSpan = num(hv.span);
+    const map = displayMap(at, size, sy);
+    if (!map) return none;
+    const trusted = Math.min(4, live ? live.typical : Math.max(1, info.samples));
+    return {accum: {mode: 2, frame, ...map, count: live ? 0 : Math.max(1, info.samples), cap: 4}, min: perFrame, typical: Math.min(16, trusted + perFrame / interleave), cycle: 0};
+  }
+  // Pixel centre of a frame (at, size, sy) -> texel coordinate of the shown frame, per axis (both images
+  // map world coordinates linearly with y up; spans as ratios keep this exact at any depth).
+  function displayMap(at, size, sy) {
+    const frame = display.frame, hv = display.view, hsy = display.sy || 1, aspect = dims.h / dims.w, hSpan = num(hv.span);
     const rx = num(at.span) / hSpan, ry = rx * sy / hsy;
     const ox = num(at.x - hv.x) / hSpan, oy = num(at.y - hv.y) / (hSpan * aspect * hsy);
     const scale = [rx * frame.width / size.width, ry * frame.height / size.height];
     const offset = [(ox - rx / 2 + 0.5) * frame.width, (oy - ry / 2 + 0.5) * frame.height];
-    if (![...scale, ...offset].every(Number.isFinite)) return none;
-    const trusted = Math.min(4, live ? live.typical : Math.max(1, info.samples));
-    return {accum: {mode: 2, frame, scale, offset, count: live ? 0 : Math.max(1, info.samples), cap: 4}, min: perFrame, typical: Math.min(16, trusted + perFrame / interleave), cycle: 0};
+    return [...scale, ...offset].every(Number.isFinite) ? {scale, offset} : null;
   }
   async function runStage(id, renderer, frame, scene, samples, onBatch, work = null) {
     const effective = renderer.effectiveIterations(scene, frame.width, frame.height);
@@ -698,6 +702,9 @@
         const frame = hold(renderer.beginFrame(target.width, target.height, reuse && s === 0 ? null : previous, stage.samples > 1));
         if (reuse && s === 0) {
           // The exposed strips stay pending, while every overlapping 16x sample is preserved.
+          // Until computed they keep the picture on screen (usually the live frame), not blank tiles.
+          const map = display.frame && display.renderer === renderer && display.canvas === gpuCanvas && display.info?.palette === scene.palette ? displayMap(renderView, frame, 1) : null;
+          if (map) renderer.copyScaled(frame, display.frame, map.scale, map.offset);
           renderer.copyShifted(frame, previous, reuse.dx, reuse.dy);
           show(renderer, frame, renderView, key, 1, {...reuse.item.info, samples: 0});
         }

@@ -77,10 +77,11 @@ def body():
             fidelity[name] = counts
         suite.record('BLA is as faithful to FP64 as plain FP32 perturbation in chaotic views', fidelity)
         # Automatic BLA renders deep views several times faster and keeps shallow ones on the plain program.
+        # Timed at app resolution, best of 5: a 160x96 frame took 1-3 ms on the faster plain program, below timer and fence resolution.
         page.evaluate('() => __tetraPixels.setBla("auto")')
         speed = {}
         for name, (x, y, s), n in [('Horizon 10^100', HORIZON, 4096), ('threshold 1e-55', ('1.3594182965158676173336178455', '2.2496614865153754494134386028', '1e-55'), 512), ('Plume 10^11', PLUME, 768)]:
-            speed[name] = page.evaluate('([x,y,s,n]) => __tetraPixels.bla(x,y,s,160,96,n)', [x, y, s, n])
+            speed[name] = page.evaluate('([x,y,s,n]) => __tetraPixels.bla(x,y,s,960,576,n,5)', [x, y, s, n])
         assert speed['Horizon 10^100']['levels'] > 0 and speed['Horizon 10^100']['speedup'] >= 2.5, speed
         assert speed['threshold 1e-55']['speedup'] >= 5 and speed['threshold 1e-55']['differing'] == 0, speed
         assert speed['Plume 10^11']['autoMs'] <= speed['Plume 10^11']['plainMs'] * 1.3 + 20, speed
