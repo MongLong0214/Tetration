@@ -7,7 +7,9 @@ suite = Suite('reuse', ['Chromium graphics on the local runner; no physical mobi
 VIEWS = json.loads((ROOT / 'tools/perf/views.json').read_text())
 HOOK = '''(() => {const timer=setInterval(()=>{if(!window.TetraGPU)return;clearInterval(timer);
  const prepare=TetraGPU.prototype.prepare;TetraGPU.prototype.prepare=function(f,s,n,...r){
- if(!s.accum){window.__nativeRenderer=this;window.__nativeScene=s;}return prepare.call(this,f,s,n,...r);};
+ if(!s.accum){window.__nativeRenderer=this;window.__nativeScene=s;window.__nativeCompute=false;}return prepare.call(this,f,s,n,...r);};
+ if(window.TetraCompute){const draw=TetraCompute.prototype.draw;TetraCompute.prototype.draw=function(r,f,s,...a){
+ window.__nativeRenderer=r;window.__nativeScene=s;window.__nativeCompute=true;return draw.call(this,r,f,s,...a);};}
  const copy=TetraGPU.prototype.copyShifted;TetraGPU.prototype.copyShifted=function(f,...a){copy.call(this,f,...a);
  const d=this.readFrame(f);let n=0;for(let i=0;i<d.length;i+=4)if(d[i]===6&&d[i+1]===6&&d[i+2]===6)n++;window.__blankPending=n;};},1);})()'''
 GRAB = '''() => {const c=document.querySelector('#gpuCanvas'),t=document.createElement('canvas');t.width=c.width;t.height=c.height;
@@ -49,9 +51,13 @@ def body():
                 a, b = (yy * after['w'] + left) * 4, ((yy - my) * before['w'] + left - mx) * 4
                 assert after['data'][a:a+length] == before['data'][b:b+length], (name, mx, my, yy)
             # The four-sample mean rounds once to RGBA8 before its 12 additional
-            # samples. Every new pixel must match a fresh 16x draw within one byte.
+            # samples. Every new pixel must match a fresh 16x draw by the same engine within one byte.
             diff = page.evaluate('''async([mx,my])=>{const r=__nativeRenderer,s=__nativeScene,W=r.canvas.width,H=r.canvas.height;
-             const f=r.beginFrame(W,H);for(const tile of TetraRender.tiles(W,H,16)){r.draw(f,tile,s,16,0);await r.fence();}
+             const f=r.beginFrame(W,H);
+             if(__nativeCompute){const c=await TetraCompute.create(),levels=s.mode==='perturb'?r.blaPolicy(f,s):0;let k='';
+              while(!(k=c.kernel(s,levels)))await new Promise(q=>setTimeout(q,50));
+              for(const tile of TetraRender.tiles(W,H,32))await c.draw(r,f,s,16,0,[tile],k,levels);c.destroy();}
+             else for(const tile of TetraRender.tiles(W,H,16)){r.draw(f,tile,s,16,0);await r.fence();}
              const expected=r.readFrame(f),c=document.querySelector('#gpuCanvas'),t=document.createElement('canvas');t.width=W;t.height=H;
              const g=t.getContext('2d');g.drawImage(c,0,0);const actual=g.getImageData(0,0,W,H).data;let worst=0;
              const left=Math.max(0,mx),right=Math.min(W,W+mx),top=Math.max(0,my),bottom=Math.min(H,H+my);

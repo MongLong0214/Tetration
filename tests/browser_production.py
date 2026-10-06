@@ -64,10 +64,16 @@ def body():
 
         open_app(page, CLOSE)
         page.evaluate('''()=>{const show=TetraGPU.prototype.presentFrame,fence=TetraGPU.prototype.fence;
-         TetraGPU.prototype.presentFrame=function(f,soft){const r=show.call(this,f,soft);if(soft&&!window.__softLatched)window.__holdSoft=true;return r;};
-         TetraGPU.prototype.fence=function(){const p=fence.call(this);
+         // A completed stage shown soft: the next batch draws into a new frame, so the screen stays as presented
+         // (a stage in progress keeps adding finished tiles to the frame on screen between presents).
+         TetraGPU.prototype.presentFrame=function(f,soft){const r=show.call(this,f,soft);
+          if(soft&&!window.__softLatched&&/100%$/.test(document.getElementById('loadingText').textContent))window.__holdSoft=true;return r;};
+         const hold=p=>{
           if(window.__holdInitial){__holdInitial=false;return p.then(()=>new Promise(r=>{window.__resumeInitial=r;}));}
           if(window.__holdSoft){__holdSoft=false;window.__softLatched=true;return p.then(()=>new Promise(r=>{window.__resumeSoft=r;}));}return p;};
+         TetraGPU.prototype.fence=function(){return hold(fence.call(this));};
+         // WebGPU final stages end each batch in its draw instead of a WebGL fence.
+         if(window.TetraCompute){const draw=TetraCompute.prototype.draw;TetraCompute.prototype.draw=function(...a){return hold(draw.apply(this,a));};}
          window.__holdInitial=true;}''')
         page.set_viewport_size({'width': 1280, 'height': 800})
         page.wait_for_function('()=>typeof window.__resumeInitial==="function" && tetraDiagnostics.renderStage==="detail"')

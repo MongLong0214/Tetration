@@ -139,6 +139,57 @@
       return {span, levels, reach, plainMs: Math.round(plain.ms), autoMs: Math.round(auto.ms), onMs: Math.round(forced.ms), speedup: +(plain.ms / auto.ms).toFixed(2),
         differing, total: W * H, blockDiff: +(blockDiff / (blocks * 3)).toFixed(2)};
     },
+    /* The WebGPU compute stages (1x, then 4x and 16x seeded and adaptive, in 32-pixel tile batches)
+     * against the WebGL programs drawing the same frames, and both 1x images against FP64. One
+     * accelerator serves every call, so consecutive calls switch kernels as the app does. null
+     * without WebGPU. */
+    async compute(cx, cy, span, W, H, iterations, mode) {
+      if (!('accelerator' in this)) this.accelerator = typeof TetraCompute === 'function' ? await TetraCompute.create() : null;
+      const c = this.accelerator;
+      if (!c) return null;
+      const built = scene(cx, cy, span, iterations, 0, mode), r = gpu(), s = built.scene;
+      const levels = mode === 'perturb' ? r.blaPolicy({width: W, height: H}, s) : 0;
+      let kernel = '';
+      for (let t = 0; t < 600 && !(kernel = c.kernel(s, levels)); t++) await new Promise(resolve => setTimeout(resolve, 50));
+      if (!kernel) return {error: 'kernel not ready', failed: c.failed};
+      const tiles = TetraRender.tiles(W, H, 32), stages = [];
+      let gl = null, wg = null;
+      for (const samples of [1, 4, 16]) {
+        const gf = r.beginFrame(W, H, gl, samples > 1), cf = r.beginFrame(W, H, wg, samples > 1);
+        r.prepare(gf, s, samples); for (const t of tiles) r.drawTile(gf, t);
+        for (let k = 0; k < tiles.length; k += 3) await c.draw(r, cf, s, samples, 0.035, tiles.slice(k, k + 3), kernel, levels);
+        c.complete(cf);
+        const a = r.readFrame(gf), b = r.readFrame(cf);
+        let differing = 0, blockDiff = 0, blocks = 0;
+        for (let k = 0; k < a.length; k += 4) if (a[k] !== b[k] || a[k + 1] !== b[k + 1] || a[k + 2] !== b[k + 2] || a[k + 3] !== b[k + 3]) differing++;
+        // Chaotic pixels differ with any change of FP32 rounding: compare 4x4 block averages as well.
+        for (let by = 0; by + 4 <= H; by += 4) for (let bx = 0; bx + 4 <= W; bx += 4, blocks++) for (let c = 0; c < 3; c++) {
+          let sa = 0, sb = 0;
+          for (let y = by; y < by + 4; y++) for (let x = bx; x < bx + 4; x++) { sa += a[(y * W + x) * 4 + c]; sb += b[(y * W + x) * 4 + c]; }
+          blockDiff += Math.abs(sa - sb) / 16;
+        }
+        stages.push({samples, differing, blockDiff: +(blockDiff / (blocks * 3)).toFixed(2), gl: samples === 1 ? a : null, wg: samples === 1 ? b : null});
+        if (gl) r.releaseFrame(gl); if (wg) r.releaseFrame(wg);
+        gl = gf; wg = cf;
+      }
+      r.releaseFrame(gl); r.releaseFrame(wg);
+      // FP64 mismatches (> 3/255 in a channel) of each 1x image.
+      let glWrong = 0, wgWrong = 0;
+      for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
+        const p = samplePoint(built.view, W, H, i, j);
+        let e;
+        if (mode === 'direct') e = TetraCore.orbitRules(Number(cx) + p.qx * Number(span), Number(cy) + p.qy * Number(span), iterations, TetraCore.RULES.gpu);
+        else {
+          const mirrored = p.y < 0n, my = mirrored ? -p.y : p.y;
+          e = TetraCore.perturb64(built.ref, F.number(p.x - built.point.x), F.number(my - built.point.y), iterations, TetraCore.RULES.gpu);
+          if (mirrored) e.im = -e.im;
+        }
+        const color = TetraCore.color(e.kind, e.steps, 0, e.re, e.im), k = (j * W + i) * 4;
+        if ([0, 1, 2].some(n => Math.abs(stages[0].gl[k + n] - color[n]) > 3)) glWrong++;
+        if ([0, 1, 2].some(n => Math.abs(stages[0].wg[k + n] - color[n]) > 3)) wgWrong++;
+      }
+      return {kernel, levels, batches: c.batches, stages: stages.map(({samples, differing, blockDiff}) => ({samples, differing, blockDiff})), glWrong, wgWrong, pixels: W * H};
+    },
     // Rows j and H-1-j sample conjugate points when the view is centred on the real axis.
     symmetry(cx, span, W, H, iterations, mode) {
       const built = scene(cx, '0', span, iterations, 3, mode), out = draw(built.scene, W, H);
@@ -191,7 +242,7 @@
     accumulate(cx, cy, span, W, H, iterations, mode, perFrame, interleave = false) {
       const built = scene(cx, cy, span, iterations, 0, mode), r = gpu();
       const unit = (mode === 'direct' ? built.scene.span : built.scene.spanMant) / W;
-      // Interleaved: a world-locked 2x2 pattern, one phase per frame, only for pixels with history.
+      // Interleaved: a world-locked 2x2 pattern of 8x8 blocks, one phase per frame, only for pixels with history.
       let phase = 0;
       const at = (shift, accum) => ({...built.scene, aspect: H / W, grid: {shift, step: [unit, unit]}, ...(accum ? {accum: interleave ? {...accum, phase: (phase = (phase + 1) & 3)} : accum} : {})});
       const render = (sc, samples) => { const f = r.beginFrame(W, H); r.draw(f, {x: 0, y: 0, width: W, height: H}, sc, samples); return f; };
@@ -204,7 +255,7 @@
         if (interleave && frames === 1) {
           // The first refinement adds samples exactly to the pixels of its phase.
           const px = r.readFrame(next);
-          for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (px[(y * W + x) * 4 + 3] !== ((x & 1) + 2 * (y & 1) === phase ? 2 : 1) * perFrame) phaseWrong++;
+          for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (px[(y * W + x) * 4 + 3] !== (((x >> 3) & 1) + 2 * ((y >> 3) & 1) === phase ? 2 : 1) * perFrame) phaseWrong++;
         }
         r.releaseFrame(prev); prev = next; frames++;
       }

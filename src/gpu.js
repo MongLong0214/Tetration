@@ -94,8 +94,10 @@
    seed=history(point);int n=int(seed.a);
    if(n>=16){pixel=vec4(seed.rgb,16./255.);return;}
    // Interleaved refinement: a pixel with history takes new samples on one frame in four
-   // (a world-locked 2x2 pattern), so a frame costs a quarter and can have four times the pixels.
-   if(uInterleave==1&&n>0){ivec2 a=ivec2(floor(point+uShift));if(((a.x&1)+2*(a.y&1))!=uPhase){pixel=vec4(seed.rgb,float(n)/255.);return;}}
+   // (a world-locked 2x2 pattern of 8x8 blocks), so a frame costs a quarter and can have four times
+   // the pixels. Whole blocks keep SIMD groups uniform: a 2x2 pixel pattern left three lanes of
+   // each quad idle and cost 70-90% of a full frame (measured).
+   if(uInterleave==1&&n>0){ivec2 a=ivec2(floor(point+uShift))>>3;if(((a.x&1)+2*(a.y&1))!=uPhase){pixel=vec4(seed.rgb,float(n)/255.);return;}}
    first=n;count=min(16,n+uSamples)-n;rgb=seed.rgb*float(n);weight=1./float(n+count);alpha=float(n+count)/255.;mode=1;
   }else{
    if(uAdaptive==1){
@@ -127,7 +129,7 @@
   float radius=length(c);int kind=0;float steps=float(uIterations);
   if(radius<1e-30){return palette(4,0.,vec2(0.));}
   vec2 l=vec2(log(radius),c.y==0.&&c.x<0.?3.141592653589793:atan(c.y,c.x));
-  vec2 w=vec2(1.,0.),old=vec2(0.);int fixedCount=0,periodCount=0;
+  vec2 w=vec2(1.,0.),old=vec2(0.),cycW=vec2(1e30);int fixedCount=0,periodCount=0,cycS=0,cycD=1;float sumA=0.,cycA=0.,logL=log(length(l));
   for(int i=1;i<=uIterations;i++){
    float a=w.x*l.x-w.y*l.y,b=w.x*l.y+w.y*l.x;
    if(isnan(a)||isnan(b)||isinf(a)||isinf(b)){kind=4;steps=float(i);break;}
@@ -136,6 +138,12 @@
    float r=exp(a);vec2 next=r*cosSin(b);float tol=uTol*(1.+r);
    fixedCount=length(next-w)<tol?fixedCount+1:0;
    periodCount=i>2&&length(next-old)<tol?periodCount+1:0;
+   // A near return to the Brent checkpoint over which the orbit contracted at least 4x is an attracting
+   // cycle: it can no longer escape, and its period (>2, or the counters above would be running) keeps
+   // it unresolved at the cap, whose colour does not depend on w. Deep perturbation views measured slower with it.
+   sumA+=a;
+   if(i-cycS>2&&fixedCount==0&&periodCount==0&&length(next-cycW)<tol&&sumA-cycA+float(i-cycS)*logL<-1.3863&&length(next-w)>=4.*tol&&length(next-old)>=4.*tol){steps=float(uIterations);break;}
+   if(i-cycS>=cycD){cycW=next;cycA=sumA;cycS=i;cycD*=2;}
    old=w;w=next;
    if(fixedCount>=8){kind=1;steps=float(i);break;}
    if(periodCount>=12){kind=2;steps=float(i);break;}
@@ -430,6 +438,8 @@ ${orbitLoop}` + perturbTail;
       this.bits = gl.getShaderPrecisionFormat(gl.FRAGMENT_SHADER, gl.HIGH_FLOAT)?.precision || 0;
       if (this.bits < 23) throw Error('Insufficient fragment precision');
       this.maxTexture = gl.getParameter(gl.MAX_TEXTURE_SIZE);
+      // Synchronous links so far: a draw that had to link measures the link, not the device's throughput.
+      this.links = 0;
       this.preciseTrig = this.probeTrig();
       // Link only the orbit program this view needs. A shallow first view should
       // not wait for the larger perturbation shader (and vice versa).
@@ -493,7 +503,7 @@ ${orbitLoop}` + perturbTail;
       for (const name of names) uniforms[name] = gl.getUniformLocation(program, 'u' + name);
       return {program, uniforms};
     }
-    link(fragmentSource, names) { return this.finishLink(this.startLink(fragmentSource), names); }
+    link(fragmentSource, names) { this.links++; return this.finishLink(this.startLink(fragmentSource), names); }
     setNearest() {
       const gl = this.gl;
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
@@ -512,7 +522,7 @@ ${orbitLoop}` + perturbTail;
       gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, this.referenceTexture);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, 1024, rows, 0, gl.RGBA, gl.FLOAT, data);
       this.setNearest(); gl.activeTexture(gl.TEXTURE0);
-      this.reference = ref;
+      this.reference = ref; this.referenceData = data;
     }
     program(name) {
       if (name === 'perturbBla') return this.blaProgram();
@@ -607,7 +617,7 @@ ${orbitLoop}` + perturbTail;
       gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, this.blaTexture);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, 1024, rows, 0, gl.RGBA, gl.FLOAT, data);
       this.setNearest(); gl.activeTexture(gl.TEXTURE0);
-      Object.assign(this.bla, {levels: table.levels, reach: TetraCore.blaReach(table, ref), base: Int32Array.from({length: 16}, (_, j) => table.base[j] || 0)});
+      Object.assign(this.bla, {levels: table.levels, reach: TetraCore.blaReach(table, ref), base: Int32Array.from({length: 16}, (_, j) => table.base[j] || 0), data});
       return this.bla;
     }
     // Expected plain steps per pixel, for sizing draws: BLA skips most of a deep approach.
@@ -615,9 +625,8 @@ ${orbitLoop}` + perturbTail;
       if (scene.mode !== 'perturb' || !this.blaLevels({width, height}, scene, false)) return scene.iterations;
       return Math.max(64, Math.round(scene.iterations - 0.75 * Math.min(this.bla.reach, scene.iterations)));
     }
-    // BLA levels to use for a perturbation draw into this frame (0 = plain program).
-    // allowLink = false (live frames): never compile here; use BLA only once its program exists.
-    blaLevels(frame, scene, allowLink = true) {
+    // BLA levels worth using for this frame's view (0 = none), whether or not a program can apply them.
+    blaPolicy(frame, scene) {
       if (this.blaMode === 'off') return 0;
       // Largest |dL| over the frame plus 2% of the span for subpixel samples (half a pixel
       // at 25 px and wider), the same for every frame size so live frames share the table.
@@ -629,11 +638,16 @@ ${orbitLoop}` + perturbTail;
       if (!(dL < Infinity)) return 0;
       const bla = this.useBla(scene.ref, scene.rules, dL);
       // Worth the larger program only when the edge pixel alone skips a quarter of a typical orbit.
-      if (!bla.levels || (this.blaMode === 'auto' && bla.reach < Math.max(32, 0.25 * Math.min(scene.ref.length, scene.iterations)))) return 0;
-      if (this.programs.perturbBla) return bla.levels;
+      return !bla.levels || (this.blaMode === 'auto' && bla.reach < Math.max(32, 0.25 * Math.min(scene.ref.length, scene.iterations))) ? 0 : bla.levels;
+    }
+    // BLA levels to use for a perturbation draw into this frame (0 = plain program).
+    // allowLink = false (live frames): never compile here; use BLA only once its program exists.
+    blaLevels(frame, scene, allowLink = true) {
+      const levels = this.blaPolicy(frame, scene);
+      if (!levels || this.programs.perturbBla) return levels;
       // Parallel-compile drivers start the link in the background and keep the plain program until it is ready.
       if (this.parallel && !this.pendingBla && this.blaMode !== 'on') { this.pendingBla = this.startLink(perturbBla); return 0; }
-      return (allowLink || this.pendingBla) && this.blaProgram() ? bla.levels : 0;
+      return (allowLink || this.pendingBla) && this.blaProgram() ? levels : 0;
     }
     // WebKit can retain the drawing-buffer attachment for a recycled FBO.
     // Reconnect its texture before reads, copies and draws; refreshing only the
@@ -667,7 +681,7 @@ ${orbitLoop}` + perturbTail;
         this.live++;
       }
       frame.seed = adaptive ? seed : null;
-      frame.aaMaskThreshold = null; frame.aaMaskFlat = false;
+      frame.aaMaskThreshold = null; frame.aaMaskFlat = false; frame.computed = null;
       if (seed) {
         gl.bindFramebuffer(gl.READ_FRAMEBUFFER, seed.buffer); gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, frame.buffer);
         gl.blitFramebuffer(0, 0, seed.width, seed.height, 0, 0, width, height, gl.COLOR_BUFFER_BIT, seed.width === width && seed.height === height ? gl.NEAREST : gl.LINEAR);

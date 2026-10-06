@@ -49,7 +49,7 @@ def body():
             r = page.evaluate('(a) => __tetraPixels.accumulate(...a)', args)
             assert r['phaseWrong'] == 0 and r['frames'] == 61 and r['notSixteen'] == 0, (name, r)
             assert r['worst'] <= 3 and r['mean'] < 0.6 and r['stillDiff'] == 0 and r['overlapDiff'] == 0 and r['revealedWrong'] == 0, (name, r)
-            suite.record('Interleaved live refinement updates one 2x2 phase per frame and converges to the 16-sample image: ' + name, r)
+            suite.record('Interleaved live refinement updates one phase of 8x8 blocks per frame and converges to the 16-sample image: ' + name, r)
 
         worst = page.evaluate('() => __tetraPixels.seams("-2.5","0","1.8",192,128,384,"direct",4)')
         assert worst == 0, worst

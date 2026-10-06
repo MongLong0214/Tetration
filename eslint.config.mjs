@@ -5,8 +5,9 @@ const browser = {window: 'readonly', document: 'readonly', navigator: 'readonly'
   matchMedia: 'readonly', requestAnimationFrame: 'readonly', cancelAnimationFrame: 'readonly', setTimeout: 'readonly', clearTimeout: 'readonly',
   performance: 'readonly', devicePixelRatio: 'readonly', ResizeObserver: 'readonly', MutationObserver: 'readonly', Worker: 'readonly', Blob: 'readonly', File: 'readonly',
   URL: 'readonly', URLSearchParams: 'readonly', ImageData: 'readonly', createImageBitmap: 'readonly', OffscreenCanvas: 'readonly', MessageChannel: 'readonly',
-  DOMException: 'readonly', Event: 'readonly', fetch: 'readonly', console: 'readonly', globalThis: 'readonly', queueMicrotask: 'readonly', Response: 'readonly', caches: 'readonly', self: 'readonly'};
-const tetra = {createFixed: 'readonly', TetraCore: 'readonly', TetraReference: 'readonly', TetraGPU: 'readonly', TetraRender: 'readonly', TetraSaved: 'readonly'};
+  DOMException: 'readonly', Event: 'readonly', fetch: 'readonly', console: 'readonly', globalThis: 'readonly', queueMicrotask: 'readonly', Response: 'readonly', caches: 'readonly', self: 'readonly',
+  GPUBufferUsage: 'readonly', GPUMapMode: 'readonly'};
+const tetra = {createFixed: 'readonly', TetraCore: 'readonly', TetraReference: 'readonly', TetraGPU: 'readonly', TetraRender: 'readonly', TetraSaved: 'readonly', TetraCompute: 'readonly'};
 const rules = {
   'no-undef': 'error', 'no-unused-vars': ['error', {args: 'none', caughtErrors: 'none'}], 'no-redeclare': 'error', 'no-dupe-keys': 'error',
   'no-unreachable': 'error', 'no-self-assign': 'error', 'no-self-compare': 'error', 'no-unsafe-finally': 'error', 'no-const-assign': 'error',

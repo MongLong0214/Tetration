@@ -91,6 +91,7 @@ FP32 perturbation (with or without BLA) reproduces FP64 perturbation pixel for p
 ## Rendering, speed and privacy
 
 - **WebGL2 / GLSL ES 3.0** renders GPU views in bounded tiles. Batches adapt to the measured speed (about 14 ms); split AA also fences each orbit submission. An asynchronous GPU mask skips submissions only when the existing adaptive predicate rejects every pixel; forced new pan strips always calculate their samples. Automatic selects FP64 Workers for dense high-cap views to avoid observed native compositor stalls. Once you reach perturbation depths, the BLA program compiles in a quiet moment (or in the background where the driver supports parallel compilation), so deep views rarely wait for it and gestures are never interrupted by it. Every orbit program, BLA included, is linked twice: on ANGLE Metal a program's first link gives a binary measured 2.2–3.7× slower than the program-cache hit returning visitors receive, and the two round differently. The second link gives first visits the same image returning visitors see and keeps the Ultra atlas byte-identical to the plain draw.
+- **WebGPU compute** (where the browser offers it) computes the final 1×, 4× and 16× stages; WebGL2 keeps live frames, presentation and every fallback. Batches of tiles become one queue of samples: perturbation pixels run their BLA and floatexp approach one thread per sample, then persistent threads take the plain steps from a shared atomic queue, so a lane that finishes early takes the next sample instead of idling beside a long orbit. Results are uploaded into the same WebGL frames, and each stage's output stays on the GPU as the next stage's adaptive seed. Any WebGPU error hands the stage back to the WebGL programs.
 - While the camera moves, single-sample frames are rendered at the resolution the GPU can finish within about 12 ms and displayed immediately; wheel zoom glides and drags carry inertia. After a pause the view refines: full-resolution single sample, then adaptive 4× and 16× samples where edges are detected. A pan keeps every completed overlapping sample and computes only the exposed strips; until they finish, those strips show the picture already on screen instead of blank tiles.
 - Without WebGL2, or after a GPU loss, a persistent pool of 1–8 Workers renders FP64 (direct or perturbation); pixel buffers and software-preferred Canvas2D keep CPU computation independent of a stalled GPU. A restored GPU context is used again automatically.
 - No framework, runtime dependency, external computation API, analytics or login. Saved views are written only after an explicit save/remove action. The service worker only caches the app's own files (network first).
@@ -131,7 +132,7 @@ npm run test:webkit
 | `npm test` | Reference orbits vs decimal BigInt, FP64 perturbation vs exact orbits, BLA tables and skipping, Workers, discovery, CSP/build/server/offline shell, saved views, rendering utilities |
 | `test:browser` | Core flows, CSP enforcement, exact links, limits, mobile focus and touch |
 | `test:release` | Served headers and bytes, reference pixels, engine switching, GPU loss/restore, degraded features, offline reload |
-| `test:deep` | GPU perturbation (plain and BLA) vs FP64 and exact orbits, BLA speed, full resolution at every depth, symmetry, seams, reference reuse, deep zoom session |
+| `test:deep` | GPU perturbation (plain and BLA) vs FP64 and exact orbits, BLA speed, full resolution at every depth, symmetry, seams, reference reuse, deep zoom session, WebGPU stages vs WebGL and FP64 |
 | `test:quality` | Antialiasing error vs 64-sample references, live-frame accumulation, grid lock, glide, inertia, reduced motion, colour flow |
 | `test:explorer` | Saved views, history, shortcuts, discovery, sharing, fallbacks, viewports, axe-core |
 | `test:perf` | First frame, live-frame cadence, main-thread long tasks, reference speed, resource leaks |
@@ -152,6 +153,7 @@ npm run test:webkit
 | `src/reference.js` | Binary fixed-point reference orbits for perturbation |
 | `src/core.js`, `src/precision.js` | Orbit classification (FP64, perturbation, exact), palettes, discovery, decimal arithmetic |
 | `src/gpu.js`, `src/render.js` | WebGL2 direct and perturbation shaders, frames and tiles; resolution and scene utilities |
+| `src/compute.js` | WebGPU compute kernels for the final stages (direct, perturbation approach and persistent plain steps) |
 | `src/worker.js`, `src/saved.js` | Reference/tile/discovery Worker and validated local saved views |
 | `src/sw.js`, `src/manifest.webmanifest`, `src/assets/` | Offline shell and app icons |
 | `src/index.html`, `src/style.css` | Interface around the map |

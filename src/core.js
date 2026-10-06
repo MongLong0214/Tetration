@@ -372,9 +372,28 @@
     float m=min(log2(1.+length(w)),3.);float angle=abs(w.y)>1e-37?atan(w.y,w.x):(w.x<0.?3.14159265359:0.);
     return ramp(.59+angle/6.28318530718*.5+m*.12)*(.14+m*.07);
   }`;
+  // The same palette for the WebGPU compute kernels (uniform struct p).
+  const paletteWGSL=`
+  fn ramp(t:f32)->vec3f{
+    var stops=array<vec3f,8>(${vectors('vec3f',0)});
+    if(p.palette==1){stops=array<vec3f,8>(${vectors('vec3f',1)});}
+    if(p.palette==2){stops=array<vec3f,8>(${vectors('vec3f',2)});}
+    let q=fract(t)*8.;let i=i32(floor(q));var k=fract(q);k=k*k*(3.-2.*k);
+    return mix(stops[i],stops[(i+1)%8],k)/255.;
+  }
+  fn palette(kind:i32,steps:f32,w:vec2f)->vec3f{
+    let s=max(steps,1.);
+    if(p.palette==3){var v=6.;if(kind==3){v=48.+184.*(.5-.5*cos(fract(log2(s+1.)*.2801+s/160.)*6.28318530718));}else if(kind==1){v=18.;}else if(kind==2){v=32.;}else if(kind==4){v=86.;}return vec3f(v/255.);}
+    if(kind==4){return vec3f(42.,31.,47.)/255.;}
+    if(kind==0){return vec3f(10.,9.,24.)/255.;}
+    if(kind==3){return ramp(log2(s+1.)*.42+s/160.+.08);}
+    if(kind==2){return ramp(.27)*.22;}
+    let m=min(log2(1.+length(w)),3.);var angle=select(0.,3.14159265359,w.x<0.);if(abs(w.y)>1e-37){angle=atan2(w.y,w.x);}
+    return ramp(.59+angle/6.28318530718*.5+m*.12)*(.14+m*.07);
+  }`;
   /* Linearisation bounds per engine: about one rounding unit of the arithmetic that
    * applies the table (FP32 mantissas on the GPU, FP64 in Workers). */
   const BLA_EPS = { gpu: 2 ** -24, cpu: 2 ** -53 };
-  root.TetraCore = { STATUS, AA, RULES, LOG_R, BLA_EPS, orbit64, orbitRules, perturb64, blaTable, blaReach, offsetBound, logOffsetBound, cdiv, discover, makePreciseOrbit, color, paletteGLSL };
+  root.TetraCore = { STATUS, AA, RULES, LOG_R, BLA_EPS, orbit64, orbitRules, perturb64, blaTable, blaReach, offsetBound, logOffsetBound, cdiv, discover, makePreciseOrbit, color, paletteGLSL, paletteWGSL };
   if (typeof module !== 'undefined') module.exports = root.TetraCore;
 })(globalThis);

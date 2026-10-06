@@ -200,6 +200,38 @@ def body():
         info = open_app(page, 'v=1&x=0.500000000000000000000000000001&y=0&s=1e-30&e=exact&n=128', 'exact')
         assert info['lastCompleted']['width'] <= 72
         suite.record('Exact per-pixel mode still renders deep views', info['lastCompleted']['width'])
+
+        # 13. WebGPU compute stages against the WebGL programs and FP64 (pages above hide WebGPU).
+        gpu_page = suite.watch(browser.new_page(viewport={'width': 480, 'height': 320}))
+        open_app(gpu_page, 'v=1&x=0.5&y=0&s=1&q=1')
+        gpu_page.evaluate(PIXELS)
+        compute_views = [
+            ('direct overview', '-2.5', '0', '1.8', 384, 'direct'),
+            ('plain perturbation at 5e-11', *PLUME, 1024, 'perturb'),
+            ('BLA perturbation at 7e-25', *ABYSS, 4096, 'perturb'),
+            ('cycle-skipping perturbation at 1e-9', '-2.5', '0', '1e-9', 8192, 'perturb'),
+            # Back to direct after the perturbation kernels: another kernel's lane state must not leak in.
+            ('direct overview after perturbation', '-2.5', '0', '1.8', 384, 'direct'),
+        ]
+        for name, x, y, s, n, mode in compute_views:
+            r = gpu_page.evaluate('async ([x,y,s,n,m]) => __tetraPixels.compute(x,y,s,96,64,n,m)', [x, y, s, n, mode])
+            if r is None:
+                suite.report['limitations'].append('WebGPU is unavailable in this browser environment; the compute path is unqualified here.')
+                break
+            assert 'error' not in r and r['batches'] > 0, (name, r)
+            # A different compiler may round FP32 steps differently from the WebGL program, which changes chaotic
+            # pixels (as between any two finite-precision engines): their block averages and their agreement with
+            # FP64 must stay within the bounds above. On Chromium direct views are bit-identical; WebKit's WebGL
+            # is closer to FP64 than either engine there (1x mismatches 302 against 365, Chromium 364 / 364).
+            if mode == 'direct':
+                if os.environ.get('TETRA_BROWSER') != 'webkit':
+                    assert all(st['differing'] == 0 for st in r['stages']), (name, r)
+                assert all(st['blockDiff'] <= 5 for st in r['stages']) and r['wgWrong'] <= r['pixels'] * 0.15, (name, r)
+            else:
+                # The chaotic-view bound against FP64 above. Measured 1x / 4x / 16x: 7.2 / 4.1 / 2.1 at 5e-11 and
+                # 10.6 / 5.1 / 2.6 at 7e-25, where WebGL against FP64 is 9.3 and 10.8.
+                assert all(st['blockDiff'] <= 18 for st in r['stages']) and r['wgWrong'] <= r['glWrong'] * 1.1 + 4, (name, r)
+            suite.record('WebGPU 1x/4x/16x stages match WebGL and FP64: ' + name, r)
         suite.no_errors()
         browser.close()
 

@@ -26,7 +26,8 @@
   let colorPhase = 0, flow = false, flowStarted = 0, flowFrame = 0, flowPaint = 0;
   let history = [], future = [], savedViews = [], coordinateDraft = false, toastTimer = 0;
   let dims = {w: 1, h: 1, dpr: 1};
-  let gpu = null, gpuFailure = '', serial = 0, jobSerial = -1, settleTimer = 0, currentMode = 'gpu';
+  // compute: the WebGPU accelerator for final stages (null until ready, or without WebGPU).
+  let gpu = null, compute = null, gpuFailure = '', serial = 0, jobSerial = -1, settleTimer = 0, currentMode = 'gpu';
   let lastRenderComplete = false, lastCompletedInfo = null, renderStage = 'initial', started = 0, workerTransfer = 'pixels';
   let gpuBusy = false, interactiveFrame = 0, interactivePending = false, interactiveCount = 0;
   const rates = new Map(), idleWaiters = [];
@@ -440,7 +441,11 @@
     return {x: snap(v.x, px), y: snap(v.y, py), span: v.span};
   }
   function interactiveSize(renderer, scene, target = targetSize(renderer), samples = 1, interleave = 1) {
-    const rate = (rates.get(rateKey(scene, samples)) ?? (rates.get(rateKey(scene, 1)) ?? rates.get('tile|' + rateKey(scene, 1)) ?? 60) / samples);
+    // Before a live frame of this cap is measured: a quarter of the WebGPU stage's rate (it finishes the
+    // same pixels about four times faster than these WebGL frames; its WebGL tiles were only the tiny
+    // preview's), else the final tiles' rate.
+    const compute = rates.get('compute|' + rateKey(scene, 1));
+    const rate = (rates.get(rateKey(scene, samples)) ?? (rates.get(rateKey(scene, 1)) ?? (compute ? compute / 4 : rates.get('tile|' + rateKey(scene, 1)) ?? 60)) / samples);
     // Slow GPUs (deep views on weak hardware) drop to coarser frames rather than stall the compositor.
     const floor = rate * FRAME_MS * 4 >= 8192 ? 8192 : 2048;
     // Cap one draw's orbit work so a sudden jump in cost cannot stall the GPU (driver watchdogs).
@@ -515,7 +520,7 @@
     // Same camera and every pixel already holds its 16 samples: nothing left to refine.
     if (display.frame && display.key === key && display.info?.live && display.info.live.min >= 16) return;
     setGPUBusy(true);
-    const t0 = performance.now();
+    const t0 = performance.now(), links = renderer.links;
     let frame = null, spent = 0;
     try {
       frame = renderer.beginFrame(size.width, size.height);
@@ -527,12 +532,15 @@
       // A shifted history skips converged pixels, so its frames overstate the rate: they may only
       // lower the estimate. Frames that sample every pixel measure it.
       // Interleaved frames compute about a quarter of the pixels that have history.
+      // A frame that linked a program measures nothing (the first deep frame after WebGPU final stages).
       const fresh = scene.accum.mode !== 1, k = rateKey(scene, plan.samples), measured = size.width * size.height / (scene.accum.mode ? plan.interleave : 1) / ms;
-      if (fresh || measured < (rates.get(k) ?? Infinity)) rates.set(k, rates.has(k) ? rates.get(k) * 0.5 + measured * 0.5 : measured);
-      // Re-plan only when far off budget: three slow frames in a row (a single hitch, such as a
-      // garbage collection, keeps the plan) or one very slow frame; faster only from a fresh frame.
-      plan.over = ms > FRAME_MS * 2.5 ? (plan.over || 0) + 1 : 0;
-      if (plan.over >= 3 || ms > FRAME_MS * 8 || (fresh && ms < FRAME_MS * 0.35 && !plan.full)) plan.stale = true;
+      if (renderer.links === links) {
+        if (fresh || measured < (rates.get(k) ?? Infinity)) rates.set(k, rates.has(k) ? rates.get(k) * 0.5 + measured * 0.5 : measured);
+        // Re-plan only when well off budget: three slow frames in a row (a single hitch, such as a
+        // garbage collection, keeps the plan) or one very slow frame; faster only from a fresh frame.
+        plan.over = ms > FRAME_MS * 1.5 ? (plan.over || 0) + 1 : 0;
+        if (plan.over >= 3 || ms > FRAME_MS * 8 || (fresh && ms < FRAME_MS * 0.5 && !plan.full)) plan.stale = true;
+      }
       // A final render (including an immediate cache restore) owns the screen now.
       // A slow live draw from before navigation must not replace its completed image
       // or switch a CPU render back to the GPU canvas. Camera-only changes may still
@@ -593,6 +601,18 @@
     return [...scale, ...offset].every(Number.isFinite) ? {scale, offset} : null;
   }
   async function runStage(id, renderer, frame, scene, samples, onBatch, work = null) {
+    if (compute && !compute.failed) {
+      const levels = scene.mode === 'perturb' ? renderer.blaPolicy(frame, scene) : 0, kernel = compute.kernel(scene, levels);
+      if (kernel && compute.seedSlot(frame) === null && frame.seed.width === frame.width && frame.seed.height === frame.height) compute.adopt(renderer, frame.seed);
+      if (kernel && compute.seedSlot(frame) !== null) {
+        try { return await computeStage(id, renderer, frame, scene, samples, onBatch, work, kernel, levels); }
+        catch (error) {
+          if (renderer.lost()) throw error;
+          // The WebGL programs redraw the whole stage.
+          compute.failed = true; console.warn('WebGPU compute unavailable:', error?.message || error);
+        }
+      }
+    }
     const effective = renderer.effectiveIterations(scene, frame.width, frame.height);
     const workCap = 8e7;
     const highCap = scene.iterations >= 8192;
@@ -625,7 +645,7 @@
       for (;;) { if (!gpuBusy) break; await gpuIdle(); }
       if (id !== serial) return false;
       setGPUBusy(true);
-      const t0 = performance.now();
+      const t0 = performance.now(), links = renderer.links;
       try {
         if (partial) {
           for (const t of batch) if (!(await renderer.drawAATile(frame, t, scene, () => id !== serial || renderer !== gpu, work ? 0 : undefined, samples))) return false;
@@ -639,12 +659,46 @@
         }
       } finally { setGPUBusy(false); }
       const ms = Math.max(0.5, performance.now() - t0), measured = pixels / ms;
-      rates.set(tileKey, measured);
+      if (renderer.links === links) {
+        rates.set(tileKey, measured);
+        budget = ms > 3 * BATCH_MS ? edge * edge : Math.min(area, maxPixels, 2 * pixels, Math.max(edge * edge, measured * BATCH_MS));
+      }
+      if (interactivePending) { interactivePending = false; requestInteractive(); }
+      if (id !== serial) return false;
+      onBatch?.(index / tiles.length, index === tiles.length);
+    }
+    return true;
+  }
+  // runStage on the WebGPU accelerator: one dispatch per batch, so whole batches run as one queue of samples.
+  async function computeStage(id, renderer, frame, scene, samples, onBatch, work, kernel, levels) {
+    const effective = levels ? Math.max(64, Math.round(scene.iterations - 0.75 * Math.min(renderer.bla.reach, scene.iterations))) : scene.iterations;
+    const edge = Math.min(256, 2 * tileEdge(effective, samples)), key = 'compute|' + rateKey(scene, samples);
+    const tiles = work ? TetraRender.exposedTiles(frame.width, frame.height, work.dx, work.dy, edge) : TetraRender.tiles(frame.width, frame.height, edge);
+    const area = frame.width * frame.height;
+    // As in runStage: a dense basin after cheap tiles stays bounded (here ~0.1 s of orbit work at the worst).
+    const maxPixels = Math.min(Math.floor(compute.capacity(kernel) / samples), Math.max(edge * edge, Math.floor(4e9 / (effective * samples))));
+    let budget = Math.max(edge * edge, Math.min(maxPixels, 4 * edge * edge, (rates.get(key) ?? (rates.get('tile|' + rateKey(scene, samples)) ?? 60) * 4) * BATCH_MS));
+    let index = 0;
+    while (index < tiles.length) {
+      if (id !== serial || renderer !== gpu) return false;
+      const batch = [];
+      let pixels = 0;
+      do { const t = tiles[index++]; batch.push(t); pixels += t.width * t.height; } while (index < tiles.length && pixels + tiles[index].width * tiles[index].height <= budget);
+      for (;;) { if (!gpuBusy) break; await gpuIdle(); }
+      if (id !== serial) return false;
+      setGPUBusy(true);
+      const t0 = performance.now();
+      try { await compute.draw(renderer, frame, scene, samples, work ? 0 : 0.035, batch, kernel, levels); }
+      finally { setGPUBusy(false); }
+      const ms = Math.max(0.5, performance.now() - t0), measured = pixels / ms;
+      rates.set(key, measured);
       budget = ms > 3 * BATCH_MS ? edge * edge : Math.min(area, maxPixels, 2 * pixels, Math.max(edge * edge, measured * BATCH_MS));
       if (interactivePending) { interactivePending = false; requestInteractive(); }
       if (id !== serial) return false;
       onBatch?.(index / tiles.length, index === tiles.length);
     }
+    // Only a whole frame can seed the next stage from its WebGPU copy (a reuse pass computes just the strips).
+    if (!work) compute.complete(frame);
     return true;
   }
   async function gpuJob(id, v, mode, ref) {
@@ -667,7 +721,8 @@
     const drop = frame => { if (held.delete(frame)) unpin(renderer, frame); };
     /* Over an antialiased picture (a converged live frame) single-sample stages would flash
      * noise. They are shown soft (the 2x2 average) where that is sharper than the picture on
-     * screen — the 1x stage once complete, the 4x stage while it fills in — and held back
+     * screen — while they fill in, the 1x stage only once it starts from that picture
+     * (finished tiles then sharpen it centre first; others would be blank) — and held back
      * otherwise until antialiased. The last stage always appears. */
     const keepSmooth = display.renderer === renderer && display.canvas === gpuCanvas && !!display.info?.smooth && display.info.palette === scene.palette;
     const softer = keepSmooth && !!display.frame && display.frame.width < target.width * 0.5;
@@ -708,6 +763,12 @@
           renderer.copyShifted(frame, previous, reuse.dx, reuse.dy);
           show(renderer, frame, renderView, key, 1, {...reuse.item.info, samples: 0});
         }
+        // A 1x stage over the live picture starts from it (resampled), so finished tiles can sharpen it.
+        let seeded = !!previous;
+        if (!reuse && s === 0 && !previous && keepSmooth) {
+          const map = displayMap(renderView, frame, 1);
+          if (map) { renderer.copyScaled(frame, display.frame, map.scale, map.offset); seeded = true; }
+        }
         let lastPresented = 0;
         const ok = await runStage(id, renderer, frame, scene, stage.samples, (fraction, last) => {
           setProgress((s + 1 + fraction) / total * 100);
@@ -716,7 +777,7 @@
           const smooth = stage.samples >= 4 && (last || smoothBase || !!reuse), final = last && s === stages.length - 1;
           let soft = false;
           if (keepSmooth && !smooth && !final) {
-            if (!softer || (stage.samples === 1 && !last)) return;
+            if (!softer || (stage.samples === 1 && !last && !seeded)) return;
             soft = true;
           }
           const now = performance.now();
@@ -1425,6 +1486,9 @@
   // number per second while visible; only an actual density change reads layout.
   window.setInterval(() => { if (!document.hidden && displayDensity() !== dims.dpr) onDensity(); }, 1000);
   function startGPU() {
+    if (!compute && typeof TetraCompute === 'function' && window.TETRA_COMPUTE !== false) {
+      TetraCompute.create().then(accelerator => { compute = accelerator; }, error => { console.warn('WebGPU unavailable:', error?.message || error); });
+    }
     try { gpu = new TetraGPU(gpuCanvas); gpuFailure = ''; return true; }
     catch (error) { gpu = null; gpuFailure = String(error.message); console.warn('WebGL2 unavailable; using Worker FP64.', error.message); return false; }
   }
@@ -1465,5 +1529,6 @@
     retainedDetail: retainedDetail ? {width: detailCanvas.width, height: detailCanvas.height, view: serialize(retainedDetail.view)} : null,
     blaCompile: gpu ? {pending: !!gpu.pendingBla, warmed: gpu.warmed, error: gpu.blaError} : null,
     bla: gpu?.bla ? {levels: gpu.bla.levels, reach: gpu.bla.reach, compiled: !!gpu.programs.perturbBla, mode: gpu.blaMode} : null, blaReady: !!gpu?.programs.perturbBla, displayView: display.view && serialize(display.view), displayCanvas: display.canvas.id, liveSamples: livePlan ? livePlan.samples : 0, liveInterleave: livePlan ? livePlan.interleave : 0, liveSize: livePlan ? [livePlan.width, livePlan.height] : null, liveMin: display.info?.live ? display.info.live.min : null, displaySmooth: !!display.info?.smooth, displaySoft: !!display.soft, perturbWarm: !!gpu?.perturbWarm, preciseTrig: !!gpu?.preciseTrig,
+    compute: compute ? {failed: compute.failed, batches: compute.batches, ready: Object.keys(compute.pipelines), preciseTrig: compute.precise} : null,
   })});
 })();
