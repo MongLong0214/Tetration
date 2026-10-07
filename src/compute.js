@@ -617,6 +617,7 @@
       this.batches++;
     }
     destroy() {
+      this.failed = true;
       for (const buffer of Object.values(this.buffers || {})) buffer?.destroy();
       for (const slot of this.slots) slot.buffer?.destroy();
       this.device.destroy();

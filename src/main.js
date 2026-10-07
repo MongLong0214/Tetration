@@ -546,7 +546,8 @@
         } catch (error) {
           if (renderer.lost()) throw error;
           // The WebGL programs draw this frame and every later one.
-          compute.failed = true; accel = null; console.warn('WebGPU compute unavailable:', error?.message || error);
+          // Free the device's buffers (up to about 200 MB), which would otherwise stay allocated beside the WebGL fallback.
+          compute.destroy(); accel = null; console.warn('WebGPU compute unavailable:', error?.message || error);
         }
       }
       if (!accel) {
@@ -636,7 +637,7 @@
         catch (error) {
           if (renderer.lost()) throw error;
           // The WebGL programs redraw the whole stage.
-          compute.failed = true; console.warn('WebGPU compute unavailable:', error?.message || error);
+          compute.destroy(); console.warn('WebGPU compute unavailable:', error?.message || error);
         }
       }
     }

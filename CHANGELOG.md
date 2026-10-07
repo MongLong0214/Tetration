@@ -1,5 +1,9 @@
 # Changelog
 
+### WebGPU fallback frees its device — 2026-10-07
+
+- When a WebGPU error hands the stage or the live frames back to WebGL, the accelerator's device is now destroyed instead of only marked failed, so its sample, lane and slot buffers (up to about 200 MB) no longer stay allocated beside the WebGL programs for the rest of the session. The README's WebGL paragraph now says the dense high-cap Worker rule applies without WebGPU compute, and its file table lists the live-frame passes.
+
 ### Live frames on WebGPU — 2026-10-07
 
 - Live frames now compute their orbit samples with WebGPU compute when it is present; WebGL2 only presents them. WebGL's live rate was 5–6× lower per pixel than the WebGPU stages (Bloom 5,020 vs 30,626 pixels per ms, Abyss 2,451 vs 12,657), and live frames are sized to a 12 ms budget, so they covered about a third of the width. Temporal accumulation runs in the accelerator's mask and resolve passes: the mask queues only pixels of the active interleave phase with fewer than 16 samples, starting at the pixel's next stratified cell, and the resolve pass writes the running mean with the same alpha encoding, so grid lock, integer-shift and resampled history, pan reuse and export are unchanged. Live and stage rates are measured under separate keys; a scene class whose WebGPU live rate is lower stays on WebGL, and any WebGPU error in a live frame falls back to WebGL for the session.
