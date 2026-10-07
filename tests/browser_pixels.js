@@ -238,20 +238,34 @@
     /* Live temporal accumulation on one sampling grid: frames adding perFrame stratified samples
      * converge to the 16-sample image; a still frame copies it bit for bit; a pan copies every
      * overlapping pixel and starts revealed ones afresh; a resampled history is trusted for at
-     * most its cap. */
-    accumulate(cx, cy, span, W, H, iterations, mode, perFrame, interleave = false) {
+     * most its cap. webgpu: the accelerator computes every frame (the 16x reference as a stage, live
+     * frames from their history), null without WebGPU. */
+    async accumulate(cx, cy, span, W, H, iterations, mode, perFrame, interleave = false, webgpu = false) {
       const built = scene(cx, cy, span, iterations, 0, mode), r = gpu();
+      let c = null, kernel = '', levels = 0;
+      if (webgpu) {
+        if (!('accelerator' in this)) this.accelerator = typeof TetraCompute === 'function' ? await TetraCompute.create() : null;
+        if (!(c = this.accelerator)) return null;
+        levels = mode === 'perturb' ? r.blaPolicy({width: W, height: H}, built.scene) : 0;
+        for (let t = 0; t < 600 && !(kernel = c.kernel(built.scene, levels)); t++) await new Promise(resolve => setTimeout(resolve, 50));
+        if (!kernel) return {error: 'kernel not ready', failed: c.failed};
+      }
       const unit = (mode === 'direct' ? built.scene.span : built.scene.spanMant) / W;
       // Interleaved: a world-locked 2x2 pattern of 8x8 blocks, one phase per frame, only for pixels with history.
       let phase = 0;
       const at = (shift, accum) => ({...built.scene, aspect: H / W, grid: {shift, step: [unit, unit]}, ...(accum ? {accum: interleave ? {...accum, phase: (phase = (phase + 1) & 3)} : accum} : {})});
-      const render = (sc, samples) => { const f = r.beginFrame(W, H); r.draw(f, {x: 0, y: 0, width: W, height: H}, sc, samples); return f; };
+      const render = async (sc, samples) => {
+        const f = r.beginFrame(W, H);
+        if (c) { await c.draw(r, f, sc, samples, 0, [{x: 0, y: 0, width: W, height: H}], kernel, levels, sc.accum); c.complete(f); }
+        else r.draw(f, {x: 0, y: 0, width: W, height: H}, sc, samples);
+        return f;
+      };
       const take = f => { const out = r.readFrame(f); r.releaseFrame(f); return out; };
-      const reference = take(render(at([0, 0]), 16));
-      let prev = render(at([0, 0], {mode: 0}), perFrame), frames = 1, phaseWrong = 0;
+      const reference = take(await render(at([0, 0]), 16));
+      let prev = await render(at([0, 0], {mode: 0}), perFrame), frames = 1, phaseWrong = 0;
       const needed = interleave ? 1 + 4 * (16 / perFrame - 1) : 16 / perFrame;
       while (frames < needed) {
-        const next = render(at([0, 0], {mode: 1, frame: prev, shift: [0, 0]}), perFrame);
+        const next = await render(at([0, 0], {mode: 1, frame: prev, shift: [0, 0]}), perFrame);
         if (interleave && frames === 1) {
           // The first refinement adds samples exactly to the pixels of its phase.
           const px = r.readFrame(next);
@@ -265,10 +279,10 @@
         for (let c = 0; c < 3; c++) { const d = Math.abs(converged[k + c] - reference[k + c]); worst = Math.max(worst, d); sum += d; }
         if (converged[k + 3] !== 16) notSixteen++;
       }
-      const still = take(render(at([0, 0], {mode: 1, frame: prev, shift: [0, 0]}), perFrame));
+      const still = take(await render(at([0, 0], {mode: 1, frame: prev, shift: [0, 0]}), perFrame));
       let stillDiff = 0;
       for (let k = 0; k < still.length; k++) if (still[k] !== converged[k]) stillDiff++;
-      const dx = 7, dy = -3, moved = take(render(at([dx, dy], {mode: 1, frame: prev, shift: [dx, dy]}), perFrame));
+      const dx = 7, dy = -3, moved = take(await render(at([dx, dy], {mode: 1, frame: prev, shift: [dx, dy]}), perFrame));
       let overlap = 0, overlapDiff = 0, revealed = 0, revealedWrong = 0;
       for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
         const i = (y * W + x) * 4, sx = x + dx, sy = y + dy;
@@ -278,7 +292,7 @@
           for (let c = 0; c < 4; c++) if (moved[i + c] !== converged[j + c]) { overlapDiff++; break; }
         } else { revealed++; if (moved[i + 3] !== perFrame) revealedWrong++; }
       }
-      const resampled = take(render(at([0, 0], {mode: 2, frame: prev, scale: [1, 1], offset: [0, 0], count: 0, cap: 4}), perFrame));
+      const resampled = take(await render(at([0, 0], {mode: 2, frame: prev, scale: [1, 1], offset: [0, 0], count: 0, cap: 4}), perFrame));
       let resampledMax = 0, resampledTrusted = 0;
       for (let k = 3; k < resampled.length; k += 4) { resampledMax = Math.max(resampledMax, resampled[k]); if (resampled[k] === 4 + perFrame) resampledTrusted++; }
       r.releaseFrame(prev);

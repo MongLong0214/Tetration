@@ -13,8 +13,12 @@ BLOOM = 'v=1&x=-2.2930579&y=0.3320804&s=0.00025&q=16'
 GRAB = '''() => {const c=document.querySelector('#gpuCanvas'),t=document.createElement('canvas');t.width=c.width;t.height=c.height;
  const g=t.getContext('2d');g.drawImage(c,0,0);return Array.from(g.getImageData(0,0,c.width,c.height).data);}'''
 LATCH = '''() => {const fence=TetraGPU.prototype.fence;
- TetraGPU.prototype.fence=function(){const p=fence.call(this);if(window.__holdLive){__holdLive=false;return p.then(()=>new Promise(resolve=>{
- window.__releaseLive=()=>{resolve();window.__deliveredLive=true;};}));}return p;};window.__holdLive=true;}'''
+ const hold=p=>{if(window.__holdLive){__holdLive=false;return p.then(()=>new Promise(resolve=>{
+ window.__releaseLive=()=>{resolve();window.__deliveredLive=true;};}));}return p;};
+ TetraGPU.prototype.fence=function(){return hold(fence.call(this));};
+ // WebGPU live frames end in the accelerator's draw instead of a WebGL fence.
+ if(window.TetraCompute){const draw=TetraCompute.prototype.draw;TetraCompute.prototype.draw=function(...a){return hold(draw.apply(this,a));};}
+ window.__holdLive=true;}'''
 
 
 def center(page):

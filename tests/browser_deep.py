@@ -232,6 +232,25 @@ def body():
                 # 10.6 / 5.1 / 2.6 at 7e-25, where WebGL against FP64 is 9.3 and 10.8.
                 assert all(st['blockDiff'] <= 18 for st in r['stages']) and r['wgWrong'] <= r['glWrong'] * 1.1 + 4, (name, r)
             suite.record('WebGPU 1x/4x/16x stages match WebGL and FP64: ' + name, r)
+        # 14. Live accumulation computed by WebGPU, with the quality suite's WebGL assertions.
+        for name, args in [('direct filaments, 1 sample per frame', ['-1.84', '0.09', '0.46', 160, 96, 384, 'direct', 1]),
+                           ('direct filaments, 4 samples per frame', ['-1.84', '0.09', '0.46', 160, 96, 384, 'direct', 4]),
+                           ('perturbation plume, 1 sample per frame', [*PLUME, 120, 72, 768, 'perturb', 1]),
+                           ('interleaved direct filaments', ['-1.84', '0.09', '0.46', 160, 96, 384, 'direct', 1, True]),
+                           ('interleaved perturbation abyss', [*ABYSS, 120, 72, 1536, 'perturb', 1, True])]:
+            interleaved = len(args) > 8
+            r = gpu_page.evaluate('async (a) => __tetraPixels.accumulate(...a)', args + [False] * (9 - len(args)) + [True])
+            if r is None:
+                suite.report['limitations'].append('WebGPU is unavailable in this browser environment; live accumulation on WebGPU is unqualified here.')
+                break
+            per = args[7]
+            assert 'error' not in r and r['notSixteen'] == 0, (name, r)
+            assert r['frames'] == (61 if interleaved else 16 // per) and r['phaseWrong'] == 0, (name, r)
+            assert r['worst'] <= 3 and r['mean'] < 0.6, (name, r)
+            assert r['stillDiff'] == 0 and r['overlapDiff'] == 0 and r['overlap'] > 0 and r['revealed'] > 0 and r['revealedWrong'] == 0, (name, r)
+            if not interleaved:
+                assert r['resampledMax'] == 4 + per and r['resampledTrusted'] > r['pixels'] * 0.95, (name, r)
+            suite.record('WebGPU live accumulation converges to its 16-sample image, still and panned frames copy it: ' + name, r)
         suite.no_errors()
         browser.close()
 

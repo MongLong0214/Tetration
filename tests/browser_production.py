@@ -97,8 +97,11 @@ def body():
         # frame after it has accumulated, keeping the real gesture held.
         page.evaluate('''()=>{const show=TetraGPU.prototype.presentFrame,fence=TetraGPU.prototype.fence;
          TetraGPU.prototype.presentFrame=function(...a){const r=show.apply(this,a);if(window.__freezeShown)window.__holdFrame=true;return r;};
-         TetraGPU.prototype.fence=function(){const p=fence.call(this);if(window.__holdFrame){__holdFrame=false;__freezeShown=false;
-          return p.then(()=>new Promise(r=>{window.__resumeFrame=r;}));}return p;};window.__freezeShown=true;}''')
+         const hold=p=>{if(window.__holdFrame){__holdFrame=false;__freezeShown=false;
+          return p.then(()=>new Promise(r=>{window.__resumeFrame=r;}));}return p;};
+         TetraGPU.prototype.fence=function(){return hold(fence.call(this));};
+         if(window.TetraCompute){const draw=TetraCompute.prototype.draw;TetraCompute.prototype.draw=function(...a){return hold(draw.apply(this,a));};}
+         window.__freezeShown=true;}''')
         box = page.locator('#viewport').bounding_box(); x, y = box['x']+box['width']/2, box['y']+box['height']/2
         page.mouse.move(x, y); page.mouse.down(); page.mouse.move(x+23, y+9)
         page.wait_for_function('()=>tetraDiagnostics.interactiveFrames>0 && typeof window.__resumeFrame==="function"')
@@ -334,6 +337,7 @@ def body():
         open_app(cold_page,SHALLOW.replace('&n=128','&n=16384'))
         d=consistent(cold_page)
         assert d['iterations']==16384 and d['lastCompleted']['samples']==16 and d['quality']==16,d
+        assert d['mode']==('gpu' if d['compute'] else 'cpu'),d
         assert d['lastCompleted']['width']==640 and d['lastCompleted']['height']==354,d
         suite.report['cold_maximum_backend']={k:d[k] for k in ['backend','gpuFailure','lastCompleted']}
         suite.record('A cold maximum-quality shared URL completes with the full requested iterations, samples and dimensions')
@@ -342,9 +346,9 @@ def body():
         controls(cold_page)
         cold_page.locator('#iterations').select_option('8192');close_controls(cold_page);settle(cold_page)
         d=consistent(cold_page)
-        assert d['mode']=='cpu' and d['iterations']==8192 and d['lastCompleted']['samples']==16,d
+        assert d['mode']==('gpu' if d['compute'] else 'cpu') and d['iterations']==8192 and d['lastCompleted']['samples']==16,d
         assert d['lastCompleted']['width']==640 and d['lastCompleted']['height']==354,d
-        suite.record('The high direct-iteration boundary computes full native AA16 through FP64 Workers')
+        suite.record('The high direct-iteration boundary computes full native AA16 on WebGPU compute, or through FP64 Workers without it')
         controls(cold_page)
         cold_page.locator('#quality').select_option('4');cold_page.locator('#iterations').select_option('auto')
         close_controls(cold_page);settle(cold_page);consistent(cold_page)

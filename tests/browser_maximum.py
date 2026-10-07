@@ -85,15 +85,15 @@ def body():
             page = suite.watch(context.new_page())
             x, y = '-2.2930579295428124999999991', '0.3320804455471875'
             open_app(page, f'v=1&x={x}&y={y}&s=1e-50&n=16384&q=16')
-            d = check_requested(page, 16384); assert d['mode'] == 'cpu-perturb', d
+            d = check_requested(page, 16384); fast = 'perturb' if d['compute'] else 'cpu-perturb'; assert d['mode'] == fast, d
             controls(page); page.locator('#quality').select_option('4'); close_controls(page); settle(page)
             check_requested(page, 16384, 4)
-            assert state(page)['mode'] == 'cpu-perturb'
+            assert state(page)['mode'] == fast
             controls(page); page.locator('#iterations').select_option('4096'); page.locator('#quality').select_option('16'); close_controls(page); settle(page)
             check_requested(page, 4096)
-            assert state(page)['mode'] == 'cpu-perturb'
+            assert state(page)['mode'] == fast
             navigate_after(page)
-            suite.record('Missing float-color extension computes the full deep request on FP64 Workers and remains navigable')
+            suite.record('Missing float-color extension computes the full deep request on WebGPU compute, or FP64 Workers without it, and remains navigable')
             context.close(); browser.close()
 
         browser = launch(p); context = browser.new_context(viewport={'width': 320, 'height': 240})

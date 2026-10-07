@@ -94,16 +94,19 @@
     return AUTO_STEPS.find(n => n >= wanted) || AUTO_STEPS.at(-1);
   }
   function magnitude(v) { return Math.max(1, Math.abs(num(v.x)), Math.abs(num(v.y))); }
+  const accelerated = () => !!compute && !compute.failed;
   const splitAA = (iterations, samples) => (iterations >= 8192 && samples >= 4) || (iterations >= 4096 && samples >= 16);
   function chooseMode(v = view) {
     if (engine === 'exact') return 'exact';
     const pixel = num(v.span) / Math.max(dims.w, 1), scale = magnitude(v);
-    // Dense high-cap views around FP64 scales finish faster on Workers using
-    // exact machine cycles. Very deep views keep GPU perturbation, with long
-    // AA passes split into single-sample submissions below.
+    // Workers are faster than WebGL fragment draws for dense high-cap views,
+    // but the WebGPU kernel is ~3x faster than Workers at full resolution and
+    // keeps live frames, so the Worker rule applies only without the
+    // accelerator. Very deep views keep GPU perturbation, with long AA passes
+    // split into single-sample submissions below.
     const n = iterationsFor(v);
-    if (engine === 'auto' && ((n >= 8192 && num(v.span) >= scale * FP64_LIMIT) ||
-        (splitAA(n, quality) && gpu && !gpu.floatColor))) return pixel >= scale * FP64_LIMIT ? 'cpu' : 'cpu-perturb';
+    if (engine === 'auto' && ((!accelerated() && n >= 8192 && num(v.span) >= scale * FP64_LIMIT) ||
+        (!accelerated() && splitAA(n, quality) && gpu && !gpu.floatColor))) return pixel >= scale * FP64_LIMIT ? 'cpu' : 'cpu-perturb';
     if (engine === 'auto' && gpu) return pixel >= scale * DIRECT_LIMIT ? 'gpu' : 'perturb';
     return pixel >= scale * FP64_LIMIT ? 'cpu' : 'cpu-perturb';
   }
@@ -419,8 +422,14 @@
    * across frames, so resolution comes first: 4 new samples per frame only when that still
    * leaves full display resolution. */
   let livePlan = null, refineTimer = 0;
+  // Live frames on WebGPU once its kernel is ready, unless both engines measured this scene and WebGL was faster.
+  function liveCompute(renderer, scene, size) {
+    if (!accelerated()) return null;
+    const levels = scene.mode === 'perturb' ? renderer.blaPolicy(size, scene) : 0, kernel = compute.kernel(scene, levels), k = rateKey(scene, 1);
+    return kernel && !(rates.get(k) > rates.get('live|' + k)) ? {kernel, levels} : null;
+  }
   function livePlanFor(renderer, scene) {
-    const target = targetSize(renderer), key = [scene.mode, scene.iterations, scene.palette, target.width, target.height].join('|');
+    const target = targetSize(renderer), key = [scene.mode, scene.iterations, scene.palette, target.width, target.height, liveCompute(renderer, scene, target) ? 'webgpu' : 'webgl'].join('|');
     if (livePlan && livePlan.key === key && !livePlan.stale) return livePlan;
     // Full resolution with every pixel each frame if affordable (4 samples if even that is), else
     // interleaved refinement: a quarter of the pixels per frame, so four times as many pixels.
@@ -441,15 +450,18 @@
     return {x: snap(v.x, px), y: snap(v.y, py), span: v.span};
   }
   function interactiveSize(renderer, scene, target = targetSize(renderer), samples = 1, interleave = 1) {
-    // Before a live frame of this cap is measured: a quarter of the WebGPU stage's rate (it finishes the
-    // same pixels about four times faster than these WebGL frames; its WebGL tiles were only the tiny
+    // Live frames on WebGPU: their own measured rate, at first the WebGPU stage's (the same kernels).
+    // On WebGL, before a frame of this cap is measured: a quarter of the WebGPU stage's rate (it finishes
+    // the same pixels four to six times faster than WebGL frames; its WebGL tiles were only the tiny
     // preview's), else the final tiles' rate.
-    const compute = rates.get('compute|' + rateKey(scene, 1));
-    const rate = (rates.get(rateKey(scene, samples)) ?? (rates.get(rateKey(scene, 1)) ?? (compute ? compute / 4 : rates.get('tile|' + rateKey(scene, 1)) ?? 60)) / samples);
+    const stage = rates.get('compute|' + rateKey(scene, 1)), live = liveCompute(renderer, scene, target) ? 'live|' : '';
+    const rate = live ? rates.get(live + rateKey(scene, samples)) ?? (rates.get(live + rateKey(scene, 1)) ?? stage ?? 60) / samples
+      : rates.get(rateKey(scene, samples)) ?? (rates.get(rateKey(scene, 1)) ?? (stage ? stage / 4 : rates.get('tile|' + rateKey(scene, 1)) ?? 60)) / samples;
     // Slow GPUs (deep views on weak hardware) drop to coarser frames rather than stall the compositor.
     const floor = rate * FRAME_MS * 4 >= 8192 ? 8192 : 2048;
-    // Cap one draw's orbit work so a sudden jump in cost cannot stall the GPU (driver watchdogs).
-    const pixels = Math.max(floor / samples, Math.min(target.width * target.height, rate * FRAME_MS * interleave, 8e7 * interleave / samples / renderer.effectiveIterations(scene, target.width, target.height)));
+    // Cap one WebGL draw's orbit work so a sudden jump in cost cannot stall the GPU (driver watchdogs);
+    // WebGPU submissions are bounded by their rounds.
+    const pixels = Math.max(floor / samples, Math.min(target.width * target.height, rate * FRAME_MS * interleave, live ? Infinity : 8e7 * interleave / samples / renderer.effectiveIterations(scene, target.width, target.height)));
     // Quantised so consecutive frames reuse pooled textures instead of reallocating.
     const scale = Math.min(1, Math.round(Math.sqrt(pixels / (target.width * target.height)) * 24) / 24 || 1 / 24);
     return {width: Math.max(32, Math.round(target.width * scale)), height: Math.max(20, Math.round(target.height * scale))};
@@ -524,16 +536,31 @@
     let frame = null, spent = 0;
     try {
       frame = renderer.beginFrame(size.width, size.height);
-      renderer.prepare(frame, scene, plan.samples, undefined, false);
-      renderer.drawTile(frame, {x: 0, y: 0, width: size.width, height: size.height});
-      await renderer.fence();
+      let accel = liveCompute(renderer, scene, size);
+      if (accel) {
+        try {
+          // Row bands within the batch capacity; the history stays on WebGPU between frames.
+          const rows = Math.max(1, Math.floor(compute.capacity(accel.kernel) / plan.samples / size.width));
+          for (let y = 0; y < size.height; y += rows) await compute.draw(renderer, frame, scene, plan.samples, 0, [{x: 0, y, width: size.width, height: Math.min(rows, size.height - y)}], accel.kernel, accel.levels, scene.accum);
+          compute.complete(frame);
+        } catch (error) {
+          if (renderer.lost()) throw error;
+          // The WebGL programs draw this frame and every later one.
+          compute.failed = true; accel = null; console.warn('WebGPU compute unavailable:', error?.message || error);
+        }
+      }
+      if (!accel) {
+        renderer.prepare(frame, scene, plan.samples, undefined, false);
+        renderer.drawTile(frame, {x: 0, y: 0, width: size.width, height: size.height});
+        await renderer.fence();
+      }
       const ms = Math.max(0.5, performance.now() - t0);
       spent = ms;
       // A shifted history skips converged pixels, so its frames overstate the rate: they may only
       // lower the estimate. Frames that sample every pixel measure it.
       // Interleaved frames compute about a quarter of the pixels that have history.
       // A frame that linked a program measures nothing (the first deep frame after WebGPU final stages).
-      const fresh = scene.accum.mode !== 1, k = rateKey(scene, plan.samples), measured = size.width * size.height / (scene.accum.mode ? plan.interleave : 1) / ms;
+      const fresh = scene.accum.mode !== 1, k = (accel ? 'live|' : '') + rateKey(scene, plan.samples), measured = size.width * size.height / (scene.accum.mode ? plan.interleave : 1) / ms;
       if (renderer.links === links) {
         if (fresh || measured < (rates.get(k) ?? Infinity)) rates.set(k, rates.has(k) ? rates.get(k) * 0.5 + measured * 0.5 : measured);
         // Re-plan only when well off budget: three slow frames in a row (a single hitch, such as a
@@ -1052,7 +1079,7 @@
     }
     if (moved) { reproject(); drawGrid(); requestInteractive(); }
     if (!same(visual, view) || motion.vx || motion.vy) motion.raf = requestAnimationFrame(stepMotion);
-    else { motion.raf = 0; clearTimeout(settleTimer); settleTimer = setTimeout(finalRender, SETTLE_MS); scheduleURL(); }
+    else { motion.raf = 0; clearTimeout(settleTimer); settleTimer = setTimeout(finalRender, 0); scheduleURL(); }
   }
   function stopMotion() { motion.vx = 0; motion.vy = 0; }
 
@@ -1487,7 +1514,7 @@
   window.setInterval(() => { if (!document.hidden && displayDensity() !== dims.dpr) onDensity(); }, 1000);
   function startGPU() {
     if (!compute && typeof TetraCompute === 'function' && window.TETRA_COMPUTE !== false) {
-      TetraCompute.create().then(accelerator => { compute = accelerator; }, error => { console.warn('WebGPU unavailable:', error?.message || error); });
+      TetraCompute.create().then(accelerator => { compute = accelerator; if (chooseMode() !== currentMode) changed(); }, error => { console.warn('WebGPU unavailable:', error?.message || error); });
     }
     try { gpu = new TetraGPU(gpuCanvas); gpuFailure = ''; return true; }
     catch (error) { gpu = null; gpuFailure = String(error.message); console.warn('WebGL2 unavailable; using Worker FP64.', error.message); return false; }

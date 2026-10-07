@@ -2,7 +2,8 @@
  * pixel, so a SIMD group waits for its longest orbit and a tile for its slowest group. Here persistent
  * lanes take one sample at a time from an atomic queue and start the next as soon as one ends, in a
  * single flattened loop. The arithmetic is the WebGL programs' (gpu.js), ported to WGSL; results land
- * in the WebGL frames, which keep presentation, live frames and reuse. A finite FP32 observation.
+ * in the WebGL frames, which keep presentation and reuse. Live frames accumulate here too (mask and resolve
+ * read the previous live image). A finite FP32 observation.
  * Lanes run in rounds of at most STEPS loop iterations and keep their sample in a buffer between
  * rounds: macOS aborts compute whose threadgroups run for tens of milliseconds while WebGL or the
  * compositor waits for the GPU (measured), and a short round also lets live frames in sooner. */
@@ -10,8 +11,8 @@
   'use strict';
   const {AA, paletteWGSL} = root.TetraCore;
   // Samples per dispatch: 12 bytes of colour each, plus the queue entry. LANES workgroups of 64 cover
-  // the resident threads of 64 Apple GPU cores; STEPS iterations keep a round to a few milliseconds.
-  const CAPACITY = 1 << 21, LANES = 1024, STEPS = 1024, FLAT = 0xffffffff;
+  // the resident threads of 64 Apple GPU cores; STEPS iterations keep a round to about ten milliseconds (a round also costs ~0.3 ms of dispatch, so shorter ones are slower).
+  const CAPACITY = 1 << 21, LANES = 1024, STEPS = 4096, FLAT = 0xffffffff;
   // Readback counters of a batch with one sample still queued: what remains if a submission never ran.
   const UNFINISHED = new Uint32Array([1, 0, 1, 0, 0, 0, 0, 0]);
   // gpu.js polyCosSin: range-reduced cos/sin from multiply-adds, for drivers whose builtins err.
@@ -29,6 +30,7 @@
   span: f32, aspect: f32, lowA: f32, maxB: f32, tol: f32, threshold: f32, imCenter: f32, spanMant: f32,
   grid: i32, iterations: i32, palette: i32, samples: i32, adaptive: i32, refLength: i32, refValues: i32, scale: i32,
   invExp: i32, blaLevels: i32, rects: u32, pixels: u32, blaBase: array<vec4i, 4>,
+  hshift: vec2f, hscale: vec2f, hoffset: vec2f, hsize: vec2f, hcount: f32, hcap: f32, accum: i32, hmode: i32, interleave: i32, phase: i32,
  };
  @group(0) @binding(0) var<uniform> p: Params;
  // Batch rectangles (GL orientation: row 0 at the bottom) and their first batch pixel.
@@ -64,14 +66,47 @@
   return vec2i(r.x + li % r.z, r.y + li / r.z);
  }
  fn seedAt(q: vec2i) -> vec4f { let s = vec2i(p.size); let c = clamp(q, vec2i(0), s - 1); return unpack4x8unorm(seeds[u32(c.y*s.x + c.x)]); }
- fn samplePoint(slot: u32) -> vec2f { let item = works[slot]; return vec2f(locate(item >> 4u)) + .5 + select(cell(item & 15u), vec2f(0.), p.samples == 1); }
- fn reused(q: vec2i) -> bool { return p.samples == 16 && p.adaptive == 1 && abs(seedAt(q).a - 64./255.) < .5/255.; }`;
+ fn samplePoint(slot: u32) -> vec2f { let item = works[slot]; return vec2f(locate(item >> 4u)) + .5 + select(cell(item & 15u), vec2f(0.), p.samples == 1 && p.accum == 0); }
+ fn reused(q: vec2i) -> bool { return p.samples == 16 && p.adaptive == 1 && abs(seedAt(q).a - 64./255.) < .5/255.; }
+ // Live accumulation (gpu.js history() and its uAccum branch): the previous estimate of a pixel (mean, samples),
+ // carried by an integer shift (hmode 1) or resampled from another grid (hmode 2), from the history in seeds.
+ fn histAt(q: vec2i) -> vec4f { return unpack4x8unorm(seeds[u32(q.y*i32(p.hsize.x) + q.x)]); }
+ fn history(q: vec2i) -> vec4f {
+  let s = vec2i(p.hsize); let point = vec2f(q) + .5;
+  if (p.hmode == 1) {
+   let h = vec2i(floor(point + p.hshift));
+   if (any(h < vec2i(0)) || any(h >= s)) { return vec4f(0.); }
+   let c = histAt(h); return vec4f(c.rgb, floor(c.a*255. + .5));
+  }
+  if (p.hmode == 2) {
+   let t = point*p.hscale + p.hoffset - .5;
+   if (t.x < 0. || t.y < 0. || t.x > f32(s.x - 1) || t.y > f32(s.y - 1)) { return vec4f(0.); }
+   let b = vec2i(floor(t)); let e = min(b + 1, s - 1); let f = t - vec2f(b);
+   let c = mix(mix(histAt(b).rgb, histAt(vec2i(e.x, b.y)).rgb, f.x), mix(histAt(vec2i(b.x, e.y)).rgb, histAt(e).rgb, f.x), f.y);
+   return vec4f(c, min(select(floor(histAt(vec2i(t + .5)).a*255. + .5), p.hcount, p.hcount > 0.), p.hcap));
+  }
+  return vec4f(0.);
+ }
+ // New samples a live pixel with n takes: none once converged, or outside this frame's phase of the world-locked
+ // 2x2 pattern of 8x8 blocks (interleaved, pixels with history only).
+ fn takes(q: vec2i, n: u32) -> u32 {
+  if (n >= 16u) { return 0u; }
+  if (p.interleave == 1 && n > 0u) { let a = vec2i(floor(vec2f(q) + .5 + p.shift)) >> vec2u(3u); if ((a.x & 1) + 2*(a.y & 1) != p.phase) { return 0u; } }
+  return min(16u, n + u32(p.samples)) - n;
+ }`;
 
   // Per batch pixel: keep a flat seed, or queue its samples (a 16x pixel seeded by a 4x pixel queues 12).
   const resolveSource = precise => header(precise) + `
  @compute @workgroup_size(64) fn mask(@builtin(global_invocation_id) g: vec3u) {
   let bp = g.x; if (bp >= p.pixels) { return; }
   let q = locate(bp);
+  if (p.accum == 1) {
+   let n = u32(history(q).w); let count = takes(q, n);
+   if (count == 0u) { bases[bp] = FLAT; return; }
+   let b = atomicAdd(&counters[0], count); bases[bp] = b;
+   for (var j = 0u; j < count; j++) { works[b + j] = (bp << 4u) | (n + j); }
+   return;
+  }
   if (p.adaptive == 1) {
    let center = seedAt(q).rgb; var contrast = 0.;
    for (var y = -1; y <= 1; y++) { for (var x = -1; x <= 1; x++) { let d = abs(center - seedAt(q + vec2i(x, y)).rgb); contrast = max(contrast, max(d.r, max(d.g, d.b))); } }
@@ -86,7 +121,17 @@
   let bp = g.x; if (bp >= p.pixels) { return; }
   let q = locate(bp); let at = u32(q.y*i32(p.size.x) + q.x); let b = bases[bp];
   var value: u32;
-  if (b == FLAT) { value = seeds[at]; }
+  if (p.accum == 1) {
+   // Running mean: converged and off-phase pixels keep their history, the rest add their new cells.
+   let h = history(q);
+   if (b == FLAT) { value = pack4x8unorm(vec4f(h.rgb, min(h.w, 16.)/255.)); }
+   else {
+    let count = takes(q, u32(h.w)); var rgb = h.rgb*h.w;
+    for (var c = 0u; c < count; c++) { let o = 3u*(b + c); rgb += vec3f(cols[o], cols[o + 1u], cols[o + 2u]); }
+    value = pack4x8unorm(vec4f(rgb*(1./(h.w + f32(count))), (h.w + f32(count))/255.));
+   }
+  }
+  else if (b == FLAT) { value = seeds[at]; }
   else {
    var rgb = vec3f(0.); var first = 0u; var weight = 1.; var alpha = 1.;
    if (p.samples == 16) { weight = .0625; if (reused(q)) { rgb = seedAt(q).rgb*4.; first = 4u; } }
@@ -445,6 +490,13 @@
     capacity(kernel) { return kernel === 'direct' ? CAPACITY : CAPACITY / 2; }
     // A completed stage: the next stage may read this frame's copy as its seed.
     complete(frame) { frame.computed = this; }
+    // A live frame's history: its slot when it was computed here, else one readback (a WebGL or reused frame).
+    historySlot(renderer, history) {
+      const index = this.slots.findIndex(slot => slot.owner === history);
+      if (index >= 0 && history.computed === this) return index;
+      this.adopt(renderer, history);
+      return 0;
+    }
     // A seed that WebGL drew (its stage ran before these pipelines were ready): one readback into a slot.
     adopt(renderer, seed) {
       const slot = this.slots[0];
@@ -459,7 +511,7 @@
     allocate() {
       const device = this.device, usage = GPUBufferUsage, make = (size, flags) => device.createBuffer({size, usage: flags});
       this.buffers = {
-        params: make(208, usage.UNIFORM | usage.COPY_DST), counters: make(32, usage.STORAGE | usage.COPY_DST | usage.COPY_SRC),
+        params: make(272, usage.UNIFORM | usage.COPY_DST), counters: make(32, usage.STORAGE | usage.COPY_DST | usage.COPY_SRC),
         lanes: make(LANES * 64 * 256, usage.STORAGE | usage.COPY_DST), empty: make(16, usage.STORAGE),
       };
     }
@@ -475,11 +527,13 @@
       return buffer;
     }
     /* Compute these tiles (top-down {x, y, width, height}) of a stage into the WebGL frame:
-     * the WebGL draw's samples, adaptive seed and threshold, uploaded with texSubImage2D. */
-    async draw(renderer, frame, scene, samples, threshold, tiles, kernel, levels) {
+     * the WebGL draw's samples, adaptive seed and threshold, uploaded with texSubImage2D.
+     * live: a live frame's accumulation (scene.accum in gpu.js), its history read in place of a seed. */
+    async draw(renderer, frame, scene, samples, threshold, tiles, kernel, levels, live = null) {
       if (!this.buffers) this.allocate();
-      const device = this.device, b = this.buffers, gl = renderer.gl;
-      const seedIndex = this.seedSlot(frame), outIndex = seedIndex === 0 ? 1 : 0, slot = this.slots[outIndex];
+      const device = this.device, b = this.buffers, gl = renderer.gl, history = live?.mode ? live.frame : null;
+      if (history === frame) throw Error('Live history cannot be its own target');
+      const seedIndex = history ? this.historySlot(renderer, history) : this.seedSlot(frame), outIndex = seedIndex === 0 ? 1 : 0, slot = this.slots[outIndex];
       if (seedIndex === null) throw Error('Seed frame was not computed here');
       this.slotBuffer(slot, frame.width * frame.height * 4);
       if (slot.owner !== frame) { slot.owner = frame; frame.computed = null; }
@@ -487,7 +541,7 @@
       tiles.forEach((t, n) => { rects.set([t.x, frame.height - t.y - t.height, t.width, t.height], 4 * n); starts[n + 1] = starts[n] + t.width * t.height; });
       const pixels = starts[tiles.length];
       if (pixels * samples > this.capacity(kernel)) throw Error('Compute batch too large');
-      const f = new Float32Array(52), i = new Int32Array(f.buffer), u = new Uint32Array(f.buffer);
+      const f = new Float32Array(68), i = new Int32Array(f.buffer), u = new Uint32Array(f.buffer);
       const grid = scene.grid, perturb = scene.mode === 'perturb';
       f.set([frame.width, frame.height, ...(grid ? grid.shift : [0, 0]), ...(grid ? grid.step : [0, 0]), ...(scene.center || [0, 0])]);
       if (perturb) {
@@ -497,9 +551,13 @@
         f.set([...scene.ref.L0, ...scene.inv, ...scene.delta, ...scene.deltaMirror], 8);
       }
       f.set([scene.span || 0, scene.aspect || frame.height / frame.width, scene.rules.lowA, scene.rules.maxB, scene.rules.tol, threshold, scene.imCenter || 0, scene.spanMant || 0], 16);
-      i.set([grid ? 1 : 0, scene.iterations, scene.palette, samples, seedIndex >= 0 ? 1 : 0, perturb ? scene.ref.length : 0, perturb ? scene.ref.values : 0, scene.scale || 0, scene.invExp || 0, levels], 24);
+      i.set([grid ? 1 : 0, scene.iterations, scene.palette, samples, !live && seedIndex >= 0 ? 1 : 0, perturb ? scene.ref.length : 0, perturb ? scene.ref.values : 0, scene.scale || 0, scene.invExp || 0, levels], 24);
       u[34] = tiles.length; u[35] = pixels;
       if (levels) i.set(renderer.bla.base, 36);
+      if (live) {
+        f.set([...(live.shift || [0, 0]), ...(live.scale || [1, 1]), ...(live.offset || [0, 0]), history ? history.width : 0, history ? history.height : 0, live.count || 0, live.cap ?? 16], 52);
+        i.set([1, live.mode || 0, live.phase === undefined ? 0 : 1, live.phase ?? 0], 62);
+      }
       device.queue.writeBuffer(b.params, 0, f);
       const storage = GPUBufferUsage.STORAGE, n = pixels * samples, packed = this.grow('packed', pixels * 4, storage | GPUBufferUsage.COPY_SRC);
       const read = this.grow('read', pixels * 4 + 32, GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST);
