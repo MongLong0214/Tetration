@@ -234,7 +234,7 @@
    else if(e.code==='Space'&&!e.ctrlKey&&!e.metaKey&&!e.altKey&&!e.target.closest('button,a,summary')){e.preventDefault();if(preview.state().playing)preview.pause();else previewView(true);}
    else if(e.key==='Escape'){e.preventDefault();if(draftDirty()){draft=copy(project().shot[endpoint]);preview.refresh({base:true});sync();}else preview.pause();}
   });
-  document.addEventListener('visibilitychange',()=>{if(!entered)return;cancelGesture();if(document.hidden){thumbAbort?.abort();preview.suspend();exporter.hidden();}else if(exporter.snapshot().state==='suspended')exportState(exporter.snapshot());});
+  document.addEventListener('visibilitychange',()=>{if(!entered)return;cancelGesture();if(document.hidden){thumbAbort?.abort();preview.suspend();exporter.hidden();}else{const state=exporter.snapshot();if(state.state==='suspended')exportState(state);else if(!state.active&&!$('studioExportDialog').open)preview.resume();}});
   matchMedia('(prefers-reduced-motion:reduce)').addEventListener('change',e=>{if(e.matches&&entered)preview.pause();});
   window.addEventListener('pagehide',()=>{if(entered){thumbAbort?.abort();preview.suspend();exporter.cancel();}});
   const api={

@@ -9,8 +9,11 @@
   Mediabunny 1.61.3 CanvasSource path. Preview keeps useful work during playback;
   export freezes the shot, serializes frames, supports cancellation/hidden Resume,
   and retains one finalized MP4/WebM result. No runtime network or install is needed.
-- Git Flow integration targets `dev`; main merge and a formal versioned release
-  remain the maintainer's separate decision. Validation is in docs/VALIDATION.md.
+- Resuming a visible Studio tab refreshes the selected preview without autoplay;
+  hidden exports retain their explicit Resume and finalized result ownership.
+- Git Flow integrates through `dev` before an authorized `main` delivery.
+  Versioned tags build an offline archive and publish a GitHub Release.
+  Validation is in docs/VALIDATION.md.
 
 ### WebGPU fallback frees its device — 2026-10-07
 

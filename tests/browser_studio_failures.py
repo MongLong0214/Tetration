@@ -50,6 +50,10 @@ def run():
             state = terminal(page, 'ready')
             assert state['config']['width'] == 1280 and state['config']['height'] == 720
             assert state['submitted'] == 60 and not page.evaluate('() => tetraStudioDiagnostics.preview.playing')
+            page.evaluate('() => {window.__studioHidden=true;document.dispatchEvent(new Event("visibilitychange"));window.__studioHidden=false;document.dispatchEvent(new Event("visibilitychange"));}')
+            retained = page.evaluate('() => ({preview:tetraStudioDiagnostics.preview,output:tetraStudioDiagnostics.export,open:document.querySelector("#studioExportDialog").open})')
+            assert retained['open'] and retained['preview']['suspended'] and not retained['preview']['playing'], retained
+            assert retained['output']['url'] == state['url'] and retained['output']['state'] == 'ready', retained
             with page.expect_download() as download:
                 page.click('#studioDownload')
             path = OUT / 'studio-hidden-resume.mp4'
@@ -109,6 +113,15 @@ def run():
             assert counts[0] == counts[1] == counts[2], counts
             assert all(c['bitmaps'] == 0 and c['urls'] == 0 for c in counts), counts
             suite.record('Three actual success/cancel/success cycles retain bounded textures/FBOs and no bitmap/result URLs', counts)
+            page.evaluate('() => {window.__studioHidden=true;document.dispatchEvent(new Event("visibilitychange"));}')
+            page.wait_for_function('() => tetraStudioDiagnostics.preview.suspended')
+            page.evaluate('() => {window.__studioHidden=false;document.dispatchEvent(new Event("visibilitychange"));}')
+            visible = page.evaluate('() => tetraStudioDiagnostics.preview')
+            assert not visible['suspended'] and not visible['playing'], visible
+            page.get_by_label('Preset', exact=True).select_option('Deep Ambient')
+            page.wait_for_function('() => tetraStudioDiagnostics.preview.displayedK>=0 && !tetraStudioDiagnostics.preview.pending && !tetraStudioDiagnostics.thumbnails.active', timeout=120000)
+            assert not page.evaluate('() => tetraStudioDiagnostics.preview.playing')
+            suite.record('Visible return resumes selected-frame Look updates without autoplay')
             page.close()
             for mode, init in [
                 ('encoder', 'Object.defineProperty(window,"VideoEncoder",{value:undefined,configurable:true});'),

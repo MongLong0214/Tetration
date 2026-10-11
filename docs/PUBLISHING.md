@@ -7,8 +7,8 @@ Target: [MongLong0214/Tetration](https://github.com/MongLong0214/Tetration), pub
 `main` holds released production code; `dev` integrates the next release.
 Create `feature/<name>` from `dev` and merge finished work back into `dev` with
 a merge commit. CI validates pushes to both long-lived branches and PRs.
-Motion Studio is being delivered to `dev` for the maintainer's review; merge
-to `main` only after their explicit instruction.
+Motion Studio integrates into `dev` first. The maintainer authorized its `main`
+delivery after final review and E2E qualification on 2026-10-11.
 
 For a release, branch `release/<version>` from `dev`, update package.json and
 CHANGELOG, and finish the existing product checks. After the maintainer's
@@ -16,7 +16,7 @@ review, merge the release into `main` and back into `dev`, then tag the release
 commit `v<version>`. The Release workflow verifies the version and main ancestry,
 builds offline, and publishes a GitHub Release with the application zip and SHA256.
 Production still deploys through Vercel's `main` integration; other branches are
-previews. No release tag or production deployment is part of the current work.
+previews. Version tags publish formal releases through the Release workflow.
 
 Urgent production repairs use `hotfix/<version>` from `main`, merge into both
 `main` and `dev`, and receive the same version/tag/release treatment. Remove

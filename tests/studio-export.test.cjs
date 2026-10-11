@@ -20,7 +20,7 @@ test('immutable project and exact frame grid, serial add and one ready result af
 });
 test('cancel while finalize resolves late cannot publish a file',async()=>{
  const finish=deferred(),started=deferred();const f=fixture({createSink:async()=>({addFrame:async()=>{},finish:()=>{started.resolve();return finish.promise;},cancel:async()=>{}})});
- const work=f.exporter.start(f.p,f.resources);await started.promise;const canceled=f.exporter.cancel();finish.resolve({blob:new Blob(['late']),extension:'mp4',bytes:4});await canceled;
+ const work=f.exporter.start(f.p,f.resources);await started.promise;f.hide(true);assert.equal(f.exporter.snapshot().state,'finalizing');f.hide(false);assert.equal(f.exporter.snapshot().state,'finalizing');const canceled=f.exporter.cancel();finish.resolve({blob:new Blob(['late']),extension:'mp4',bytes:4});await canceled;
  const state=await work;assert.equal(state.state,'canceled');assert.equal(state.result,null);assert.equal(state.url,null);assert.equal(state.active,false);
 });
 test('hidden finishes current add and suspends at next frame; visible requires explicit Resume',async()=>{

@@ -4,9 +4,9 @@
 
 Native Chromium 153.0.8010.12 / ANGLE Metal on Apple M4 Pro, Python 3.14.3,
 Playwright 1.63.0, served production CSP. Final Studio runtime
-`54e7dc00bbd917e947bf597abc1e28576764dc67db1322af2f99db7d69a27d16`
-passes media 13, FX 3, UI 16, failures/recovery 8 and deep adapter 2 checks,
-42 total with zero uncaught exceptions. UI takes 37.4 seconds. Actual UI exports:
+`cf3c1c7dfef88bd9bcc454228ed079e9d089cdc0f14745ffe256af10fdc66acf`
+passes media 13, FX 3, UI 16, failures/recovery 9 and deep adapter 2 checks,
+43 total with zero uncaught exceptions. Actual UI exports:
 
 | Shot | Output | Independent ffprobe/ffmpeg result |
 | --- | --- | --- |
@@ -49,6 +49,12 @@ on one page retain the same observed texture/FBO counts; each ends with zero
 owned bitmaps and result URLs. Visibility is driven through the app handler with
 a controlled document.hidden getter, not an OS sleep certification.
 
+The final code review found and repaired a paused preview that stayed suspended
+after a hidden tab became visible. The same added scenario fails before repair
+and passes after it: Look edits render again without autoplay. Active export still
+requires explicit Resume; a ready result retains its modal and URL across hiding.
+Hiding during finalization cannot publish a canceled late result.
+
 Small complete AA4 deep frames cover Horizon 7e−80→7e−100, including the planned
 reference-precision switch at frame 50, and a negative-real-axis branch crossing.
 Neighbour frames match fresh same-camera computations byte for byte, including
@@ -83,9 +89,11 @@ An additional native Metal run retained a failure at the original deep suite's
 WebGL/WebGPU direct pixel-identity assertion (62/206/595 differing pixels at
 1/4/16 samples). An isolated build of main `88fa6a4` reproduces those exact
 counts and statistics; Studio is identical. The assertion is not weakened.
-Native Studio WebGPU outputs are qualified separately above. Final remote CI
-results are linked from PR #18. No main merge, production release, physical
-iPhone or Safari export qualification is claimed.
+Native Studio WebGPU outputs are qualified separately above. Remote CI at
+`404ae5c` passes all 19 jobs, including the full deep suite. The final visibility
+repair and deployment qualification are tracked in PR #18. Physical iPhone and
+Safari movie export remain unqualified; the checked scope does not establish
+absolute absence of defects on every device or shot.
 
 ## Motion foundations (2026-10-11, development)
 
