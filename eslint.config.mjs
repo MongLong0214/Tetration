@@ -5,9 +5,9 @@ const browser = {window: 'readonly', document: 'readonly', navigator: 'readonly'
   matchMedia: 'readonly', requestAnimationFrame: 'readonly', cancelAnimationFrame: 'readonly', setTimeout: 'readonly', clearTimeout: 'readonly',
   performance: 'readonly', devicePixelRatio: 'readonly', ResizeObserver: 'readonly', MutationObserver: 'readonly', Worker: 'readonly', Blob: 'readonly', File: 'readonly',
   URL: 'readonly', URLSearchParams: 'readonly', ImageData: 'readonly', createImageBitmap: 'readonly', OffscreenCanvas: 'readonly', MessageChannel: 'readonly',
-  DOMException: 'readonly', Event: 'readonly', fetch: 'readonly', console: 'readonly', globalThis: 'readonly', queueMicrotask: 'readonly', Response: 'readonly', caches: 'readonly', self: 'readonly',
+  DOMException: 'readonly', Event: 'readonly', AbortController: 'readonly', WritableStream: 'readonly', TextEncoder: 'readonly', fetch: 'readonly', console: 'readonly', globalThis: 'readonly', queueMicrotask: 'readonly', Response: 'readonly', caches: 'readonly', self: 'readonly',
   GPUBufferUsage: 'readonly', GPUMapMode: 'readonly'};
-const tetra = {createFixed: 'readonly', TetraCore: 'readonly', TetraReference: 'readonly', TetraGPU: 'readonly', TetraRender: 'readonly', TetraSaved: 'readonly', TetraCompute: 'readonly'};
+const tetra = {createFixed: 'readonly', TetraCore: 'readonly', TetraReference: 'readonly', TetraGPU: 'readonly', TetraRender: 'readonly', TetraSaved: 'readonly', TetraCompute: 'readonly', TetraStudioModel: 'readonly', TetraStudioEncoder: 'readonly'};
 const rules = {
   'no-undef': 'error', 'no-unused-vars': ['error', {args: 'none', caughtErrors: 'none'}], 'no-redeclare': 'error', 'no-dupe-keys': 'error',
   'no-unreachable': 'error', 'no-self-assign': 'error', 'no-self-compare': 'error', 'no-unsafe-finally': 'error', 'no-const-assign': 'error',
@@ -16,8 +16,8 @@ const rules = {
   'no-unmodified-loop-condition': 'error', 'no-use-before-define': ['error', {functions: false, classes: false, variables: false}], 'eqeqeq': ['error', 'always', {null: 'ignore'}],
 };
 export default [
-  {ignores: ['dist/**', 'node_modules/**', 'tests/review-output/**']},
+  {ignores: ['dist/**', '**/node_modules/**', 'src/vendor/mediabunny.js', 'tests/review-output/**', '.venv/**']},
   {files: ['src/**/*.js'], languageOptions: {ecmaVersion: 2023, sourceType: 'script', globals: {...browser, ...tetra, module: 'readonly', __WORKER_SOURCE__: 'readonly'}}, rules},
   {files: ['tests/browser_pixels.js'], languageOptions: {ecmaVersion: 2023, sourceType: 'script', globals: {...browser, ...tetra}}, rules},
-  {files: ['**/*.cjs'], languageOptions: {ecmaVersion: 2023, sourceType: 'commonjs', globals: {require: 'readonly', module: 'writable', __dirname: 'readonly', process: 'readonly', console: 'readonly', Buffer: 'readonly', global: 'writable', globalThis: 'readonly', performance: 'readonly', setTimeout: 'readonly', URL: 'readonly'}}, rules},
+  {files: ['**/*.cjs'], languageOptions: {ecmaVersion: 2023, sourceType: 'commonjs', globals: {require: 'readonly', module: 'writable', __dirname: 'readonly', process: 'readonly', console: 'readonly', Buffer: 'readonly', global: 'writable', globalThis: 'readonly', performance: 'readonly', setTimeout: 'readonly', clearTimeout: 'readonly', AbortController: 'readonly', WritableStream: 'readonly', Blob: 'readonly', URL: 'readonly'}}, rules},
 ];

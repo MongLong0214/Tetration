@@ -1,5 +1,43 @@
 # Validation — 1.0.0
 
+## Motion foundations (2026-10-11, development)
+
+Working tree based on `88fa6a4`, runtime SHA-256
+`eb8467fdcfd368fca5fec6757adcd6b823d6afaac0b9f63ece5250cfcb0a0719` (not a production
+release). Project, transactional storage/Undo and camera tests include 256-place
+coordinates, strict import rejection, 310-digit mpmath 1.3.0 fixtures, frame timing,
+roll extent and cancellation. No existing numerical/sample/time tolerances changed.
+The historical 400KB application check excludes the explicitly vendored media
+bundle; the Explorer check retains its original budget.
+
+`npm test`, `npm run lint`, `npm run build` pass. `browser_explorer.py` passes
+27 checks and `browser_release.py` passes 16, including real context loss/restore,
+Worker fallback, storage failures and offline reload. Media QA uses Python 3.14.3,
+Playwright 1.63.0 and desktop Chromium 153.0.8010.12 on Apple M4 Pro / ANGLE Metal.
+Use Python 3.10+ for the pinned QA requirements; macOS system Python 3.9 cannot
+install the pinned Playwright (the project pins remain unchanged).
+
+`TETRA_BASE_URL=http://127.0.0.1:4174 TETRA_HARDWARE_BROWSER=1 python3
+tests/browser_studio.py` passes independent ffprobe/ffmpeg checks: MP4/AVC at
+320×180/30 (60 frames supplied with 40ms wall-clock delays), 720²/24 (48 frames),
+1080×1920/30 (60 frames), and WebM/VP9 at 320×180/30 (60 frames). Every file is
+2 seconds with one video track and no audio; all decoded frame IDs, timestamps,
+channel colors and vertical orientation match. Container timestamp rounding is
+allowed within 2ms, independently of strict integer-microsecond unit tests.
+The 12 720/1080/aspect/fps MP4 probes succeeded. Blob previews remain paused under
+the production CSP, no external runtime request occurs, and offline reload keeps
+the model and encoder available.
+
+Vendor regeneration with `npm ci --prefix tools/vendor --ignore-scripts` and
+`npm run build --prefix tools/vendor` reproduces the SHA256 in
+`src/vendor/SHA256SUMS`. The pinned package includes the original MPL sources;
+NOTICE, license and bundle hash also ship in the offline distribution.
+
+These results verify the media path, not the required moving-camera + FX 10-second
+movie. Renderer/FX/Studio UI/export integration and their regression checks remain
+in progress. No physical iPhone/Safari or cross-device qualification is claimed,
+and the collector's 64MiB logical output limit does not bound process/GPU memory.
+
 ## 2026-10-06 first-visit relink, pending-strip fill and Overview opening qualification
 
 Local qualification of the working tree on top of `7b27455` (not committed when measured), runtime SHA-256 `74918f55638d1c149e957375e5bf2f1d2573e2b74b1354a9e42cd091deef1bd1` (274,642 bytes), native Chrome 154.0.8037.98 / ANGLE Metal on an Apple M2 Pro, served by `serve.cjs` with its CSP. `npm test`: 138 passed, 0 failed. `npm run lint` (ESLint 10.1.0): clean. All 12 browser suites run sequentially in hardware mode and pass 217 checks with zero uncaught browser errors: review 29, release 16, deep 29, quality 22, explorer 27, perf 13, reuse 12, interactions 14, production 22, zoom 7, webkit 13, maximum 13. Five further deep runs on the same runtime each pass 29/29. This is a single local machine under heavy unrelated load (load average 7 at the start of the sequential run; it reached 162 at the end of the extra deep runs), not remote CI.

@@ -15,7 +15,7 @@
     {name: 'Horizon', sub: '10¹⁰⁰ · DEEP FEATHER', x: '-0.605137938972379900971817048132147498249950297815856628491748908858224992290680363711703001492344905661729028182206', y: '0.437740442074800562969426586669113155808012201307319340609925561376648113051190710894591896027315034323404945092475', span: '7e-100'},
   ];
   const FIXED_ITERATIONS = [64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384];
-  const AUTO_STEPS = [256, 384, 512, 768, 1024, 1536, 2048, 3072, 4096, 6144, 8192, 12288, 16384];
+  const AUTO_STEPS = TetraRender.AUTO_STEPS;
   const DIRECT_LIMIT = 2 ** -16, FP64_LIMIT = 1e-13, SETTLE_MS = 110, BATCH_MS = 28, FRAME_MS = 12;
   const minSpan = F.parse('1e-200'), maxSpan = F.parse('1e12'), maxCoordinate = F.parse('1e12');
   const reducedMotion = matchMedia('(prefers-reduced-motion:reduce)');
@@ -90,8 +90,7 @@
   }
   function iterationsFor(v = view) {
     if (iterationSetting !== 'auto') return iterationSetting;
-    const wanted = 320 + 34 * Math.max(0, Math.log10(7 / num(v.span)));
-    return AUTO_STEPS.find(n => n >= wanted) || AUTO_STEPS.at(-1);
+    return TetraRender.autoIterations(F.text(v.span));
   }
   function magnitude(v) { return Math.max(1, Math.abs(num(v.x)), Math.abs(num(v.y))); }
   const accelerated = () => !!compute && !compute.failed;
