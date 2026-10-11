@@ -1,4 +1,154 @@
-# Validation — 1.0.0
+# Validation — 1.1.0
+
+## Motion Studio integration (2026-10-11)
+
+Native Chromium 153.0.8010.12 / ANGLE Metal on Apple M4 Pro, Python 3.14.3,
+Playwright 1.63.0, served production CSP. Final Studio runtime
+`cf3c1c7dfef88bd9bcc454228ed079e9d089cdc0f14745ffe256af10fdc66acf`
+passes media 13, FX 3, UI 16, failures/recovery 9 and deep adapter 2 checks,
+43 total with zero uncaught exceptions. Actual UI exports:
+
+| Shot | Output | Independent ffprobe/ffmpeg result |
+| --- | --- | --- |
+| Tunnel In + Neon Pulse | 1080×1920, 30fps, AA4 | 300 frames, 10.000s, AVC, 15,071,120 bytes |
+| Travel + Prism Wave | 1280×720, 24fps, AA4 | 48 frames, 2.000s, AVC, 1,498,164 bytes |
+| Travel + Prism Wave | 720², 24fps, AA16 | 48 frames, 2.000s, AVC, 1,514,645 bytes |
+| Travel + Neutral | 720², 24fps, AA4 | 48 frames, 2.000s, AVC, 1,526,586 bytes |
+| Travel + Deep Ambient | 720², 24fps, AA4 | 48 frames, 2.000s, AVC, 1,526,831 bytes |
+| Hold + Prism Wave | 720², 30fps, AA4 | 600 frames, 20.000s, AVC, 12,765,929 bytes |
+
+Every decoded PTS matches k/fps within container rounding (2ms); every file has
+one silent video track and distinct first/middle/last images. The mandatory
+10-second output uses WebGPU orbit work, 384 shot-wide iterations, 300 complete
+source frames and 301 compositions including preflight. Hold computes one orbit
+image and gets 600 cache hits. After cleanup, each session reports zero cached
+source frames and zero FX target bytes/programs. This is app-owned resource
+accounting, not a driver/encoder RAM guarantee.
+
+Decoded first/middle/last frames of all four presets were visually inspected:
+moving framing and fractal detail remain visible, with no blank drawing-buffer
+frames, white clipping fields or black rotation corners in these representative
+clips. This does not certify every extreme effect combination or remove SDR
+quantization/compression limits.
+
+UI checks include draft Cancel/Apply, retained B in Hold, inverse-roll pan at 90°
+with spatial FX, Duration/Speed/FPS, invalid numeric drafts, 100 inputs/one Undo,
+Save/JSON/rejected import/import Undo/Load/Delete, cancel/retry without partial
+files, result URL release and exact Explore camera/hash restoration. Desktop,
+768px tablet and 390px mobile screenshots are generated in tests/review-output.
+Mobile WCAG checks pass; a reduced-motion preference change pauses preview.
+Space on a focused Original button retains native activation without Play.
+Pause refines the selected preview to the chosen 4/16 samples.
+
+Actual hidden/export/Resume and resize checks decode 60 frames at the frozen
+1280×720 size. Real WebGL context loss fails without a partial result, preserves
+the project, and a restored renderer produces a new preview and complete video.
+Missing WebGL2, half-float targets and VideoEncoder report explicit failures
+while project editing/Save remain usable. Three success→cancel→success cycles
+on one page retain the same observed texture/FBO counts; each ends with zero
+owned bitmaps and result URLs. Visibility is driven through the app handler with
+a controlled document.hidden getter, not an OS sleep certification.
+
+The final code review found and repaired a paused preview that stayed suspended
+after a hidden tab became visible. The same added scenario fails before repair
+and passes after it: Look edits render again without autoplay. Active export still
+requires explicit Resume; a ready result retains its modal and URL across hiding.
+Hiding during finalization cannot publish a canceled late result.
+
+Small complete AA4 deep frames cover Horizon 7e−80→7e−100, including the planned
+reference-precision switch at frame 50, and a negative-real-axis branch crossing.
+Neighbour frames match fresh same-camera computations byte for byte, including
+reversed request order. This verifies those shots, not all chaotic trajectories.
+
+Separate actual GPU FX checks establish opaque byte identity for Neutral,
+Original and Amount 0; independent linear EV/Wave calculations differ by at most
+one quantization level. Roll 0/45/90 agrees with inverse camera geometry in all
+three aspects; reflected Kaleidoscope/Prism samples match the CPU sampler within
+one level. Missing half-float support rejects the selected look explicitly while
+Original works. Frame/preset results do not depend on request order.
+
+The subsequent mobile Explorer toolbar repair puts Open in Studio in Explore
+controls on narrow screens, retaining every existing 44px toolbar action.
+Runtime `8becbb2ffbc1b9d8aedba3354041b74a3c59de85a1fa2b903322efe3ac00c4db`
+passes Explorer 27, release/recovery/offline 16, review 29 and the 13 media-path
+checks. Final Node tests: 177 passed; lint/build pass. The application size budget is
+explicitly updated from 400KB to 500KB for the native Studio implementation;
+the pinned 236,722-byte media bundle is separate. Numerical/sample/time
+tolerances are unchanged.
+
+CI runs all five Studio suites together with all original browser suites.
+The Linux deep job reached 12 passing checks but did not finish its 960×576
+BLA performance section in two successive runs before the next push canceled
+them. The full unchanged-size/iterations/threshold suite passes 29 checks with
+SwiftShader on macOS. That heavyweight CI job now uses macOS with explicit
+SwiftShader; Linux retains quality/pixel, interaction and recovery suites.
+Benchmark start/finish and the actual driver are recorded. The original GPU
+orbit kernels and all numerical/sample/performance assertions remain unchanged.
+
+An additional native Metal run retained a failure at the original deep suite's
+WebGL/WebGPU direct pixel-identity assertion (62/206/595 differing pixels at
+1/4/16 samples). An isolated build of main `88fa6a4` reproduces those exact
+counts and statistics; Studio is identical. The assertion is not weakened.
+Native Studio WebGPU outputs are qualified separately above. Remote CI at
+`404ae5c` passes all 19 jobs, including the full deep suite. The final visibility
+repair passes all 19 jobs at `12f975e` in
+[CI 38115411993](https://github.com/MongLong0214/Tetration/actions/runs/38115411993).
+All 43 Studio checks also pass on its actual protected Vercel preview; inline
+runtime and CSP match the local build, including an offline media reload using
+the existing CLI authentication scoped to that preview host. Native desktop
+WebKit 26.6 additionally passes Studio editing, Save/JSON and exact Explore return,
+and independently decoded Neon Pulse MP4: 1280×720, 24fps, 48 frames, 2 seconds,
+every PTS correct and distinct first/middle/last images, zero uncaught errors.
+Physical iPhone and Safari movie export remain unqualified; the checked scope
+does not establish absolute absence of defects on every device or shot.
+
+## Motion foundations (2026-10-11, development)
+
+Working tree based on `88fa6a4`, runtime SHA-256
+`eb8467fdcfd368fca5fec6757adcd6b823d6afaac0b9f63ece5250cfcb0a0719` (not a production
+release). Project, transactional storage/Undo and camera tests include 256-place
+coordinates, strict import rejection, 310-digit mpmath 1.3.0 fixtures, frame timing,
+roll extent and cancellation. No existing numerical/sample/time tolerances changed.
+The historical 400KB application check excludes the explicitly vendored media
+bundle; the Explorer check retains its original budget.
+
+`npm test`, `npm run lint`, `npm run build` pass. `browser_explorer.py` passes
+27 checks and `browser_release.py` passes 16, including real context loss/restore,
+Worker fallback, storage failures and offline reload. Media QA uses Python 3.14.3,
+Playwright 1.63.0 and desktop Chromium 153.0.8010.12 on Apple M4 Pro / ANGLE Metal.
+Use Python 3.10+ for the pinned QA requirements; macOS system Python 3.9 cannot
+install the pinned Playwright (the project pins remain unchanged).
+
+`TETRA_BASE_URL=http://127.0.0.1:4174 TETRA_HARDWARE_BROWSER=1 python3
+tests/browser_studio.py` passes independent ffprobe/ffmpeg checks: MP4/AVC at
+320×180/30 (60 frames supplied with 40ms wall-clock delays), 720²/24 (48 frames),
+1080×1920/30 (60 frames), and WebM/VP9 at 320×180/30 (60 frames). Every file is
+2 seconds with one video track and no audio; all decoded frame IDs, timestamps,
+channel colors and vertical orientation match. Container timestamp rounding is
+allowed within 2ms, independently of strict integer-microsecond unit tests.
+The 12 720/1080/aspect/fps MP4 probes succeeded. Blob previews remain paused under
+the production CSP, no external runtime request occurs, and offline reload keeps
+the model and encoder available.
+
+Vendor regeneration with `npm ci --prefix tools/vendor --ignore-scripts` and
+`npm run build --prefix tools/vendor` reproduces the SHA256 in
+`src/vendor/SHA256SUMS`. The pinned package includes the original MPL sources;
+NOTICE, license and bundle hash also ship in the offline distribution.
+
+These results verify the media path, not the required moving-camera + FX 10-second
+movie. Renderer/FX/Studio UI/export integration and their regression checks remain
+in progress. No physical iPhone/Safari or cross-device qualification is claimed,
+and the collector's 64MiB logical output limit does not bound process/GPU memory.
+
+The next adapter checks use runtime `0d37907e203c6299b1facc4d1cbda58b41017702e7f5f4b414352bc0ce56ec3c`
+on the same native Chromium/GPU: complete 160×90 AA4/16 frames are byte-identical
+to existing-kernel whole-frame draws, every source alpha carries its selected AA
+count, and Hold reuses one cached base. Sixteen shallow-to-Plume frame requests
+(including reordered seeks) return the same descriptor and pixel hash for each k.
+Node cases check delayed fence cancellation, delayed reference disposal, fixed
+source limits and device/float failures. This does not yet prove Studio owner
+handoff, full-resolution moving FX, visual continuity across reference segments,
+or the WebGPU adapter path; those require the remaining integration checks.
 
 ## 2026-10-06 first-visit relink, pending-strip fill and Overview opening qualification
 

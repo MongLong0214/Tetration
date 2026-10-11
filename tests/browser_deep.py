@@ -7,7 +7,7 @@ from playwright.sync_api import sync_playwright
 
 getcontext().prec = 300
 PIXELS = (ROOT / 'tests/browser_pixels.js').read_text()
-suite = Suite('deep', ['SwiftShader WebGL2 on a Linux runner; FP32 GPU arithmetic as on hardware, but no hardware driver qualification.',
+suite = Suite('deep', ['SwiftShader WebGL2; software graphics, not hardware driver qualification.',
                        'Chaotic regions are compared statistically: finite precision of any kind changes individual chaotic pixels.'])
 PLUME = ('-2.2930579295624999999999991', '0.33208044555625', '5e-11')
 ABYSS = ('-0.605137938972379900971816986088586258864125', '0.437740442074800562969426507709712806289976004723289995229', '7e-25')
@@ -17,11 +17,12 @@ HORIZON = ('-0.60513793897237990097181704813214749824995029781585662849174890885
 
 def body():
     with sync_playwright() as p:
-        browser = launch(p)
+        browser = launch(p, ['--use-angle=swiftshader'])
         suite.report['browser_version'] = browser.version
         page = suite.watch(browser.new_page(viewport={'width': 480, 'height': 320}))
         page.add_init_script(NO_WEBGPU)
         open_app(page, 'v=1&x=0.5&y=0&s=1&q=1')
+        suite.report['graphics'] = graphics(page)
         page.evaluate(PIXELS)
 
         # 1. Structured views must match FP64 perturbation pixel for pixel on the GPU.
@@ -81,7 +82,9 @@ def body():
         page.evaluate('() => __tetraPixels.setBla("auto")')
         speed = {}
         for name, (x, y, s), n in [('Horizon 10^100', HORIZON, 4096), ('threshold 1e-55', ('1.3594182965158676173336178455', '2.2496614865153754494134386028', '1e-55'), 512), ('Plume 10^11', PLUME, 768)]:
+            print('BENCHMARK_START', name, '960x576, best of 5', flush=True)
             speed[name] = page.evaluate('([x,y,s,n]) => __tetraPixels.bla(x,y,s,960,576,n,5)', [x, y, s, n])
+            print('BENCHMARK_DONE', name, speed[name], flush=True)
         assert speed['Horizon 10^100']['levels'] > 0 and speed['Horizon 10^100']['speedup'] >= 2.5, speed
         assert speed['threshold 1e-55']['speedup'] >= 5 and speed['threshold 1e-55']['differing'] == 0, speed
         assert speed['Plume 10^11']['autoMs'] <= speed['Plume 10^11']['plainMs'] * 1.3 + 20, speed

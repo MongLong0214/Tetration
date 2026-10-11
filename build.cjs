@@ -6,11 +6,11 @@ const root = __dirname;
 const read = name => fs.readFileSync(path.join(root, 'src', name), 'utf8').replace(/\r\n/g, '\n');
 const worker = ['precision.js', 'reference.js', 'core.js', 'worker.js'].map(read).join('\n');
 const main = read('main.js').replace('__WORKER_SOURCE__', () => JSON.stringify(worker));
-const script = [read('precision.js'), read('reference.js'), read('core.js'), read('gpu.js'), read('compute.js'), read('saved.js'), read('render.js'), main].join('\n').replace(/<\/script/gi, '<\\/script');
+const script = [read('precision.js'), read('reference.js'), read('core.js'), read('gpu.js'), read('compute.js'), read('saved.js'), read('render.js'), read('vendor/mediabunny.js'), read('studio-model.js'), read('studio-camera.js'), read('studio-render.js'), read('studio-fx.js'), read('studio-encoder.js'), read('studio-preview.js'), read('studio-export.js'), read('studio.js'), main].join('\n').replace(/<\/script/gi, '<\\/script');
 const styles = read('style.css');
 const hash = text => "'sha256-" + createHash('sha256').update(text).digest('base64') + "'";
 const csp = ["default-src 'none'", 'script-src ' + hash(script), 'style-src ' + hash(styles),
-  "worker-src 'self' blob:", "manifest-src 'self'", "img-src 'self' data: blob:", "connect-src 'none'", "base-uri 'none'", "form-action 'none'"].join('; ');
+  "worker-src 'self' blob:", "manifest-src 'self'", "img-src 'self' data: blob:", "media-src blob:", "connect-src 'none'", "base-uri 'none'", "form-action 'none'"].join('; ');
 const html = read('index.html').replace('<head>', '<head>\n<meta http-equiv="Content-Security-Policy" content="' + csp + '">')
   .replace('__STYLES__', () => styles).replace('__SCRIPT__', () => script)
   // Link previews need absolute URLs (SITE_URL overrides the production origin).
@@ -25,5 +25,7 @@ const release = createHash('sha256').update(html).update(read('manifest.webmanif
 for (const name of assets) release.update(fs.readFileSync(path.join(root, 'src', 'assets', name)));
 fs.writeFileSync(path.join(out, 'sw.js'), read('sw.js').replace('__BUILD__', release.digest('hex').slice(0, 16)));
 fs.writeFileSync(path.join(out, 'manifest.webmanifest'), read('manifest.webmanifest'));
+fs.mkdirSync(path.join(out, 'vendor'), {recursive:true});
+for (const name of ['NOTICE.md', 'LICENSE.mediabunny', 'SHA256SUMS']) fs.copyFileSync(path.join(root, 'src/vendor', name), path.join(out, 'vendor', name));
 for (const name of assets) fs.copyFileSync(path.join(root, 'src', 'assets', name), path.join(out, name));
 console.log(`Built dist/index.html (${Buffer.byteLength(html)} bytes) with SHA-256 CSP, offline shell and ${assets.length} icons. No runtime dependencies.`);
