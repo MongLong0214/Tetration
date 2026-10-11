@@ -27,6 +27,12 @@ test('dispose aborts a delayed reference without waiting for or applying its lat
  let resolve,entered;const started=new Promise(r=>{entered=r;}),gpu=renderer(),session=await R.prepare(p,{renderer:gpu,size:{width:64,height:64},yieldTask:async()=>{},reference:()=>{entered();return new Promise(r=>{resolve=r;});}});
  const work=session.renderBase(0),rejected=assert.rejects(work,{name:'AbortError'});await started;await session.dispose();await rejected;resolve({});await Promise.resolve();assert.equal(gpu.calls.allocations,0);assert.equal(session.diagnostics().references,0);
 });
+test('canceled WebGPU batch drains queued WebGL writes before returning its frame',async()=>{
+ let resolve,entered;const started=new Promise(r=>{entered=r;}),gpu=renderer({fence:()=>{entered();return new Promise(r=>{resolve=r;});}}),controller=new AbortController();
+ const compute={failed:false,pending:new Map(),pipeline(){},kernel:()=> 'direct',capacity:()=>65536,draw:async()=>{controller.abort();return false;},complete(){}};
+ const session=await R.prepare(project(),{renderer:gpu,compute,size:{width:32,height:32}}),work=session.renderBase(0,'final',controller.signal),rejected=assert.rejects(work,{name:'AbortError'});
+ await started;assert.equal(gpu.calls.releases.length,0);resolve();await rejected;assert.equal(gpu.calls.releases.length,1);await session.dispose();
+});
 test('reference descriptors are deterministic and independent of visiting or Look fields',async()=>{
  const p=project();p.shot.motion='travel';p.shot.end.span='1e-100';const first=await R.prepare(p,{renderer:renderer(),size:{width:64,height:64},yieldTask:async()=>{}});
  p.look.kaleido.enabled=true;p.look.wave.speed=-1;p.look.bloom.radiusRatio=0.03;

@@ -67,6 +67,12 @@ def run():
             assert page.locator('#studio-speed-number').input_value() == '2'
             page.click('#studioSave')
             baseline = page.evaluate('() => TetraStudioModel.serialize(tetraStudioDiagnostics.project)')
+            page.locator('#studioOriginal').focus()
+            page.keyboard.press('Space')
+            assert page.locator('#studioOriginal').get_attribute('aria-pressed') == 'true'
+            assert not page.evaluate('() => tetraStudioDiagnostics.preview.playing')
+            assert page.evaluate('() => TetraStudioModel.serialize(tetraStudioDiagnostics.project)') == baseline
+            page.keyboard.press('Space')
             page.locator('#studio-look-hueDeg-number').fill('')
             page.locator('#studio-look-hueDeg-number').press('Tab')
             assert page.locator('#studio-look-hueDeg-number').get_attribute('aria-invalid') == 'true'
@@ -75,7 +81,7 @@ def run():
             page.click('#studioUndo')
             assert page.evaluate('() => TetraStudioModel.serialize(tetraStudioDiagnostics.project)') == baseline
             assert not page.evaluate('() => tetraStudioDiagnostics.dirty')
-            suite.record('Draft Cancel/Apply, Hold B preservation, speed/FPS, invalid number and one drag Undo')
+            suite.record('Draft Cancel/Apply, Hold B, speed/FPS, keyboard Original, invalid number and one drag Undo')
             # Keep one moving endpoint pair; restore the mandatory 10 s portrait configuration.
             number(page, 'duration', 10)
             page.get_by_label('FPS', exact=True).select_option('30')
@@ -127,6 +133,21 @@ def run():
                 size = (1280, 720) if aspect == '16:9' else (720, 720)
                 suite.record('Actual Prism Wave moving short clip', {'samples': samples, 'decoded': inspect(path, size, 24, 48), 'cleanup': cleanup})
                 page.click('#studioReturnEdit')
+            page.get_by_label('Sampling', exact=True).select_option('4')
+            for preset in ['Neutral', 'Deep Ambient']:
+                page.get_by_label('Preset', exact=True).select_option(preset)
+                page.click('#studioVideo')
+                page.click('#studioExportStart')
+                page.wait_for_function('() => ["ready","failed","canceled"].includes(tetraStudioDiagnostics.export.state) && !tetraStudioDiagnostics.export.active', timeout=300000)
+                output = page.evaluate('() => tetraStudioDiagnostics.export')
+                assert output['state'] == 'ready' and output['submitted'] == 48, output
+                with page.expect_download() as download:
+                    page.click('#studioDownload')
+                path = OUT / ('studio-' + preset.lower().replace(' ', '-') + '-720.mp4')
+                download.value.save_as(path)
+                suite.record('Actual ' + preset + ' moving short clip', inspect(path, (720, 720), 24, 48))
+                page.click('#studioReturnEdit')
+            page.get_by_label('Preset', exact=True).select_option('Prism Wave')
             page.get_by_label('Path', exact=True).select_option('hold')
             page.get_by_label('Sampling', exact=True).select_option('4')
             number(page, 'duration', 20)

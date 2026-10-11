@@ -3,15 +3,18 @@
 ## Motion Studio integration (2026-10-11, development)
 
 Native Chromium 153.0.8010.12 / ANGLE Metal on Apple M4 Pro, Python 3.14.3,
-Playwright 1.63.0, served production CSP. Studio UI runtime
-`8832bc3ebaf810f165257865ed1fc16085547aae03ee201ddf5a0c56609c0ee3`
-passes 14 checks in 34.3 seconds with zero uncaught exceptions. Actual UI exports:
+Playwright 1.63.0, served production CSP. Final Studio runtime
+`54e7dc00bbd917e947bf597abc1e28576764dc67db1322af2f99db7d69a27d16`
+passes media 13, FX 3, UI 16, failures/recovery 8 and deep adapter 2 checks,
+42 total with zero uncaught exceptions. UI takes 37.4 seconds. Actual UI exports:
 
 | Shot | Output | Independent ffprobe/ffmpeg result |
 | --- | --- | --- |
 | Tunnel In + Neon Pulse | 1080×1920, 30fps, AA4 | 300 frames, 10.000s, AVC, 15,071,120 bytes |
 | Travel + Prism Wave | 1280×720, 24fps, AA4 | 48 frames, 2.000s, AVC, 1,498,164 bytes |
 | Travel + Prism Wave | 720², 24fps, AA16 | 48 frames, 2.000s, AVC, 1,514,645 bytes |
+| Travel + Neutral | 720², 24fps, AA4 | 48 frames, 2.000s, AVC, 1,526,586 bytes |
+| Travel + Deep Ambient | 720², 24fps, AA4 | 48 frames, 2.000s, AVC, 1,526,831 bytes |
 | Hold + Prism Wave | 720², 30fps, AA4 | 600 frames, 20.000s, AVC, 12,765,929 bytes |
 
 Every decoded PTS matches k/fps within container rounding (2ms); every file has
@@ -22,12 +25,34 @@ image and gets 600 cache hits. After cleanup, each session reports zero cached
 source frames and zero FX target bytes/programs. This is app-owned resource
 accounting, not a driver/encoder RAM guarantee.
 
+Decoded first/middle/last frames of all four presets were visually inspected:
+moving framing and fractal detail remain visible, with no blank drawing-buffer
+frames, white clipping fields or black rotation corners in these representative
+clips. This does not certify every extreme effect combination or remove SDR
+quantization/compression limits.
+
 UI checks include draft Cancel/Apply, retained B in Hold, inverse-roll pan at 90°
 with spatial FX, Duration/Speed/FPS, invalid numeric drafts, 100 inputs/one Undo,
 Save/JSON/rejected import/import Undo/Load/Delete, cancel/retry without partial
 files, result URL release and exact Explore camera/hash restoration. Desktop,
 768px tablet and 390px mobile screenshots are generated in tests/review-output.
 Mobile WCAG checks pass; a reduced-motion preference change pauses preview.
+Space on a focused Original button retains native activation without Play.
+Pause refines the selected preview to the chosen 4/16 samples.
+
+Actual hidden/export/Resume and resize checks decode 60 frames at the frozen
+1280×720 size. Real WebGL context loss fails without a partial result, preserves
+the project, and a restored renderer produces a new preview and complete video.
+Missing WebGL2, half-float targets and VideoEncoder report explicit failures
+while project editing/Save remain usable. Three success→cancel→success cycles
+on one page retain the same observed texture/FBO counts; each ends with zero
+owned bitmaps and result URLs. Visibility is driven through the app handler with
+a controlled document.hidden getter, not an OS sleep certification.
+
+Small complete AA4 deep frames cover Horizon 7e−80→7e−100, including the planned
+reference-precision switch at frame 50, and a negative-real-axis branch crossing.
+Neighbour frames match fresh same-camera computations byte for byte, including
+reversed request order. This verifies those shots, not all chaotic trajectories.
 
 Separate actual GPU FX checks establish opaque byte identity for Neutral,
 Original and Amount 0; independent linear EV/Wave calculations differ by at most
@@ -40,15 +65,27 @@ The subsequent mobile Explorer toolbar repair puts Open in Studio in Explore
 controls on narrow screens, retaining every existing 44px toolbar action.
 Runtime `8becbb2ffbc1b9d8aedba3354041b74a3c59de85a1fa2b903322efe3ac00c4db`
 passes Explorer 27, release/recovery/offline 16, review 29 and the 13 media-path
-checks. Node tests: 176 passed; lint/build pass. The application size budget is
+checks. Final Node tests: 177 passed; lint/build pass. The application size budget is
 explicitly updated from 400KB to 500KB for the native Studio implementation;
 the pinned 236,722-byte media bundle is separate. Numerical/sample/time
 tolerances are unchanged.
 
-CI now runs the media, FX and UI Studio suites together with all original browser
-suites. Full remote CI and additional deep/exception-path integration checks are
-still being completed before dev integration. No main merge, production release,
-physical iPhone or Safari export qualification is claimed.
+CI runs all five Studio suites together with all original browser suites.
+The Linux deep job reached 12 passing checks but did not finish its 960×576
+BLA performance section in two successive runs before the next push canceled
+them. The full unchanged-size/iterations/threshold suite passes 29 checks with
+SwiftShader on macOS. That heavyweight CI job now uses macOS with explicit
+SwiftShader; Linux retains quality/pixel, interaction and recovery suites.
+Benchmark start/finish and the actual driver are recorded. The original GPU
+orbit kernels and all numerical/sample/performance assertions remain unchanged.
+
+An additional native Metal run retained a failure at the original deep suite's
+WebGL/WebGPU direct pixel-identity assertion (62/206/595 differing pixels at
+1/4/16 samples). An isolated build of main `88fa6a4` reproduces those exact
+counts and statistics; Studio is identical. The assertion is not weakened.
+Native Studio WebGPU outputs are qualified separately above. Final remote CI
+results are linked from PR #18. No main merge, production release, physical
+iPhone or Safari export qualification is claimed.
 
 ## Motion foundations (2026-10-11, development)
 

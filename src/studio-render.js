@@ -63,18 +63,18 @@
    release(){if(!released){released=true;item.readers--;}}};}
   return {
    plan,numerical,backend,
-   diagnostics(){return {...stats,source:{...extent},output:{...plan.size},cachedFrames:cache?1:0,cachedBytes:cache?extent.width*extent.height*4:0,references:refs.size,active};},
+   diagnostics(){return {...stats,source:{...extent},output:{...plan.size},cachedFrames:cache?1:0,cachedSamples:cache?.samples??null,cachedBytes:cache?extent.width*extent.height*4:0,references:refs.size,active};},
    async renderBase(k,profile='final',renderSignal){
     if(active)throw Error('Only one source frame may render at a time');if(!['preview','final'].includes(profile))throw Error('Invalid frame profile');activeCheck(renderSignal);M.timing(plan.project,k);
     const selected=profile==='final'?samples:4,state=numerical.states[k],palette=M.ENUMS.palette.indexOf(plan.project.look.palette);
     const key=JSON.stringify([state.camera,extent,palette,plan.iterations,selected,state.descriptor,backend]);
     if(cache?.key===key){stats.cacheHits++;return handle(cache,k);}
-    dropCache();active=true;drain=new Promise(resolve=>{finishDrain=resolve;});let frame=null;
+    dropCache();active=true;drain=new Promise(resolve=>{finishDrain=resolve;});let frame=null,writesPending=false;
     try{
      activeCheck(renderSignal);const ref=state.mode==='perturb'?await getReference(state.descriptor,renderSignal):null,view=fixed(state.camera);
      const base={iterations:plan.iterations,palette,rules:root.TetraCore.RULES.gpu,aspect:extent.height/extent.width};
      const scene=state.mode==='direct'?{...base,mode:'direct',center:[F.number(view.x),F.number(view.y)],span:F.number(view.span)}:{...base,...R.perturbScene(F,view,ref.point.x,ref.point.y),ref};
-     activeCheck(renderSignal);frame=renderer.beginFrame(extent.width,extent.height,null,false);
+     activeCheck(renderSignal);frame=renderer.beginFrame(extent.width,extent.height,null,false);writesPending=true;
      // Clear BLA's previous view bound so seeking cannot choose another frame's table.
      renderer.bla=null;const levels=scene.mode==='perturb'?renderer.blaPolicy(frame,scene):0;
      const partial=backend==='webgl'&&((plan.iterations>=8192&&selected>=4)||(plan.iterations>=4096&&selected>=16));
@@ -87,14 +87,20 @@
       activeCheck(renderSignal);const batch=[];let pixels=0;
       do{const tile=tiles[index++];batch.push(tile);pixels+=tile.width*tile.height;}while(index<tiles.length&&pixels+tiles[index].width*tiles[index].height<=budget);
       stats.submits++;
+      writesPending=true;
       if(backend==='webgpu'){const completed=await compute.draw(renderer,frame,scene,selected,0,batch,kernel,levels,null,()=>disposed||signal?.aborted||renderSignal?.aborted);if(completed===false){activeCheck(renderSignal);throw Error('GPU sampling did not complete');}}
-      else if(partial){for(const tile of batch){const completed=await renderer.drawAATile(frame,tile,scene,()=>disposed||signal?.aborted||renderSignal?.aborted,0,selected);if(!completed){activeCheck(renderSignal);throw Error('GPU sampling did not complete');}}}
-      else{renderer.prepare(frame,scene,selected,0);for(const tile of batch)renderer.drawTile(frame,tile);await renderer.fence();}
+      else if(partial){for(const tile of batch){const completed=await renderer.drawAATile(frame,tile,scene,()=>disposed||signal?.aborted||renderSignal?.aborted,0,selected);if(!completed){activeCheck(renderSignal);throw Error('GPU sampling did not complete');}}writesPending=false;}
+      else{renderer.prepare(frame,scene,selected,0);for(const tile of batch)renderer.drawTile(frame,tile);await renderer.fence();writesPending=false;}
       activeCheck(renderSignal);
      }
-     if(backend==='webgpu'){compute.complete(frame);await renderer.fence();}
+     if(backend==='webgpu'){compute.complete(frame);await renderer.fence();writesPending=false;}
      activeCheck(renderSignal);stats.completedFrames++;cache={key,frame,samples:selected,descriptor:state.descriptor,readers:0};frame=null;return handle(cache,k);
-    }finally{if(frame){renderer.releaseFrame(frame);stats.releases++;}active=false;finishDrain();}
+    }finally{
+     // WebGPU readback may already have queued WebGL texture uploads from an
+     // earlier batch. Drain those too before cancel returns the source to its pool.
+     try{if(frame&&writesPending&&!renderer.lost())await renderer.fence();}
+     finally{if(frame){renderer.releaseFrame(frame);stats.releases++;}active=false;finishDrain();}
+    }
    },
    async dispose(){disposed=true;lifetime.abort();await drain;dropCache();refs.clear();}
   };

@@ -30,7 +30,8 @@ schema v1 and decimal strings up to 256 places; invalid imports preserve the
 current shot. Undo/Redo holds 50 snapshots, with one slider drag per entry.
 Storage errors preserve edits; export JSON to keep a separate copy.
 
-Preview uses a smaller image and four complete samples. Playback keeps one active
+Preview uses a smaller image and four complete samples while playing, and refines
+the paused selected frame to the chosen 4/16 samples. Playback keeps one active
 frame plus one latest desired frame and shows completed useful work, even when
 rendering is slower than the clock. Seeking invalidates older work. Look edits
 reuse compatible orbit pixels. Hidden/leave/export stop the clock; returning does

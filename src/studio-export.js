@@ -19,16 +19,16 @@
   function clearResult(){if(url)URL.revokeObjectURL(url);url=null;result=null;if(state==='ready')state='idle';emit();}
   const api={
    snapshot,
-   start(input,options){
+   start(input,options={}){
     if(active)throw Error('A video export is already active');const project=M.createSession(input).project;
     clearResult();active=true;controller=new AbortController();const signal=controller.signal,id=++job;
     submitted=0;total=project.shot.frameCount;error=null;config=null;profile=null;forcedFailure=null;paused=isHidden();transition('preparing');
     promise=(async()=>{
      let session=null,fx=null,sink=null;
      try{
-      await drainPreview();check(signal);setOwner('export');
-      session=await prepare(project,{...options,signal});check(signal);
-      const size=session.plan.size;fx=createCompositor(options.renderer,size);
+      await drainPreview();check(signal);setOwner('export');const resources=options.getResources?options.getResources():options;
+      session=await prepare(project,{...resources,signal});check(signal);
+      const size=session.plan.size;fx=createCompositor(resources.renderer,size);
       // Compile/allocate the selected look before starting the output writer.
       const base=await session.renderBase(0,'final',signal);
       try{await fx.compose(base,{look:project.look,k:0,fps:project.shot.fps,rollDeg:session.plan.frames[0].camera.rollDeg,signal});}finally{base.release();}

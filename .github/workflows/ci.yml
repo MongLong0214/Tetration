@@ -34,9 +34,10 @@ jobs:
     needs: unit
     env:
       TETRA_SUITE: ${{ matrix.suite }}
-    # The largest native Ultra scenes also exercise latency bounds. Use the
-    # desktop macOS renderer for those; keep Linux pixel/recovery suites below.
-    runs-on: ${{ (matrix.suite == 'studio' || matrix.suite == 'explorer' || matrix.suite == 'reuse' || matrix.suite == 'production' || startsWith(matrix.suite, 'maximum') || matrix.suite == 'cpu-recovery') && 'macos-15' || 'ubuntu-latest' }}
+    # Native Ultra/video qualification uses macOS. The large deep benchmark
+    # also runs there, with SwiftShader explicitly selected by its suite;
+    # Linux retains the quality, pixel, interaction and recovery checks.
+    runs-on: ${{ (matrix.suite == 'deep' || matrix.suite == 'studio' || matrix.suite == 'explorer' || matrix.suite == 'reuse' || matrix.suite == 'production' || startsWith(matrix.suite, 'maximum') || matrix.suite == 'cpu-recovery') && 'macos-15' || 'ubuntu-latest' }}
     timeout-minutes: 45
     strategy:
       fail-fast: false
@@ -79,12 +80,14 @@ jobs:
             python3 tests/browser_studio.py
             python3 tests/browser_studio_fx.py
             python3 tests/browser_studio_ui.py
+            python3 tests/browser_studio_failures.py
+            python3 tests/browser_studio_deep.py
           else
             python3 "tests/browser_${SUITE}.py"
           fi
         env:
           TETRA_BASE_URL: http://127.0.0.1:4173
-          TETRA_HARDWARE_BROWSER: ${{ runner.os == 'macOS' && '1' || '0' }}
+          TETRA_HARDWARE_BROWSER: ${{ runner.os == 'macOS' && matrix.suite != 'deep' && '1' || '0' }}
           TETRA_TRACE_GPU: ${{ (startsWith(inputs.suite, 'production') || inputs.suite == 'maximum-trace' || inputs.suite == 'maximum-kernel-webkit-trace') && '1' || '0' }}
           TETRA_KERNEL_ONLY: ${{ inputs.suite == 'maximum-kernel-webkit-trace' && '1' || '0' }}
           TETRA_SKIP_PENDING_LOSS: ${{ inputs.suite == 'production-skip-loss' && '1' || '0' }}

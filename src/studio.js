@@ -6,7 +6,7 @@
  function put(object,path,value){const keys=path.split('.'),last=keys.pop();get(object,keys.join('.'))[last]=value;}
  function create(bridge){
   const $=id=>document.getElementById(id),stage=$('studioCanvas'),context=stage.getContext('2d',{alpha:false}),wide=matchMedia('(min-width:761px)'),records=[];
-  let session=null,preview=null,pipeline=null,entered=false,endpoint=null,draft=null,original=false,entering=false,notice='',confirming=null,thumbRevision=0,thumbDone=-1,thumbPromise=null,thumbAbort=null,thumbStarting=false;
+  let session=null,preview=null,pipeline=null,entered=false,endpoint=null,draft=null,original=false,entering=false,notice='',confirming=null,thumbRevision=0,thumbDone=-1,thumbPromise=null,thumbAbort=null,thumbStarting=false,composedSamples=4,displayedSamples=0;
   const store=M.createStore({getItem:key=>localStorage.getItem(key),setItem:(key,value)=>localStorage.setItem(key,value)});
   const pointers=new Map();let gesture=null;
   const thumbBases=new Map();
@@ -27,26 +27,28 @@
   function cancelGesture(){pointers.clear();gesture=null;}
   function currentShot(){const value=M.validate(project());if(endpoint){value.shot.start=copy(draft);value.shot.end=copy(draft);value.shot.motion='hold';}return value;}
   function previewSize(){const size=M.dimensions(project().output),scale=Math.min(1,512/Math.max(size.width,size.height));return {width:Math.round(size.width*scale),height:Math.round(size.height*scale)};}
-  function baseKey(value,size){return JSON.stringify([value.shot,value.output.aspect,value.numerics,value.look.palette,size]);}
+  function baseKey(value,size){return JSON.stringify([value.shot,value.output.aspect,value.output.samples,value.numerics,value.look.palette,size]);}
   async function dropPipeline(){if(pipeline){const previous=pipeline;pipeline=null;previous.abort.abort();await previous.fx?.dispose();await previous.render?.dispose();}}
   async function ensurePipeline(signal){
    if(thumbPromise)await thumbPromise;
    if(signal.aborted)throw new DOMException('Preview canceled','AbortError');
-   const value=currentShot(),size=previewSize(),key=baseKey(value,size);
-   if(pipeline?.key===key)return pipeline;
-   await dropPipeline();const abort=new AbortController(),resources=bridge.resources();
+   const value=currentShot(),size=previewSize(),key=baseKey(value,size),resources=bridge.resources();
+   if(pipeline?.key===key&&pipeline.renderer===resources.renderer)return pipeline;
+   await dropPipeline();const abort=new AbortController();
    const render=await root.TetraStudioRender.prepare(value,{...resources,size,signal:abort.signal});
-   const fx=FX.createCompositor(resources.renderer,size);pipeline={key,render,fx,abort};return pipeline;
+   const fx=FX.createCompositor(resources.renderer,size);pipeline={key,render,fx,abort,renderer:resources.renderer};return pipeline;
   }
   function makePreview(){
    const p=project();preview=root.TetraStudioPreview.create({frameCount:p.shot.frameCount,fps:p.shot.fps,
-    renderBase:async(k,{signal})=>{const pipe=await ensurePipeline(signal);if(signal.aborted)throw new DOMException('Preview canceled','AbortError');const base=await pipe.render.renderBase(k,'preview',signal);base.pipe=pipe;return base;},
-    compose:(base,{k,signal})=>base.pipe.fx.compose(base,{look:project().look,k,fps:project().shot.fps,rollDeg:base.pipe.render.plan.frames[k].camera.rollDeg,original,framing:!!endpoint,signal}),
-    present:(canvas,{k})=>{if(!entered)return;if(stage.width!==canvas.width||stage.height!==canvas.height){stage.width=canvas.width;stage.height=canvas.height;}context.drawImage(canvas,0,0);fitCanvas();$('studioFrameNote').textContent=`Preview · ${canvas.width} × ${canvas.height} · frame ${k+1} / ${project().shot.frameCount} · 4 samples`;},
-    onState:state=>{if(!entered)return;$('studioScrub').value=state.desiredK;$('studioTime').textContent=`${(state.desiredK/project().shot.fps).toFixed(3)} s / ${(project().shot.frameCount/project().shot.fps).toFixed(3)} s${state.pending?' · Pending':''}`;$('studioPlay').setAttribute('aria-pressed',String(state.playing));if(state.error)announce(state.error);if(!state.playing&&!state.pending)queueThumbnails();}
+    renderBase:async(k,{signal})=>{const pipe=await ensurePipeline(signal);if(signal.aborted)throw new DOMException('Preview canceled','AbortError');const base=await pipe.render.renderBase(k,preview.state().playing?'preview':'final',signal);base.pipe=pipe;return base;},
+    compose:(base,{k,signal})=>{composedSamples=base.samples;return base.pipe.fx.compose(base,{look:project().look,k,fps:project().shot.fps,rollDeg:base.pipe.render.plan.frames[k].camera.rollDeg,original,framing:!!endpoint,signal});},
+    present:(canvas,{k})=>{if(!entered)return;displayedSamples=composedSamples;if(stage.width!==canvas.width||stage.height!==canvas.height){stage.width=canvas.width;stage.height=canvas.height;}context.drawImage(canvas,0,0);fitCanvas();$('studioFrameNote').textContent=`Preview · ${canvas.width} × ${canvas.height} · frame ${k+1} / ${project().shot.frameCount} · ${displayedSamples} samples`;},
+    onState:state=>{if(!entered)return;$('studioScrub').value=state.desiredK;$('studioTime').textContent=`${(state.desiredK/project().shot.fps).toFixed(3)} s / ${(project().shot.frameCount/project().shot.fps).toFixed(3)} s${state.pending?' · Pending':''}`;$('studioPlay').setAttribute('aria-pressed',String(state.playing));if(state.error)announce(state.error);
+     if(!state.playing&&!state.pending&&!state.suspended){if(state.displayedK===state.desiredK&&displayedSamples<project().output.samples)preview.refresh();else queueThumbnails();}
+    }
    });
   }
-  function fitCanvas(){if(!entered)return;const box=$('studioCanvasArea').getBoundingClientRect(),aspect=M.dimensions(project().output),ratio=aspect.width/aspect.height,w=Math.min(box.width,box.height*ratio);stage.style.width=Math.max(1,w)+'px';stage.style.height=Math.max(1,w/ratio)+'px';}
+  function fitCanvas(){if(!entered)return;const size=previewSize();if(stage.width!==size.width||stage.height!==size.height){stage.width=size.width;stage.height=size.height;}const box=$('studioCanvasArea').getBoundingClientRect(),ratio=size.width/size.height,w=Math.min(box.width,box.height*ratio);stage.style.width=Math.max(1,w)+'px';stage.style.height=Math.max(1,w/ratio)+'px';}
   function thumbnailsChanged(){thumbRevision++;thumbAbort?.abort();}
   async function clearThumbnails(){for(const entry of thumbBases.values()){await entry.fx.dispose();entry.source.renderer.releaseFrame(entry.source.frame);}thumbBases.clear();}
   async function thumbnailBase(which,shot,size,signal){
@@ -202,7 +204,7 @@
   $('studioSettingsBtn').onclick=()=>$('studioSettings').showModal();$('studioSettingsClose').onclick=()=>$('studioSettings').close();wide.addEventListener('change',settingsLayout);new ResizeObserver(()=>{cancelGesture();fitCanvas();}).observe($('studioCanvasArea'));
   function exportSummary(){const p=project(),size=M.dimensions(p.output);$('studioExportSummary').textContent=`${size.width} × ${size.height} · ${p.shot.fps} fps · ${p.shot.frameCount} frames · ${(p.shot.frameCount/p.shot.fps).toFixed(3)} s · ${p.output.samples} samples · silent SDR · ${p.output.container==='webm'?'WebM / VP9':'MP4 / AVC'} · 64 MiB file limit`;$('studioExportProgress').max=p.shot.frameCount;}
   $('studioVideo').onclick=async()=>{if(!await settleDraft())return;endpoint=null;draft=null;sync();exportSummary();exportState(exporter.snapshot());$('studioExportDialog').showModal();};
-  $('studioExportStart').onclick=async()=>{commit();try{await exporter.start(project(),bridge.resources());}catch(reason){announce(reason.message);}if(entered&&!document.hidden&&exporter.snapshot().state!=='ready')preview.resume();};
+  $('studioExportStart').onclick=async()=>{commit();try{await exporter.start(project(),{getResources:bridge.resources});}catch(reason){announce(reason.message);}if(entered&&!document.hidden&&exporter.snapshot().state!=='ready')preview.resume();};
   $('studioExportCancel').onclick=()=>exporter.cancel();$('studioExportResume').onclick=()=>exporter.resume();
   function closeExport(){if(exporter.snapshot().active)return;exporter.clearResult();$('studioExportDialog').close();if(entered&&!document.hidden)preview.resume();}
   $('studioExportClose').onclick=$('studioReturnEdit').onclick=closeExport;$('studioExportDialog').addEventListener('cancel',e=>{if(exporter.snapshot().active)e.preventDefault();else exporter.clearResult();});
@@ -229,7 +231,7 @@
   document.addEventListener('keydown',e=>{
    if(!entered||document.querySelector('dialog:modal')||e.target.closest('input,select,textarea,[contenteditable=true]')||exporter.snapshot().active)return;
    if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){e.preventDefault();$(e.shiftKey?'studioRedo':'studioUndo').click();}
-   else if(e.code==='Space'){e.preventDefault();if(preview.state().playing)preview.pause();else previewView(true);}
+   else if(e.code==='Space'&&!e.ctrlKey&&!e.metaKey&&!e.altKey&&!e.target.closest('button,a,summary')){e.preventDefault();if(preview.state().playing)preview.pause();else previewView(true);}
    else if(e.key==='Escape'){e.preventDefault();if(draftDirty()){draft=copy(project().shot[endpoint]);preview.refresh({base:true});sync();}else preview.pause();}
   });
   document.addEventListener('visibilitychange',()=>{if(!entered)return;cancelGesture();if(document.hidden){thumbAbort?.abort();preview.suspend();exporter.hidden();}else if(exporter.snapshot().state==='suspended')exportState(exporter.snapshot());});
