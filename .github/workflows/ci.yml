@@ -73,7 +73,15 @@ jobs:
           curl -fsS http://127.0.0.1:4173/ >/dev/null
           SUITE="$TETRA_SUITE"
           if [[ "$SUITE" == *-webkit ]]; then export TETRA_BROWSER=webkit; SUITE="${SUITE%-webkit}"; fi
-          if [[ "$SUITE" == cpu-recovery ]]; then python3 tools/perf/cpu_recovery.py; else python3 "tests/browser_${SUITE}.py"; fi
+          if [[ "$SUITE" == cpu-recovery ]]; then
+            python3 tools/perf/cpu_recovery.py
+          elif [[ "$SUITE" == studio ]]; then
+            python3 tests/browser_studio.py
+            python3 tests/browser_studio_fx.py
+            python3 tests/browser_studio_ui.py
+          else
+            python3 "tests/browser_${SUITE}.py"
+          fi
         env:
           TETRA_BASE_URL: http://127.0.0.1:4173
           TETRA_HARDWARE_BROWSER: ${{ runner.os == 'macOS' && '1' || '0' }}

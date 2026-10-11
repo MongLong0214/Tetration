@@ -55,6 +55,122 @@
  const mirror=value=>1-Math.abs(mod(value,2)-1);
  const srgbToLinear=value=>value<=0.04045?value/12.92:((value+0.055)/1.055)**2.4;
  const linearToSrgb=value=>value<=0.0031308?12.92*value:1.055*value**(1/2.4)-0.055;
- root.TetraStudioFX={PRESET_NAMES:Object.keys(PRESETS),applyPreset,presetName,evaluateLook,identity,waveEV,foldUV,prismOffset,mirror,srgbToLinear,linearToSrgb};
+ // All sampling uses texel-centre-clamped mirror extension. Manual bilinear
+ // fetches also work on RGBA16F devices without float linear filtering.
+ const COMMON=`#version 300 es
+ precision highp float;
+ uniform sampler2D Source;
+ uniform vec2 Size;
+ out vec4 Color;
+ const float TAU=6.283185307179586;
+ vec2 mirrored(vec2 uv){return 1.-abs(mod(uv,2.)-1.);}
+ vec3 sampleAt(sampler2D image,vec2 uv){
+  ivec2 s=textureSize(image,0);vec2 p=clamp(mirrored(uv)*vec2(s)-.5,vec2(0),vec2(s)-1.);
+  ivec2 a=ivec2(floor(p)),b=min(a+1,s-1);vec2 f=fract(p);
+  return mix(mix(texelFetch(image,a,0).rgb,texelFetch(image,ivec2(b.x,a.y),0).rgb,f.x),mix(texelFetch(image,ivec2(a.x,b.y),0).rgb,texelFetch(image,b,0).rgb,f.x),f.y);
+ }
+ vec3 linearRGB(vec3 c){return mix(c/12.92,pow((c+.055)/1.055,vec3(2.4)),step(vec3(.04045),c));}
+ vec3 encodedRGB(vec3 c){return mix(12.92*c,1.055*pow(max(c,vec3(0)),vec3(1./2.4))-.055,step(vec3(.0031308),c));}
+ `;
+ const SHADERS={
+  frame:COMMON+`uniform float Roll;uniform vec2 SourceSize;
+   void main(){vec2 p=gl_FragCoord.xy-Size*.5;float c=cos(Roll),s=sin(Roll);vec2 q=vec2(c*p.x-s*p.y,s*p.x+c*p.y);Color=vec4(sampleAt(Source,(q+SourceSize*.5)/SourceSize),1.);}`,
+  effect:COMMON+`uniform vec4 Kaleido;uniform vec3 Prism;uniform vec3 Tone;uniform vec3 Wave;uniform float Seconds;
+   // Axis guards avoid atan(0,0), and this one-argument form is stable on
+   // ANGLE/Metal implementations that miscompile two-argument atan.
+   float angleOf(vec2 q){if(q.x==0.)return q.y>=0.?TAU*.25:-TAU*.25;if(q.y==0.)return q.x>=0.?0.:TAU*.5;
+    if(abs(q.x)>=abs(q.y)){float a=atan(q.y/q.x);return q.x<0.?a+(q.y>0.?TAU*.5:-TAU*.5):a;}
+    return (q.y>0.?TAU*.25:-TAU*.25)-atan(q.x/q.y);}
+   vec3 folded(vec2 uv){vec3 original=sampleAt(Source,uv);if(Kaleido.x==0.||Kaleido.z==0.)return original;
+    float L=min(Size.x,Size.y);vec2 q=(uv-.5)*Size/L;float r=length(q);if(r==0.)return original;
+    float a=mod(angleOf(q)-Kaleido.w,TAU),sector=TAU/Kaleido.y,index=floor(a/sector),local=a-index*sector;
+    if(mod(index,2.)==1.)local=sector-local;local+=Kaleido.w;
+    return mix(original,sampleAt(Source,.5+r*vec2(cos(local),sin(local))*L/Size),Kaleido.z);}
+   vec3 hsv(vec3 c){vec4 K=vec4(0.,-1./3.,2./3.,-1.);vec4 p=mix(vec4(c.bg,K.wz),vec4(c.gb,K.xy),step(c.b,c.g));
+    vec4 q=mix(vec4(p.xyw,c.r),vec4(c.r,p.yzx),step(p.x,c.r));float d=q.x-min(q.w,q.y),e=1.e-10;
+    return vec3(abs(q.z+(q.w-q.y)/(6.*d+e)),d/(q.x+e),q.x);}
+   vec3 rgb(vec3 c){vec3 p=abs(fract(c.xxx+vec3(0.,2./3.,1./3.))*6.-3.);return c.z*mix(vec3(1.),clamp(p-1.,0.,1.),c.y);}
+   void main(){vec2 uv=gl_FragCoord.xy/Size;float L=min(Size.x,Size.y);vec2 q=(uv-.5)*Size/L;float r=length(q);vec3 c=folded(uv);
+    if(Prism.x!=0.&&Prism.y!=0.&&Prism.z!=0.){vec2 d=r==0.?vec2(0.):q/r*Prism.z*L/Size*smoothstep(0.,.75,r);
+     c=mix(c,vec3(folded(uv+d).r,c.g,folded(uv-d).b),Prism.y);}
+    if(Tone.x!=0.||Tone.y!=1.){vec3 h=hsv(c);h.x=fract(h.x+Tone.x);h.y=clamp(h.y*Tone.y,0.,1.);c=rgb(h);}
+    float crest=pow(.5+.5*cos(TAU*(Wave.y*r-Wave.z*Seconds)),2.);
+    Color=vec4(linearRGB(c)*exp2(Tone.z+Wave.x*(crest-.375)),1.);
+   }`,
+  bright:COMMON+`uniform float Threshold;void main(){vec3 c=sampleAt(Source,gl_FragCoord.xy/Size);Color=vec4(max(c-vec3(Threshold),vec3(0)),1.);}`,
+  blur:COMMON+`uniform vec2 Step;void main(){vec2 uv=gl_FragCoord.xy/Size;vec3 c=sampleAt(Source,uv)*70.;
+   c+=(sampleAt(Source,uv-Step)+sampleAt(Source,uv+Step))*56.;c+=(sampleAt(Source,uv-2.*Step)+sampleAt(Source,uv+2.*Step))*28.;
+   c+=(sampleAt(Source,uv-3.*Step)+sampleAt(Source,uv+3.*Step))*8.;c+=sampleAt(Source,uv-4.*Step)+sampleAt(Source,uv+4.*Step);Color=vec4(c/256.,1.);}`,
+  finish:COMMON+`uniform sampler2D Original;uniform sampler2D Glow;uniform float Amount;uniform float GlowGain;
+   void main(){vec2 uv=gl_FragCoord.xy/Size;vec3 c=sampleAt(Source,uv);if(GlowGain>0.)c+=GlowGain*sampleAt(Glow,uv);
+    c=mix(linearRGB(sampleAt(Original,uv)),c,Amount);Color=vec4(encodedRGB(clamp(c,0.,1.)),1.);}`
+ };
+ function createCompositor(renderer,{width,height,canvas}={}){
+  if(!renderer||renderer.lost())throw Error('FX requires a working WebGL2 GPU');
+  if(!Number.isInteger(width)||!Number.isInteger(height)||width<1||height<1||width>renderer.maxTexture||height>renderer.maxTexture)throw Error('Invalid FX output size');
+  const gl=renderer.gl,programs={},targets={},output=canvas||document.createElement('canvas');output.width=width;output.height=height;
+  const ctx=output.getContext('2d',{alpha:false});if(!ctx)throw Error('The video canvas is unavailable');
+  let active=false,disposed=false,drain=Promise.resolve(),done=null,compositions=0;
+  function program(name){
+   if(programs[name])return programs[name];const shaders=[];let linked=null;
+   try{
+    for(const [type,source]of [[gl.VERTEX_SHADER,root.TetraGPU.sources.vertex],[gl.FRAGMENT_SHADER,SHADERS[name]]]){
+     const shader=gl.createShader(type);shaders.push(shader);gl.shaderSource(shader,source);gl.compileShader(shader);
+     if(!gl.getShaderParameter(shader,gl.COMPILE_STATUS))throw Error('FX shader failed: '+gl.getShaderInfoLog(shader));
+    }
+    linked=gl.createProgram();shaders.forEach(shader=>gl.attachShader(linked,shader));gl.linkProgram(linked);
+    if(!gl.getProgramParameter(linked,gl.LINK_STATUS))throw Error('FX shader link failed: '+gl.getProgramInfoLog(linked));
+    const uniforms={};for(let i=0;i<gl.getProgramParameter(linked,gl.ACTIVE_UNIFORMS);i++){const info=gl.getActiveUniform(linked,i);uniforms[info.name]=gl.getUniformLocation(linked,info.name);}
+    programs[name]={program:linked,uniforms};return programs[name];
+   }catch(error){if(linked)gl.deleteProgram(linked);throw error;}finally{shaders.forEach(shader=>gl.deleteShader(shader));}
+  }
+  function target(name,w=width,h=height,float=false){
+   if(targets[name])return targets[name];if(float&&!renderer.floatColor)throw Error('This look requires half-float GPU targets. Neutral and Original remain available.');
+   const texture=gl.createTexture(),buffer=gl.createFramebuffer();gl.bindTexture(gl.TEXTURE_2D,texture);
+   gl.texStorage2D(gl.TEXTURE_2D,1,float?gl.RGBA16F:gl.RGBA8,w,h);renderer.setNearest();
+   gl.bindFramebuffer(gl.FRAMEBUFFER,buffer);gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.TEXTURE_2D,texture,0);
+   if(gl.checkFramebufferStatus(gl.FRAMEBUFFER)!==gl.FRAMEBUFFER_COMPLETE||gl.getError()!==gl.NO_ERROR){gl.deleteFramebuffer(buffer);gl.deleteTexture(texture);throw Error('FX image allocation failed');}
+   return targets[name]={texture,buffer,width:w,height:h,bytes:w*h*(float?8:4)};
+  }
+  function draw(name,destination,textures,values={}){
+   const p=program(name);gl.disable(gl.SCISSOR_TEST);gl.disable(gl.BLEND);gl.bindFramebuffer(gl.FRAMEBUFFER,destination.buffer);gl.viewport(0,0,destination.width,destination.height);gl.useProgram(p.program);
+   let slot=0;for(const [key,frame]of Object.entries(textures)){gl.activeTexture(gl.TEXTURE0+slot);gl.bindTexture(gl.TEXTURE_2D,frame.texture);gl.uniform1i(p.uniforms[key],slot++);}
+   const fields={Size:[destination.width,destination.height],...values};
+   for(const [key,value]of Object.entries(fields)){const u=p.uniforms[key];if(u===undefined)continue;if(Array.isArray(value))gl['uniform'+value.length+'fv'](u,value);else gl.uniform1f(u,value);}
+   gl.drawArrays(gl.TRIANGLES,0,3);
+  }
+  function check(signal){if(signal?.aborted||disposed)throw new DOMException('FX composition canceled','AbortError');if(renderer.lost())throw Error('GPU lost during FX composition');}
+  return {
+   canvas:output,
+   diagnostics(){return {active,compositions,targets:Object.keys(targets).length,bytes:Object.values(targets).reduce((sum,frame)=>sum+frame.bytes,0),programs:Object.keys(programs).length};},
+   async compose(source,{look,k=0,fps=30,rollDeg=0,original=false,framing=false,signal}={}){
+    if(active)throw Error('Only one FX frame may compose at a time');check(signal);if(!source.complete||source.renderer!==renderer)throw Error('FX requires a completed owned source frame');
+    active=true;drain=new Promise(resolve=>{done=resolve;});let snapshot=null;
+    try{
+     const frame=target('framed'),base=source.frame;renderer.refreshFrame(base);
+     draw('frame',frame,{Source:base},{Roll:rollDeg*Math.PI/180,SourceSize:[base.width,base.height]});
+     const applied=framing?{...look,prism:{...look.prism,enabled:false},kaleido:{...look.kaleido,enabled:false}}:look;
+     let final=frame;
+     if(!identity(applied,k,fps,original)){
+      const time=evaluateLook(applied,k,fps),effect=target('effect',width,height,true),{prism,kaleido,wave,bloom}=applied;
+      draw('effect',effect,{Source:frame},{Kaleido:[kaleido.enabled?1:0,kaleido.segments,kaleido.blend,kaleido.angleDeg*Math.PI/180],Prism:[prism.enabled?1:0,prism.amount,prism.offsetRatio],Tone:[time.hueDeg/360,applied.saturation,time.exposureEV],Wave:[wave.enabled?wave.strengthEV:0,wave.fieldCycles,wave.speed],Seconds:time.seconds});
+      let glow=effect;
+      if(time.bloomIntensity>0){
+       const w=Math.max(1,Math.ceil(width/2)),h=Math.max(1,Math.ceil(height/2)),a=target('bright',w,h,true),b=target('blur',w,h,true);
+       draw('bright',a,{Source:effect},{Threshold:bloom.threshold});const radius=bloom.radiusRatio*Math.min(width,height);
+       draw('blur',b,{Source:a},{Step:[radius/(4*width),0]});draw('blur',a,{Source:b},{Step:[0,radius/(4*height)]});glow=a;
+      }
+      final=target('final');draw('finish',final,{Source:effect,Original:frame,Glow:glow},{Amount:applied.amount,GlowGain:time.bloomIntensity});
+     }
+     // Drain GPU writes before presenting. capture invokes createImageBitmap
+     // immediately, before the browser may clear the transient drawing buffer.
+     await renderer.fence();check(signal);snapshot=await renderer.capture(final);check(signal);ctx.drawImage(snapshot,0,0);compositions++;
+     return output;
+    }finally{snapshot?.close?.();active=false;done();}
+   },
+   async dispose(){disposed=true;await drain;for(const frame of Object.values(targets)){gl.deleteFramebuffer(frame.buffer);gl.deleteTexture(frame.texture);}for(const p of Object.values(programs))gl.deleteProgram(p.program);Object.keys(targets).forEach(key=>delete targets[key]);Object.keys(programs).forEach(key=>delete programs[key]);}
+  };
+ }
+ root.TetraStudioFX={PRESET_NAMES:Object.keys(PRESETS),applyPreset,presetName,evaluateLook,identity,waveEV,foldUV,prismOffset,mirror,srgbToLinear,linearToSrgb,createCompositor};
  if(typeof module!=='undefined')module.exports=root.TetraStudioFX;
 })(globalThis);

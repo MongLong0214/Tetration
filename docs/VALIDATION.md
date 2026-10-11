@@ -1,5 +1,55 @@
 # Validation — 1.0.0
 
+## Motion Studio integration (2026-10-11, development)
+
+Native Chromium 153.0.8010.12 / ANGLE Metal on Apple M4 Pro, Python 3.14.3,
+Playwright 1.63.0, served production CSP. Studio UI runtime
+`8832bc3ebaf810f165257865ed1fc16085547aae03ee201ddf5a0c56609c0ee3`
+passes 14 checks in 34.3 seconds with zero uncaught exceptions. Actual UI exports:
+
+| Shot | Output | Independent ffprobe/ffmpeg result |
+| --- | --- | --- |
+| Tunnel In + Neon Pulse | 1080×1920, 30fps, AA4 | 300 frames, 10.000s, AVC, 15,071,120 bytes |
+| Travel + Prism Wave | 1280×720, 24fps, AA4 | 48 frames, 2.000s, AVC, 1,498,164 bytes |
+| Travel + Prism Wave | 720², 24fps, AA16 | 48 frames, 2.000s, AVC, 1,514,645 bytes |
+| Hold + Prism Wave | 720², 30fps, AA4 | 600 frames, 20.000s, AVC, 12,765,929 bytes |
+
+Every decoded PTS matches k/fps within container rounding (2ms); every file has
+one silent video track and distinct first/middle/last images. The mandatory
+10-second output uses WebGPU orbit work, 384 shot-wide iterations, 300 complete
+source frames and 301 compositions including preflight. Hold computes one orbit
+image and gets 600 cache hits. After cleanup, each session reports zero cached
+source frames and zero FX target bytes/programs. This is app-owned resource
+accounting, not a driver/encoder RAM guarantee.
+
+UI checks include draft Cancel/Apply, retained B in Hold, inverse-roll pan at 90°
+with spatial FX, Duration/Speed/FPS, invalid numeric drafts, 100 inputs/one Undo,
+Save/JSON/rejected import/import Undo/Load/Delete, cancel/retry without partial
+files, result URL release and exact Explore camera/hash restoration. Desktop,
+768px tablet and 390px mobile screenshots are generated in tests/review-output.
+Mobile WCAG checks pass; a reduced-motion preference change pauses preview.
+
+Separate actual GPU FX checks establish opaque byte identity for Neutral,
+Original and Amount 0; independent linear EV/Wave calculations differ by at most
+one quantization level. Roll 0/45/90 agrees with inverse camera geometry in all
+three aspects; reflected Kaleidoscope/Prism samples match the CPU sampler within
+one level. Missing half-float support rejects the selected look explicitly while
+Original works. Frame/preset results do not depend on request order.
+
+The subsequent mobile Explorer toolbar repair puts Open in Studio in Explore
+controls on narrow screens, retaining every existing 44px toolbar action.
+Runtime `8becbb2ffbc1b9d8aedba3354041b74a3c59de85a1fa2b903322efe3ac00c4db`
+passes Explorer 27, release/recovery/offline 16, review 29 and the 13 media-path
+checks. Node tests: 176 passed; lint/build pass. The application size budget is
+explicitly updated from 400KB to 500KB for the native Studio implementation;
+the pinned 236,722-byte media bundle is separate. Numerical/sample/time
+tolerances are unchanged.
+
+CI now runs the media, FX and UI Studio suites together with all original browser
+suites. Full remote CI and additional deep/exception-path integration checks are
+still being completed before dev integration. No main merge, production release,
+physical iPhone or Safari export qualification is claimed.
+
 ## Motion foundations (2026-10-11, development)
 
 Working tree based on `88fa6a4`, runtime SHA-256

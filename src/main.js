@@ -28,6 +28,7 @@
   let dims = {w: 1, h: 1, dpr: 1};
   // compute: the WebGPU accelerator for final stages (null until ready, or without WebGPU).
   let gpu = null, compute = null, gpuFailure = '', serial = 0, jobSerial = -1, settleTimer = 0, currentMode = 'gpu';
+  let owner = 'explore', studio = null, studioFlow = false;
   let lastRenderComplete = false, lastCompletedInfo = null, renderStage = 'initial', started = 0, workerTransfer = 'pixels';
   let gpuBusy = false, interactiveFrame = 0, interactivePending = false, interactiveCount = 0;
   const rates = new Map(), idleWaiters = [];
@@ -466,12 +467,12 @@
     return {width: Math.max(32, Math.round(target.width * scale)), height: Math.max(20, Math.round(target.height * scale))};
   }
   function requestInteractive() {
-    if (!gpu || interactiveFrame) return;
+    if (owner !== 'explore' || !gpu || interactiveFrame) return;
     interactiveFrame = requestAnimationFrame(runInteractive);
   }
   async function runInteractive() {
     interactiveFrame = 0;
-    if (!gpu || document.hidden) return;
+    if (owner !== 'explore' || !gpu || document.hidden) return;
     // The final render for this camera has started; refining live frames would only compete.
     if (jobSerial === serial && same(visual, view)) return;
     if (gpuBusy) { interactivePending = true; return; }
@@ -999,6 +1000,7 @@
   // Every camera or setting change ends here. Interactive changes keep showing and
   // refining low-cost frames; the full render starts when the camera rests.
   function changed(options = {}) {
+    if (owner !== 'explore') return;
     if (!options.interactive) cancelGesture();
     if (options.interactive || options.animate) retainDetail(); else clearDetail();
     invalidate(); quietSince = performance.now();
@@ -1013,6 +1015,7 @@
   }
   async function finalRender() {
     clearTimeout(settleTimer);
+    if (owner !== 'explore') return;
     if (pointerMap.size || motion.raf) { settleTimer = setTimeout(finalRender, SETTLE_MS); return; }
     livePlan = null;
     if (document.hidden || jobSerial === serial) return;
@@ -1402,6 +1405,7 @@
   document.querySelectorAll('.close-dialog').forEach(b => { b.onclick = () => b.closest('dialog').close(); });
   document.querySelectorAll('dialog').forEach(d => d.addEventListener('click', e => {
     if (e.target !== d) return;
+    if (d.id === 'studioExportDialog' && studio?.diagnostics().export.active) return;
     const r = d.getBoundingClientRect();
     if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) d.close();
   }));
@@ -1452,6 +1456,7 @@
   window.addEventListener('storage', e => { if (e.key === TetraSaved.KEY || e.key === null) loadSaved(); });
   loadSaved();
   document.addEventListener('keydown', e => {
+    if (owner !== 'explore') return;
     if (document.querySelector('dialog[open]') || e.target.closest('input,select,textarea,[contenteditable=true]') || e.ctrlKey || e.metaKey || e.altKey) return;
     if (e.key === 'Escape' && document.body.classList.contains('focus-mode')) { focusMode(false); return; }
     const key = e.key.toLowerCase();
@@ -1463,6 +1468,7 @@
   // ---------- Lifecycle ----------
   let resumeFlow = false;
   document.addEventListener('visibilitychange', () => {
+    if (owner !== 'explore') return;
     if (document.hidden) {
       cancelGesture();
       resumeFlow = flow; setFlow(false);
@@ -1489,6 +1495,7 @@
   // and the full render starts once resizing pauses.
   const displayDensity = () => Math.min(Math.max(devicePixelRatio || 1, 0.25), 3);
   function measure() {
+    if (owner !== 'explore') return;
     const r = viewport.getBoundingClientRect();
     if (!r.width || !r.height) return;
     const next = {w: r.width, h: r.height, dpr: displayDensity()};
@@ -1522,6 +1529,9 @@
   gpuCanvas.addEventListener('webglcontextlost', e => {
     e.preventDefault();
     if (!gpu) return;
+    if (owner !== 'explore') {
+      studio?.deviceLost(); clearCompleted(); gpu = null; display.frame = null; display.renderer = null; display.key = ''; gpuFailure = 'context lost'; return;
+    }
     const timedOut = gpu.failed;
     clearDetail();
     keepSnapshot();
@@ -1541,6 +1551,31 @@
   }
   $('gestureHint').textContent = coarsePointer ? 'DRAG TO PAN / PINCH TO ZOOM' : 'DRAG TO PAN / SCROLL TO ZOOM';
   syncControls(); observer.observe(viewport);
+
+  // Explicit ownership handoff: cancel Explore, drain its submitted GPU work,
+  // then let Studio borrow the same kernels, device and reference worker.
+  studio = globalThis.TetraStudio.create({
+    snapshot: () => ({...serialize(), palette: globalThis.TetraStudioModel.ENUMS.palette[palette]}),
+    async enter() {
+      updateURL(); closeSettings(); owner = 'studio'; serial++; stopCPU(); cancelGesture(); stopMotion();
+      cancelAnimationFrame(motion.raf); motion.raf = 0; cancelAnimationFrame(interactiveFrame); interactiveFrame = 0; interactivePending = false;
+      clearTimeout(settleTimer); clearTimeout(urlTimer); urlTimer = 0; studioFlow = flow; setFlow(false);
+      viewport.inert = true; await gpuIdle(); await new Promise(resolve => setTimeout(resolve, 0));
+    },
+    async leave() { owner = 'explore'; viewport.inert = false; measure(); if (studioFlow) setFlow(true); changed(); },
+    setOwner: value => { owner = value; },
+    resources() {
+      if (!gpu || gpu.lost()) throw Error('Video rendering requires WebGL2. Explore remains available with CPU rendering.');
+      return {renderer: gpu, compute: accelerated() ? compute : null, reference: options => {
+        const worker = referenceWorker(); if (!worker) return Promise.resolve(TetraReference.compute(options));
+        const id = references.nextId++;
+        return new Promise((resolve, reject) => { references.waiters.set(id, {resolve, reject}); worker.postMessage({type: 'reference', id, options}); });
+      }};
+    }
+  });
+  $('openStudioBtn').onclick = () => studio.enter();
+  $('openStudioFromSettings').onclick = () => studio.enter();
+  Object.defineProperty(window, 'tetraStudioDiagnostics', {get: () => ({owner, ...studio.diagnostics()})});
 
   // Read-only diagnostic snapshots for reproducible tests; no network or telemetry.
   Object.defineProperty(window, 'tetraDiagnostics', {get: () => ({

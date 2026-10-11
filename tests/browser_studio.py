@@ -92,7 +92,7 @@ def run():
             page.on('request', lambda request: external.append(request.url)
                     if not request.url.startswith(BASE) and not request.url.startswith(('blob:', 'data:')) else None)
             page.goto(BASE)
-            page.wait_for_function('typeof TetraStudioEncoder !== "undefined"')
+            page.wait_for_function('() => typeof TetraStudioEncoder !== "undefined"')
             suite.report['graphics'] = graphics(page)
             page.set_default_timeout(180000)
             source_checks = page.evaluate('''async () => {
@@ -169,10 +169,10 @@ def run():
             suite.record('No external runtime fetch under production CSP')
             page.evaluate('navigator.serviceWorker.ready')
             page.reload()
-            page.wait_for_function('!!navigator.serviceWorker.controller')
+            page.wait_for_function('() => !!navigator.serviceWorker.controller')
             context.set_offline(True)
             page.reload()
-            page.wait_for_function('typeof TetraStudioEncoder !== "undefined"')
+            page.wait_for_function('() => typeof TetraStudioEncoder !== "undefined"')
             assert page.evaluate('TetraStudioModel.serialize(TetraStudioModel.createProject({x:"0",y:"0",span:"1"})).length') > 0
             suite.record('Offline reload retains model and committed encoder bytes')
             suite.no_errors()

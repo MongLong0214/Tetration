@@ -104,6 +104,7 @@
    undo(){if(transaction!==null)fail('EDIT_ACTIVE','Finish the current edit first');if(past.length){future.push(current);return replace(past.pop());}},
    redo(){if(transaction!==null)fail('EDIT_ACTIVE','Finish the current edit first');if(future.length){past.push(current);return replace(future.pop());}},
    markSaved(){baseline=serialize(current);},
+   markUnsaved(){baseline=null;},
    import(raw){const next=deserialize(raw);if(transaction!==null)fail('EDIT_ACTIVE','Finish the current edit first');push(current);return replace(next);},
    load(next){const validated=validate(next);if(transaction!==null)fail('EDIT_ACTIVE','Finish the current edit first');past.length=0;future.length=0;replace(validated);baseline=serialize(current);},
    save(store){store.save(current);baseline=serialize(current);}
