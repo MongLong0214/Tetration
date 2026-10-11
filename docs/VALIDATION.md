@@ -72,6 +72,22 @@ The UI test now waits for displayed k≥3 and two completed source frames togeth
 retaining the same two-frame/camera assertions and 120-second deadline. Product
 coalescing, rendering and the final runtime bytes are unchanged by this repair.
 
+The first main-delivery CI (38132616847) passed the real video/UI flow but
+observed total allocations 10/9 → 9/8 → 10/9 across resource groups. The
+renderer deliberately retains up to three returned frame images; canceled
+work can leave a different free-pool occupancy. The resource check now records
+all observed allocations, verifies every pooled image is accounted for and
+the pool stays within its existing three-image bound, then reclaims only those
+returned images using the existing renderer operation. Texture/FBO counts must
+decrease by exactly that pool count and the remaining active allocations must
+still be equal across groups; bitmap/new-URL counts remain exactly zero.
+This test-only correction does not change product caching or runtime bytes.
+In native local verification, deliberately withholding one exported source
+frame from release makes the same equality assertion fail with active counts
+6/5 → 7/6 → 7/6; normal release passes at 6/5 across all three groups.
+The failed delivery run remains a failure; final delivery qualification follows
+this correction.
+
 Observed preview timing on 1440×900 / DPR2, one sequential native WebGPU run per
 case, comparing baseline 8c86947 with implementation d8b3683 (deep span 7e−30,
 fixed cap512; before the version-diagnostic-only runtime change):

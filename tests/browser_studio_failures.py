@@ -104,8 +104,13 @@ def run():
             setup(page)
             # Explore keeps one reference-worker script URL for this page's lifetime.
             assert page.evaluate('() => [...__studioURLTypes.values()]') == ['text/javascript']
-            page.evaluate('() => {window.__studioInitialURLs=new Set(__studioOwned.urls);}')
+            page.evaluate('''() => {
+             window.__studioInitialURLs=new Set(__studioOwned.urls);
+             const prepare=TetraStudioRender.prepare;
+             TetraStudioRender.prepare=(project,options)=>{window.__studioResourceRenderer=options.renderer;return prepare(project,options);};
+            }''')
             counts = []
+            reclamations = []
             for _ in range(3):
                 for expected in ['ready', 'canceled', 'ready']:
                     export(page)
@@ -119,10 +124,28 @@ def run():
                         assert value['url'] is None, value
                     page.click('#studioReturnEdit')
                     page.wait_for_function('() => tetraStudioDiagnostics.requested?.quality==="detailed" && !tetraStudioDiagnostics.preview.pending && !tetraStudioDiagnostics.thumbnails.active && tetraStudioDiagnostics.thumbnails.completed===tetraStudioDiagnostics.thumbnails.revision', timeout=120000)
-                counts.append(page.evaluate('() => Object.fromEntries(Object.entries(__studioOwned).map(([key,value])=>[key,key==="urls"?[...value].filter(url=>!__studioInitialURLs.has(url)).length:value.size]))'))
+                # A free frame pool may contain 0–3 images depending on the
+                # canceled work. Reclaim only those returned images; a leaked
+                # in-use frame cannot be hidden by this operation.
+                reclaimed = page.evaluate('''async () => {
+                 const renderer=__studioResourceRenderer;
+                 await renderer.fence();
+                 const count=()=>Object.fromEntries(Object.entries(__studioOwned).map(([key,value])=>[key,key==="urls"?[...value].filter(url=>!__studioInitialURLs.has(url)).length:value.size]));
+                 const before=count(),pool=renderer.pool.slice();
+                 if(pool.length>3||new Set(pool).size!==pool.length||pool.some(frame=>!__studioOwned.textures.has(frame.texture)||!__studioOwned.buffers.has(frame.buffer)))throw Error('Unaccounted free frame pool');
+                 renderer.releaseAll();
+                 return {before,pooled:pool.length,after:count(),remainingPool:renderer.pool.length};
+                }''')
+                assert reclaimed['remainingPool'] == 0, reclaimed
+                for kind in ['textures', 'buffers']:
+                    assert reclaimed['after'][kind] == reclaimed['before'][kind] - reclaimed['pooled'], reclaimed
+                assert reclaimed['after']['bitmaps'] == reclaimed['before']['bitmaps'] == 0, reclaimed
+                assert reclaimed['after']['urls'] == reclaimed['before']['urls'] == 0, reclaimed
+                reclamations.append(reclaimed)
+                counts.append(reclaimed['after'])
             assert counts[0] == counts[1] == counts[2], counts
             assert all(c['bitmaps'] == 0 and c['urls'] == 0 for c in counts), counts
-            suite.record('Three actual success/cancel/success cycles retain bounded textures/FBOs and no bitmap/result URLs', counts)
+            suite.record('Three actual success/cancel/success cycles reclaim every pooled frame, retain equal active textures/FBOs and no bitmap/result URLs', reclamations)
             page.evaluate('() => {window.__studioHidden=true;document.dispatchEvent(new Event("visibilitychange"));}')
             page.wait_for_function('() => tetraStudioDiagnostics.preview.suspended')
             page.evaluate('() => {window.__studioHidden=false;document.dispatchEvent(new Event("visibilitychange"));}')
