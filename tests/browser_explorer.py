@@ -34,6 +34,7 @@ def body():
           });}};''')
         page = suite.watch(context.new_page())
         initial = open_app(page)
+        assert initial['version'] == json.loads((ROOT / 'package.json').read_text())['version']
         suite.report['graphics'] = graphics(page)
         assert initial['view'] == {'x': '-0.5', 'y': '0', 'span': '8'}, initial['view']
         assert initial['lastCompleted']['samples'] == 16 and initial['lastCompleted']['width'] == 1440, initial['lastCompleted']

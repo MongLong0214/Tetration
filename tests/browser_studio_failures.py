@@ -82,10 +82,13 @@ def run():
             assert restored['submitted'] == 60 and restored['profile']['resourcesAfterCleanup']['render']['completedFrames'] == 1, restored
             page.click('#studioReturnEdit')
             suite.record('Actual WebGL loss fails without partial video; restored GPU produces preview and a fresh complete export')
-            # Observe the resources the app can own, after context recovery.
+            page.close()
+            page = suite.watch(browser.new_page(viewport={'width': 1200, 'height': 800}, accept_downloads=True))
+            # Observe every allocation from construction, including pooled frames.
             # Driver/encoder allocations are outside this accounting.
-            page.evaluate('''() => {
-             const owned=window.__studioOwned={textures:new Set(),buffers:new Set(),bitmaps:new Set(),urls:new Set()};
+            page.add_init_script('''(() => {
+             window.__studioHidden=false;Object.defineProperty(document,"hidden",{configurable:true,get:()=>window.__studioHidden});
+             const owned=window.__studioOwned={textures:new Set(),buffers:new Set(),bitmaps:new Set(),urls:new Set()};window.__studioURLTypes=new Map();
              for(const [kind,create,remove]of [['textures','createTexture','deleteTexture'],['buffers','createFramebuffer','deleteFramebuffer']]){
               const add=WebGL2RenderingContext.prototype[create],drop=WebGL2RenderingContext.prototype[remove];
               WebGL2RenderingContext.prototype[create]=function(...args){const value=add.apply(this,args);owned[kind].add(value);return value;};
@@ -95,9 +98,13 @@ def run():
              window.createImageBitmap=async(...args)=>{const value=await bitmap(...args);owned.bitmaps.add(value);return value;};
              ImageBitmap.prototype.close=function(){owned.bitmaps.delete(this);return close.call(this);};
              const url=URL.createObjectURL,revoke=URL.revokeObjectURL;
-             URL.createObjectURL=function(value){const result=url.call(this,value);owned.urls.add(result);return result;};
-             URL.revokeObjectURL=function(value){owned.urls.delete(value);return revoke.call(this,value);};
-            }''')
+             URL.createObjectURL=function(value){const result=url.call(this,value);owned.urls.add(result);window.__studioURLTypes.set(result,value.type);return result;};
+             URL.revokeObjectURL=function(value){owned.urls.delete(value);window.__studioURLTypes.delete(value);return revoke.call(this,value);};
+            })();''')
+            setup(page)
+            # Explore keeps one reference-worker script URL for this page's lifetime.
+            assert page.evaluate('() => [...__studioURLTypes.values()]') == ['text/javascript']
+            page.evaluate('() => {window.__studioInitialURLs=new Set(__studioOwned.urls);}')
             counts = []
             for _ in range(3):
                 for expected in ['ready', 'canceled', 'ready']:
@@ -111,8 +118,8 @@ def run():
                     else:
                         assert value['url'] is None, value
                     page.click('#studioReturnEdit')
-                    page.wait_for_function('() => !tetraStudioDiagnostics.preview.pending && !tetraStudioDiagnostics.thumbnails.active', timeout=120000)
-                counts.append(page.evaluate('() => Object.fromEntries(Object.entries(__studioOwned).map(([key,value])=>[key,value.size]))'))
+                    page.wait_for_function('() => tetraStudioDiagnostics.requested?.quality==="detailed" && !tetraStudioDiagnostics.preview.pending && !tetraStudioDiagnostics.thumbnails.active && tetraStudioDiagnostics.thumbnails.completed===tetraStudioDiagnostics.thumbnails.revision', timeout=120000)
+                counts.append(page.evaluate('() => Object.fromEntries(Object.entries(__studioOwned).map(([key,value])=>[key,key==="urls"?[...value].filter(url=>!__studioInitialURLs.has(url)).length:value.size]))'))
             assert counts[0] == counts[1] == counts[2], counts
             assert all(c['bitmaps'] == 0 and c['urls'] == 0 for c in counts), counts
             suite.record('Three actual success/cancel/success cycles retain bounded textures/FBOs and no bitmap/result URLs', counts)
