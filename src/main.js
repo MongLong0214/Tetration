@@ -1555,6 +1555,7 @@
   // Explicit ownership handoff: cancel Explore, drain its submitted GPU work,
   // then let Studio borrow the same kernels, device and reference worker.
   studio = globalThis.TetraStudio.create({
+    error: message => toast(message),
     snapshot: () => ({...serialize(), palette: globalThis.TetraStudioModel.ENUMS.palette[palette]}),
     async enter() {
       updateURL(); closeSettings(); owner = 'studio'; serial++; stopCPU(); cancelGesture(); stopMotion();

@@ -33,7 +33,7 @@
  async function prepare(project,{renderer,compute=null,reference=options=>root.TetraReference.compute(options),signal,size,yieldTask=()=>new Promise(resolve=>setTimeout(resolve,0))}={}){
   if(!renderer||renderer.lost())throw Error('Motion rendering requires a working WebGL2 GPU');
   const plan=await C.plan(project,{signal,...(size?{size}:{}),yieldTask}),{extent}=plan;
-  if(extent.width>renderer.maxTexture||extent.height>renderer.maxTexture||extent.width*extent.height>8294400||extent.width*extent.height*4>64*1024*1024)throw Error('The rolled source frame exceeds the GPU image limit. Change the shot or output settings.');
+  if(extent.width>renderer.maxTexture||extent.height>renderer.maxTexture||extent.width*extent.height>8294400||extent.width*extent.height*4>64*1024*1024){const error=Error('The rolled source frame exceeds the GPU image limit. Change the shot or output settings.');error.code='SOURCE_LIMIT';throw error;}
   const backend=compute&&!compute.failed?'webgpu':'webgl',samples=plan.project.output.samples;
   if(backend==='webgl'&&((plan.iterations>=8192&&samples>=4)||(plan.iterations>=4096&&samples>=16))&&!renderer.floatColor)throw Error('This shot requires float render targets for bounded full-sample GPU work.');
   const numerical=referencePlan(plan),usesPerturb=numerical.states.some(state=>state.mode==='perturb');

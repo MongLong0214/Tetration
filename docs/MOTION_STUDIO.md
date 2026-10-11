@@ -1,11 +1,53 @@
-# Motion Studio
+# Make a video with Motion Studio
 
-Open Studio from an Explore view. Start A and End B store exact decimal camera
-coordinates, horizontal span and roll. Selecting an endpoint opens a draft:
-drag/arrow keys pan, scroll/pinch/double-click zoom, and Roll changes its angle.
-Set / Update applies one Undo entry. Switching endpoints, playing, exporting or
-loading asks Apply / Discard / Cancel when the draft changed. Framing temporarily
-hides Prism/Kaleidoscope; Preview and video use their saved values.
+1. Open **Studio** from the Explore toolbar, including on mobile. Your current
+   camera and palette become a new shot. Drag, zoom or use the arrow / + / − keys,
+   then **Use as Start**. You can also use the starting view unchanged.
+2. Continue zooming or dragging in the End view, then **Use as End & animate**.
+   This applies End and enables movement together. **Keep camera still** instead
+   uses Start and preserves the stored End. Preview never plays automatically.
+3. Choose **Look** for a preset, palette, color, Glow, Prism or Kaleidoscope;
+   choose **Rhythm** for Pulse or Glow Wave. Each effect has its own visible switch.
+   Off preserves its settings. Press **Play** to see motion and time effects;
+   **Pause** stays accessible when mobile Settings are open.
+4. Open **Export video**. Choose Aspect, Resolution, FPS, Sampling and Format in
+   that window, then **Create video**. Once ready, **Download MP4 / WebM** saves
+   the file. These are silent videos, computed locally in your browser.
+
+**Save project** saves editable settings on this device, not a video. **Projects**
+loads saved shots, imports/exports project JSON and offers **New from Explore**.
+Returning to Studio offers **Continue shot** for saved and unsaved work in this
+same tab. Export JSON for a separate copy; restarting the browser does not
+restore an unsaved session. Up to 10 projects and 50 Undo entries are supported.
+
+**Edit Start / Edit End** opens a draft. Ordinary **Use as End** preserves an
+intentional still camera; **Animate A → B** explicitly enables travel. Switching
+views asks Apply / Discard / Cancel for changed framing. Reverse and Undo update
+an untouched draft. Duration uses whole frames; changing FPS preserves its time.
+The Motion Details contain Speed, Easing and Endpoint rotation.
+
+While framing, active spatial effects are temporarily hidden; **View effects**
+returns to Preview after resolving the draft. **Original** is preview comparison
+only; **Show effects** restores the look without an Undo entry. FX Amount 0
+bypasses effects. Invalid numbers block Save project, Play and video creation:
+the relevant tab opens and focuses the error. Reset restores that field; a preset
+only replaces Look/Rhythm fields. Explicit Discard permits leaving invalid input.
+
+Quick preview uses at most 512 pixels on its long side while playing or framing.
+After 300 ms idle, Detailed preview computes actual display pixels at up to DPR 2,
+1536 pixels on the long side and 1.5 million output pixels, limited by the selected
+output and GPU source budget. Its label distinguishes completed pixels from a
+pending target. Final video always uses the selected output size and 4/16 samples.
+A failed refinement keeps the last complete image and offers an explicit retry.
+
+Output requires WebGL2 and a supported WebCodecs encoder. Non-neutral effects
+need half-float GPU targets. MP4 is preferred; a confirmed WebM alternative must
+be selected explicitly. Codec support is checked before final fractal rendering.
+An unsupported output preserves the project. Retry begins at frame 0. A hidden
+export finishes current work and waits for visible **Resume export**; closing a
+modal never starts playback. **How to make a video** explains this flow in the app.
+
+## Technical details
 
 Hold uses A and retains B. Tunnel In/Out derives from the actual span ratio;
 Drift uses equal spans. Reversing the path exchanges both complete endpoints.
@@ -20,19 +62,6 @@ Pulse and Glow Wave. Details groups reveal the remaining values; switching an
 effect off preserves them. Presets rebuild a complete Neutral look before their
 overrides. Reset Look retains the palette. Original and Amount 0 bypass FX while
 keeping the current framing, roll and palette.
-
-Save explicitly writes up to 10 projects under `tetra.motion.projects.v1`.
-Explorer's 24 bookmarks and URL format remain separate. Project JSON uses strict
-schema v1 and decimal strings up to 256 places; invalid imports preserve the
-current shot. Undo/Redo holds 50 snapshots, with one slider drag per entry.
-Storage errors preserve edits; export JSON to keep a separate copy.
-
-Preview uses a smaller image and four complete samples while playing, and refines
-the paused selected frame to the chosen 4/16 samples. Playback keeps one active
-frame plus one latest desired frame and shows completed useful work, even when
-rendering is slower than the clock. Seeking invalidates older work. Look edits
-reuse compatible orbit pixels. Hidden/leave/export stop the clock; returning does
-not autoplay. Paused playback can refine the selected frame.
 
 Export freezes the project and drains preview before taking GPU ownership. It
 computes every source pixel at the selected 4/16 samples and a fixed shot-wide
@@ -53,7 +82,7 @@ One awaited CanvasSource add consumes each stable composed canvas at integer
 microsecond timestamps. Hidden export completes current work, then suspends before
 the next frame; visible Resume continues from the next k. Finalization can finish
 while hidden. Cancel/device/encoder errors never publish a partial file; retry
-starts at frame 0. File ready appears only after finalization. Download does not
+starts at frame 0. File ready appears only after finalization and resource cleanup. Download does not
 claim that a browser save dialog completed. Closing the result, exporting again
 or leaving Studio releases its Blob URL.
 
