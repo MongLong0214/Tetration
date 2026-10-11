@@ -95,6 +95,35 @@ def run():
             page.wait_for_function('typeof TetraStudioEncoder !== "undefined"')
             suite.report['graphics'] = graphics(page)
             page.set_default_timeout(180000)
+            source_checks = page.evaluate('''async () => {
+             const canvas=document.createElement('canvas'),gpu=new TetraGPU(canvas),rows=[];
+             try {
+              for(const samples of [4,16]){
+               const project=TetraStudioModel.createProject({x:'-0.5',y:'0',span:'8'});
+               project.output.samples=samples;project.numerics.iterations='fixed';project.numerics.fixedIterations=1024;
+               const size={width:160,height:90},session=await TetraStudioRender.prepare(project,{renderer:gpu,size});
+               const actual=await session.renderBase(0),data=gpu.readFrame(actual.frame);
+               const expected=gpu.beginFrame(160,90),scene={mode:'direct',center:[-0.5,0],span:8,iterations:1024,palette:0,rules:TetraCore.RULES.gpu,aspect:90/160};
+               gpu.draw(expected,{x:0,y:0,width:160,height:90},scene,samples,0);await gpu.fence();
+               const reference=gpu.readFrame(expected);let different=0,wrongAlpha=0;
+               for(let n=0;n<data.length;n++){if(data[n]!==reference[n])different++;if(n%4===3&&data[n]!== (samples===4?64:255))wrongAlpha++;}
+               actual.release();gpu.releaseFrame(expected);
+               const cached=await session.renderBase(299);cached.release();const diagnostic=session.diagnostics();
+               rows.push({samples,different,wrongAlpha,diagnostic});await session.dispose();
+              }
+              const project=TetraStudioModel.createProject({x:'-2.2930579295624999999999991',y:'0.33208044555625',span:'0.02'});
+              project.shot.motion='travel';project.shot.frameCount=60;project.shot.end.span='5e-11';
+              const session=await TetraStudioRender.prepare(project,{renderer:gpu,size:{width:96,height:64}}),hashes=new Map();
+              const hash=bytes=>{let h=2166136261;for(const b of bytes)h=Math.imul(h^b,16777619);return h>>>0;};
+              for(const k of [0,1,2,25,26,27,58,59]){const handle=await session.renderBase(k);hashes.set(k,{hash:hash(gpu.readFrame(handle.frame)),descriptor:handle.descriptor});handle.release();}
+              let mismatches=0;for(const k of [59,25,0,58,2,27,1,26]){const handle=await session.renderBase(k),value={hash:hash(gpu.readFrame(handle.frame)),descriptor:handle.descriptor};if(JSON.stringify(value)!==JSON.stringify(hashes.get(k)))mismatches++;handle.release();}
+              rows.push({seekMismatches:mismatches,diagnostic:session.diagnostics(),descriptors:session.numerical.descriptors});await session.dispose();
+             }finally{gpu.releaseAll();gpu.destroy();canvas.width=canvas.height=1;}
+             return rows;
+            }''')
+            assert all(row.get('different', 0) == 0 and row.get('wrongAlpha', 0) == 0
+                       and row.get('seekMismatches', 0) == 0 for row in source_checks), source_checks
+            suite.record('Actual GPU complete AA4/16 and reference-consistent random seek', source_checks)
             support = page.evaluate('''async () => {
              const values=[];
              for(const resolution of [720,1080])for(const aspect of ['16:9','9:16','1:1'])for(const fps of [24,30]){

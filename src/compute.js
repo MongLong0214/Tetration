@@ -529,7 +529,8 @@
     /* Compute these tiles (top-down {x, y, width, height}) of a stage into the WebGL frame:
      * the WebGL draw's samples, adaptive seed and threshold, uploaded with texSubImage2D.
      * live: a live frame's accumulation (scene.accum in gpu.js), its history read in place of a seed. */
-    async draw(renderer, frame, scene, samples, threshold, tiles, kernel, levels, live = null) {
+    async draw(renderer, frame, scene, samples, threshold, tiles, kernel, levels, live = null, canceled = () => false) {
+      if (canceled()) return false;
       if (!this.buffers) this.allocate();
       const device = this.device, b = this.buffers, gl = renderer.gl, history = live?.mode ? live.frame : null;
       if (history === frame) throw Error('Live history cannot be its own target');
@@ -608,6 +609,7 @@
             gl.bindTexture(gl.TEXTURE_2D, null);
           }
         } finally { read.unmap(); }
+        if (canceled()) return false;
         if (drained) break;
         // An aborted round leaves the queue unfinished for good; anything else just needs more rounds.
         if (done > 4 * Math.ceil(pixels * samples * scene.iterations / (LANES * 64 * STEPS)) + 64) throw Error('Compute queue did not drain');

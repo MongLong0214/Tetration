@@ -38,6 +38,16 @@ movie. Renderer/FX/Studio UI/export integration and their regression checks rema
 in progress. No physical iPhone/Safari or cross-device qualification is claimed,
 and the collector's 64MiB logical output limit does not bound process/GPU memory.
 
+The next adapter checks use runtime `0d37907e203c6299b1facc4d1cbda58b41017702e7f5f4b414352bc0ce56ec3c`
+on the same native Chromium/GPU: complete 160×90 AA4/16 frames are byte-identical
+to existing-kernel whole-frame draws, every source alpha carries its selected AA
+count, and Hold reuses one cached base. Sixteen shallow-to-Plume frame requests
+(including reordered seeks) return the same descriptor and pixel hash for each k.
+Node cases check delayed fence cancellation, delayed reference disposal, fixed
+source limits and device/float failures. This does not yet prove Studio owner
+handoff, full-resolution moving FX, visual continuity across reference segments,
+or the WebGPU adapter path; those require the remaining integration checks.
+
 ## 2026-10-06 first-visit relink, pending-strip fill and Overview opening qualification
 
 Local qualification of the working tree on top of `7b27455` (not committed when measured), runtime SHA-256 `74918f55638d1c149e957375e5bf2f1d2573e2b74b1354a9e42cd091deef1bd1` (274,642 bytes), native Chrome 154.0.8037.98 / ANGLE Metal on an Apple M2 Pro, served by `serve.cjs` with its CSP. `npm test`: 138 passed, 0 failed. `npm run lint` (ESLint 10.1.0): clean. All 12 browser suites run sequentially in hardware mode and pass 217 checks with zero uncaught browser errors: review 29, release 16, deep 29, quality 22, explorer 27, perf 13, reuse 12, interactions 14, production 22, zoom 7, webkit 13, maximum 13. Five further deep runs on the same runtime each pass 29/29. This is a single local machine under heavy unrelated load (load average 7 at the start of the sequential run; it reached 162 at the end of the extra deep runs), not remote CI.
