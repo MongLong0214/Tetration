@@ -88,6 +88,19 @@ frame from release makes the same equality assertion fail with active counts
 The failed delivery run remains a failure; final delivery qualification follows
 this correction.
 
+CI 38133470575 then exposed a second observation race: native dialog `close`
+runs asynchronously, so a suspended preview with no pending frame could satisfy
+the old idle predicate before rendering resumed. Local instrumentation confirmed
+snapshots with no render session and displayed frame −1. Resource readiness now
+requires a resumed, completed Detailed source and matching displayed dimensions
+and samples, plus completed thumbnails. Readiness and allocation snapshot run
+atomically in one browser task; the same equality/zero assertions and 120-second
+deadline remain. This is also test-only; both failed CI runs are preserved.
+With a genuinely completed Detailed preview, native local active counts are
+8/7 in all groups. The same deliberately withheld source-frame release now
+fails 8/7 → 9/8 → 9/8, so the stronger observation still detects an ownership
+leak rather than suppressing it.
+
 Observed preview timing on 1440×900 / DPR2, one sequential native WebGPU run per
 case, comparing baseline 8c86947 with implementation d8b3683 (deep span 7e−30,
 fixed cap512; before the version-diagnostic-only runtime change):

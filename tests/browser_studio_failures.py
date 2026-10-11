@@ -108,6 +108,14 @@ def run():
              window.__studioInitialURLs=new Set(__studioOwned.urls);
              const prepare=TetraStudioRender.prepare;
              TetraStudioRender.prepare=(project,options)=>{window.__studioResourceRenderer=options.renderer;return prepare(project,options);};
+             window.__studioResourceReady=()=>{
+              const d=tetraStudioDiagnostics,r=d.requested;
+              return r?.quality==='detailed'&&!d.preview.suspended&&!d.preview.pending&&d.preview.displayedK>=0
+               &&d.render?.cachedFrames===1&&!d.render.active&&d.render.cachedSamples===r.samples
+               &&d.render.output.width===r.width&&d.render.output.height===r.height
+               &&d.displayedSize?.width===r.width&&d.displayedSize.height===r.height&&!d.fx.active
+               &&!d.thumbnails.active&&d.thumbnails.completed===d.thumbnails.revision;
+             };
             }''')
             counts = []
             reclamations = []
@@ -123,19 +131,24 @@ def run():
                     else:
                         assert value['url'] is None, value
                     page.click('#studioReturnEdit')
-                    page.wait_for_function('() => tetraStudioDiagnostics.requested?.quality==="detailed" && !tetraStudioDiagnostics.preview.pending && !tetraStudioDiagnostics.thumbnails.active && tetraStudioDiagnostics.thumbnails.completed===tetraStudioDiagnostics.thumbnails.revision', timeout=120000)
+                    page.wait_for_function('() => __studioResourceReady()', timeout=120000)
                 # A free frame pool may contain 0–3 images depending on the
                 # canceled work. Reclaim only those returned images; a leaked
                 # in-use frame cannot be hidden by this operation.
-                reclaimed = page.evaluate('''async () => {
+                # Native dialog close is asynchronous. Check completion and
+                # capture in one task, so a suspended pre-resume state cannot
+                # become the certified resource snapshot.
+                sample = page.wait_for_function('''() => {
+                 if(!__studioResourceReady())return false;
                  const renderer=__studioResourceRenderer;
-                 await renderer.fence();
                  const count=()=>Object.fromEntries(Object.entries(__studioOwned).map(([key,value])=>[key,key==="urls"?[...value].filter(url=>!__studioInitialURLs.has(url)).length:value.size]));
                  const before=count(),pool=renderer.pool.slice();
                  if(pool.length>3||new Set(pool).size!==pool.length||pool.some(frame=>!__studioOwned.textures.has(frame.texture)||!__studioOwned.buffers.has(frame.buffer)))throw Error('Unaccounted free frame pool');
                  renderer.releaseAll();
                  return {before,pooled:pool.length,after:count(),remainingPool:renderer.pool.length};
-                }''')
+                }''', timeout=120000)
+                reclaimed = sample.json_value()
+                sample.dispose()
                 assert reclaimed['remainingPool'] == 0, reclaimed
                 for kind in ['textures', 'buffers']:
                     assert reclaimed['after'][kind] == reclaimed['before'][kind] - reclaimed['pooled'], reclaimed
