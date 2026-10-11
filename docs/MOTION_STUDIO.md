@@ -47,6 +47,8 @@ An unsupported output preserves the project. Retry begins at frame 0. A hidden
 export finishes current work and waits for visible **Resume export**; closing a
 modal never starts playback. **How to make a video** explains this flow in the app.
 
+[Desktop controls](review/studio-ux/desktop.png) · [Mobile Look settings](review/studio-ux/mobile.png)
+
 ## Technical details
 
 Hold uses A and retains B. Tunnel In/Out derives from the actual span ratio;
