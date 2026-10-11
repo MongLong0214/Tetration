@@ -2,10 +2,11 @@
 
 ## Studio first-video UX follow-up (2026-10-11, issues #20–#26)
 
-Tested implementation commit `d8b36837a714c83f7fa15548f9d5b5fe5eff253f`,
+Tested implementation `d8b36837a714c83f7fa15548f9d5b5fe5eff253f` plus
+resource-observer/version repair `2bbded7377ed3316f4e79bcea65234d0ee88f259`,
 from main `8c869473d5e9fd1d8374fde29fbf9caf8269e099`. Version remains 1.1.0;
 no new version tag. Production-build HTML SHA-256:
-`b362a70ad1f2f91b54c0c429dddbb37670205fa01be3a1679922d435ac6f58de` (698,085 bytes).
+`f2e5eded3dec0aa01a2f0d16d21ee7f2d34f6d17a38ec5b320693bac3545fa69` (698,085 bytes).
 
 Native Chromium 153.0.8010.12 / ANGLE Metal on Apple M4 Pro, Node 22.23.2,
 Python 3.14.3 and Playwright 1.63.0, served CSP on localhost:4174.
@@ -53,8 +54,21 @@ hidden Resume and GPU loss. Original errors survive additional cleanup errors;
 no failed or canceled job publishes a Download result. These injected scenarios
 are distinguished from the fresh public-UI video flow.
 
+The first PR CI run (38130555659) passed 18 jobs but failed the Studio resource
+observer: it attached after GPU construction and saw a partial pool count
+1→0→0. The repaired observer starts before construction on a fresh context and
+waits for completed Detailed pixels and the current thumbnail revision. It
+retains equal texture/FBO counts across three success/cancel/success groups and
+zero new result URLs/bitmaps. The one existing reference-worker script URL is
+identified before any export and excluded by exact identity; new URLs are still
+counted. No image/sample/time tolerance was relaxed. Runtime diagnostics now
+match package version 1.1.0; the same version witness fails before and passes
+after repair. Final-head qualification follows the repair; the failed run is
+not counted as a full CI pass.
+
 Observed preview timing on 1440×900 / DPR2, one sequential native WebGPU run per
-case, comparing baseline 8c86947 with this runtime (deep span 7e−30, fixed cap512):
+case, comparing baseline 8c86947 with implementation d8b3683 (deep span 7e−30,
+fixed cap512; before the version-diagnostic-only runtime change):
 
 | Build / scene | First complete display | Settled display | Actual backing pixels |
 | --- | --- | --- | --- |
