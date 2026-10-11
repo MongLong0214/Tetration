@@ -320,7 +320,7 @@ def run():
             number(page, 'look.pulse.period', 2)
             tab(page, 'Motion')
             page.click('#studioPlay')
-            page.wait_for_function('() => tetraStudioDiagnostics.preview.displayedK>=3', timeout=120000)
+            page.wait_for_function('() => tetraStudioDiagnostics.preview.displayedK>=3 && tetraStudioDiagnostics.render.completedFrames>=2', timeout=120000)
             played = page.evaluate('() => tetraStudioDiagnostics')
             assert played['project']['shot']['start']['span'] != played['project']['shot']['end']['span']
             assert played['render']['completedFrames'] >= 2

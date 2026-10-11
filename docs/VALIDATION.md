@@ -66,6 +66,12 @@ match package version 1.1.0; the same version witness fails before and passes
 after repair. Final-head qualification follows the repair; the failed run is
 not counted as a full CI pass.
 
+The second CI run (38131378546) found an early first-shot observation: a first
+useful frame at k≥3 can be the new Quick pipeline's first completed source.
+The UI test now waits for displayed k≥3 and two completed source frames together,
+retaining the same two-frame/camera assertions and 120-second deadline. Product
+coalescing, rendering and the final runtime bytes are unchanged by this repair.
+
 Observed preview timing on 1440×900 / DPR2, one sequential native WebGPU run per
 case, comparing baseline 8c86947 with implementation d8b3683 (deep span 7e−30,
 fixed cap512; before the version-diagnostic-only runtime change):
