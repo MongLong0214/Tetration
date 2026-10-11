@@ -29,6 +29,16 @@ integration CI are attached to the follow-up PR; the existing real 10-second
 1080×1920 / 30fps video test additionally requires zero motion-history passes
 in final export. Version remains 1.1.0; no release tag is added.
 
+The first preserved review at `408429a` found a resize cleanup exception that
+skipped disposal of the detached source, plus a canceled frame starting camera
+preparation after awaiting disposal. The real injected cleanup witness retained
+one 2,663,424-byte source before repair and retains zero afterwards. The repair
+attempts both owners, preserves cleanup errors, and observes an already-aborted
+signal before preparation. The motion suite covers this and delayed-disposal
+cancellation in addition to normal input and history reset paths. The first
+head's local ten-suite run passed 155 checks, illustrating why routine success
+tests alone did not close these failure paths.
+
 ## Studio first-video UX follow-up (2026-10-11, issues #20–#26)
 
 Tested implementation `d8b36837a714c83f7fa15548f9d5b5fe5eff253f` plus

@@ -84,6 +84,23 @@ def run():
             assert max(state['requested']['width'], state['requested']['height']) <= 1024
             page.click('#studioPause')
             suite.record('Actual Start → End → Preview uses motion stability and bounded display-density resolution')
+            page.close()
+            page = suite.watch(browser.new_page(viewport={'width': 1440, 'height': 900}, device_scale_factor=2))
+            page.add_init_script('''window.__renders=[];window.__fxs=[];window.__abortedAtEntry=0;addEventListener('load',()=>{
+             const prepare=TetraStudioRender.prepare;TetraStudioRender.prepare=async(...a)=>{if(a[1]?.signal?.aborted)__abortedAtEntry++;const r=await prepare(...a);__renders.push(r);return r;};
+             const create=TetraStudioFX.createCompositor;TetraStudioFX.createCompositor=(...a)=>{const f=create(...a);__fxs.push(f);return f;};
+            });''')
+            page.goto(BASE);page.click('#openStudioBtn')
+            page.wait_for_function('()=>tetraStudioDiagnostics.requested?.quality==="detailed" && !tetraStudioDiagnostics.preview.pending && tetraStudioDiagnostics.thumbnails.completed===tetraStudioDiagnostics.thumbnails.revision')
+            page.evaluate('''()=>{window.__oldRender=__renders.filter(r=>r.plan.size.height>512&&r.diagnostics().cachedFrames===1).at(-1);const fx=__fxs.filter(f=>f.canvas.height>512).at(-1),dispose=fx.dispose;fx.dispose=async()=>{await dispose();throw Error('injected FX cleanup failure');};}''')
+            page.click('#studioZoomIn')
+            page.wait_for_function('()=>!tetraStudioDiagnostics.preview.pending && JSON.stringify(tetraStudioDiagnostics.displayedCamera)===JSON.stringify(tetraStudioDiagnostics.draft)')
+            assert page.evaluate('()=>__oldRender.diagnostics().cachedFrames') == 0, 'FX cleanup failure skipped source cleanup'
+            page.wait_for_function('()=>tetraStudioDiagnostics.requested.quality==="detailed" && !tetraStudioDiagnostics.preview.pending')
+            page.evaluate('''()=>{const r=__renders.filter(r=>r.plan.size.height>512&&r.diagnostics().cachedFrames===1).at(-1),dispose=r.dispose;window.__disposalStarted=false;r.dispose=async()=>{__disposalStarted=true;await new Promise(resolve=>setTimeout(resolve,400));await dispose();};}''')
+            page.click('#studioZoomOut');page.wait_for_function('()=>__disposalStarted');page.click('#studioZoomIn')
+            page.wait_for_function('()=>__abortedAtEntry>0 && !tetraStudioDiagnostics.preview.pending && JSON.stringify(tetraStudioDiagnostics.displayedCamera)===JSON.stringify(tetraStudioDiagnostics.draft)')
+            suite.record('FX cleanup failure still releases its source; input during delayed disposal aborts preparation before camera work')
             suite.no_errors()
             browser.close()
         suite.write(True)

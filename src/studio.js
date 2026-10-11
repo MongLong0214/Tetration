@@ -50,17 +50,21 @@
   $('studioDetailRetry').onclick=()=>{detailError=null;requested=requestBudget(true);if(requested&&!preview.setRequest(requested))preview.refresh({base:true});frameNote();};
 
   function baseKey(value,size){return JSON.stringify([value.shot,value.output.aspect,value.output.samples,value.numerics,value.look.palette,size]);}
-  async function dropPipeline(){if(pipeline){const previous=pipeline;pipeline=null;previous.abort.abort();try{await previous.fx?.dispose();}finally{await previous.render?.dispose();}}}
+  async function disposeParts({fx,render},{keepFX=false}={}){
+   const failures=[];for(const cleanup of [()=>!keepFX&&fx?.dispose(),()=>render?.dispose()]){try{await cleanup();}catch(reason){failures.push(reason.message||String(reason));}}
+   if(failures.length)throw Error('Preview cleanup failed: '+failures.join('; '));
+  }
+  async function dropPipeline(){if(pipeline){const previous=pipeline;pipeline=null;previous.abort.abort();await disposeParts(previous);}}
   async function ensurePipeline(signal,size){
    if(thumbPromise)await thumbPromise;
    if(signal.aborted)throw new DOMException('Preview canceled','AbortError');
    const value=currentShot(),key=baseKey(value,size),resources=bridge.resources();
    if(pipeline?.key===key&&pipeline.renderer===resources.renderer)return pipeline;
    const old=pipeline,reuse=old?.renderer===resources.renderer&&old.fx.canvas.width===size.width&&old.fx.canvas.height===size.height;
-   pipeline=null;if(old){old.abort.abort();try{if(!reuse)await old.fx.dispose();await old.render.dispose();}catch(reason){if(reuse)await old.fx.dispose();throw reason;}}
-   const abort=new AbortController(),cancel=()=>abort.abort();signal.addEventListener('abort',cancel,{once:true});let render,fx=reuse?old.fx:null;
+   pipeline=null;if(old){old.abort.abort();try{await disposeParts(old,{keepFX:reuse});}catch(reason){if(reuse){try{await disposeParts({fx:old.fx});}catch(cleanup){throw Error(reason.message+' · '+cleanup.message);}}throw reason;}}
+   const abort=new AbortController(),cancel=()=>abort.abort();signal.addEventListener('abort',cancel,{once:true});if(signal.aborted)cancel();let render,fx=reuse?old.fx:null;
    try{render=await root.TetraStudioRender.prepare(value,{...resources,size,signal:abort.signal});if(signal.aborted)throw new DOMException('Preview canceled','AbortError');fx=fx||FX.createCompositor(resources.renderer,size);}
-   catch(reason){await fx?.dispose();await render?.dispose();throw reason;}finally{signal.removeEventListener('abort',cancel);}
+   catch(reason){try{await disposeParts({fx,render});}catch(cleanup){throw Error(reason.message+' · '+cleanup.message);}throw reason;}finally{signal.removeEventListener('abort',cancel);}
    pipeline={key,render,fx,abort,renderer:resources.renderer};return pipeline;
   }
   function makePreview(){
