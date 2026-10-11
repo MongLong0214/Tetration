@@ -11,8 +11,11 @@ def setup(page):
     page.wait_for_function('() => tetraStudioDiagnostics.entered')
     page.locator('#studio-duration-number').fill('2')
     page.locator('#studio-duration-number').press('Tab')
+    page.click('#studioPreviewView')
+    page.click('#studioVideo')
     page.get_by_label('Resolution', exact=True).select_option('720')
     page.get_by_label('Aspect', exact=True).select_option('16:9')
+    page.click('#studioExportClose')
 
 
 def export(page):
@@ -79,10 +82,13 @@ def run():
             assert restored['submitted'] == 60 and restored['profile']['resourcesAfterCleanup']['render']['completedFrames'] == 1, restored
             page.click('#studioReturnEdit')
             suite.record('Actual WebGL loss fails without partial video; restored GPU produces preview and a fresh complete export')
-            # Observe the resources the app can own, after context recovery.
+            page.close()
+            page = suite.watch(browser.new_page(viewport={'width': 1200, 'height': 800}, accept_downloads=True))
+            # Observe every allocation from construction, including pooled frames.
             # Driver/encoder allocations are outside this accounting.
-            page.evaluate('''() => {
-             const owned=window.__studioOwned={textures:new Set(),buffers:new Set(),bitmaps:new Set(),urls:new Set()};
+            page.add_init_script('''(() => {
+             window.__studioHidden=false;Object.defineProperty(document,"hidden",{configurable:true,get:()=>window.__studioHidden});
+             const owned=window.__studioOwned={textures:new Set(),buffers:new Set(),bitmaps:new Set(),urls:new Set()};window.__studioURLTypes=new Map();
              for(const [kind,create,remove]of [['textures','createTexture','deleteTexture'],['buffers','createFramebuffer','deleteFramebuffer']]){
               const add=WebGL2RenderingContext.prototype[create],drop=WebGL2RenderingContext.prototype[remove];
               WebGL2RenderingContext.prototype[create]=function(...args){const value=add.apply(this,args);owned[kind].add(value);return value;};
@@ -92,9 +98,13 @@ def run():
              window.createImageBitmap=async(...args)=>{const value=await bitmap(...args);owned.bitmaps.add(value);return value;};
              ImageBitmap.prototype.close=function(){owned.bitmaps.delete(this);return close.call(this);};
              const url=URL.createObjectURL,revoke=URL.revokeObjectURL;
-             URL.createObjectURL=function(value){const result=url.call(this,value);owned.urls.add(result);return result;};
-             URL.revokeObjectURL=function(value){owned.urls.delete(value);return revoke.call(this,value);};
-            }''')
+             URL.createObjectURL=function(value){const result=url.call(this,value);owned.urls.add(result);window.__studioURLTypes.set(result,value.type);return result;};
+             URL.revokeObjectURL=function(value){owned.urls.delete(value);window.__studioURLTypes.delete(value);return revoke.call(this,value);};
+            })();''')
+            setup(page)
+            # Explore keeps one reference-worker script URL for this page's lifetime.
+            assert page.evaluate('() => [...__studioURLTypes.values()]') == ['text/javascript']
+            page.evaluate('() => {window.__studioInitialURLs=new Set(__studioOwned.urls);}')
             counts = []
             for _ in range(3):
                 for expected in ['ready', 'canceled', 'ready']:
@@ -108,8 +118,8 @@ def run():
                     else:
                         assert value['url'] is None, value
                     page.click('#studioReturnEdit')
-                    page.wait_for_function('() => !tetraStudioDiagnostics.preview.pending && !tetraStudioDiagnostics.thumbnails.active', timeout=120000)
-                counts.append(page.evaluate('() => Object.fromEntries(Object.entries(__studioOwned).map(([key,value])=>[key,value.size]))'))
+                    page.wait_for_function('() => tetraStudioDiagnostics.requested?.quality==="detailed" && !tetraStudioDiagnostics.preview.pending && !tetraStudioDiagnostics.thumbnails.active && tetraStudioDiagnostics.thumbnails.completed===tetraStudioDiagnostics.thumbnails.revision', timeout=120000)
+                counts.append(page.evaluate('() => Object.fromEntries(Object.entries(__studioOwned).map(([key,value])=>[key,key==="urls"?[...value].filter(url=>!__studioInitialURLs.has(url)).length:value.size]))'))
             assert counts[0] == counts[1] == counts[2], counts
             assert all(c['bitmaps'] == 0 and c['urls'] == 0 for c in counts), counts
             suite.record('Three actual success/cancel/success cycles retain bounded textures/FBOs and no bitmap/result URLs', counts)
@@ -118,11 +128,74 @@ def run():
             page.evaluate('() => {window.__studioHidden=false;document.dispatchEvent(new Event("visibilitychange"));}')
             visible = page.evaluate('() => tetraStudioDiagnostics.preview')
             assert not visible['suspended'] and not visible['playing'], visible
+            page.click('#studioLookTab')
             page.get_by_label('Preset', exact=True).select_option('Deep Ambient')
             page.wait_for_function('() => tetraStudioDiagnostics.preview.displayedK>=0 && !tetraStudioDiagnostics.preview.pending && !tetraStudioDiagnostics.thumbnails.active', timeout=120000)
             assert not page.evaluate('() => tetraStudioDiagnostics.preview.playing')
             suite.record('Visible return resumes selected-frame Look updates without autoplay')
             page.close()
+            context = browser.new_context(viewport={'width': 1200, 'height': 800}, accept_downloads=True)
+            context.add_init_script("""window.__cleanupFx=true;window.__cleanupRender=true;window.__forceWebM=false;
+             let exported;Object.defineProperty(globalThis,'TetraStudioExport',{configurable:true,get:()=>exported,set:value=>{
+              const create=value.create;value.create=options=>create({...options,
+               createCompositor(renderer,size){const fx=TetraStudioFX.createCompositor(renderer,size),dispose=fx.dispose;fx.dispose=async()=>{await dispose();if(window.__cleanupFx){window.__cleanupFx=false;throw Error('injected FX cleanup');}};return fx;},
+               async prepare(p,o){const session=await TetraStudioRender.prepare(p,o),dispose=session.dispose;session.dispose=async()=>{await dispose();if(window.__cleanupRender){window.__cleanupRender=false;throw Error('injected render cleanup');}};return session;},
+               probe:(config,...rest)=>TetraStudioEncoder.probe({...config,container:window.__forceWebM&&config.container==='auto'?'webm':config.container},...rest)
+              });exported=value;
+             }});
+            """)
+            page = suite.watch(context.new_page())
+            setup(page)
+            export(page)
+            failure = terminal(page, 'failed')
+            assert 'FX cleanup' in failure['error'] and 'render cleanup' in failure['error'], failure
+            assert failure['url'] is None and page.evaluate('() => tetraStudioDiagnostics.owner==="studio"')
+            assert not page.locator('#studioOutputFields').is_disabled()
+            page.click('#studioReturnEdit')
+            export(page)
+            assert terminal(page, 'ready')['submitted'] == 60
+            page.click('#studioReturnEdit')
+            suite.record('Actual compositor/session cleanup exceptions both run, publish no file, unlock UI/owner and permit a fresh successful job')
+            # A forced MP4 availability failure still uses the real WebM probe and encoder.
+            page.evaluate('() => {window.__forceWebM=true;}')
+            page.click('#studioVideo')
+            page.get_by_label('Format', exact=True).select_option('auto')
+            page.click('#studioExportStart')
+            alternative = terminal(page, 'failed')
+            assert alternative['errorCode'] == 'MP4_UNAVAILABLE' and alternative['profile'] is None
+            assert page.get_by_role('button', name='Use WebM', exact=True).is_visible()
+            page.click('#studioUseWebM')
+            assert page.evaluate('() => tetraStudioDiagnostics.project.output.container==="webm" && !tetraStudioDiagnostics.export.active')
+            page.click('#studioExportStart')
+            output = terminal(page, 'ready')
+            assert output['config']['container'] == 'webm' and output['submitted'] == 60
+            with page.expect_download() as downloaded:
+                page.click('#studioDownload')
+            path = OUT / 'studio-confirmed-webm.webm'
+            downloaded.value.save_as(path)
+            stream = json.loads(subprocess.check_output(['ffprobe','-v','error','-count_frames','-show_streams','-of','json',str(path)],text=True))['streams'][0]
+            assert stream['codec_name'] == 'vp9' and int(stream['nb_read_frames']) == 60
+            page.click('#studioReturnEdit')
+            suite.record('Confirmed WebM alternative requires explicit selection, then a real VP9/60-frame download')
+            page.click('#studioMotionTab')
+            page.click('#studioStart')
+            page.get_by_text('Speed, easing and rotation', exact=True).click()
+            page.locator('#studio-rollDeg-number').fill('45')
+            page.locator('#studio-rollDeg-number').press('Tab')
+            page.click('#studioApply')
+            page.click('#studioPreviewView')
+            frozen = page.evaluate('() => tetraStudioDiagnostics.project')
+            page.evaluate('''() => {const prepare=TetraStudioRender.prepare;TetraStudioRender.prepare=async(p,o)=>{if(o.size)return prepare(p,o);const limit=o.renderer.maxTexture;o.renderer.maxTexture=1024;try{return await prepare(p,o);}finally{o.renderer.maxTexture=limit;}};}''')
+            export(page)
+            limited = terminal(page, 'failed')
+            assert limited['errorCode'] == 'SOURCE_LIMIT' and limited['url'] is None
+            assert page.evaluate('() => tetraStudioDiagnostics.project') == frozen
+            page.click('#studioEditRotation')
+            page.wait_for_function('() => tetraStudioDiagnostics.endpoint==="start"')
+            assert page.locator('#studio-rollDeg-number').is_visible()
+            assert page.locator('#studio-rollDeg-number').input_value() == '45'
+            suite.record('Rolled source limit preserves output/angles and routes explicit rotation editing to the used Hold endpoint')
+            context.close()
             for mode, init in [
                 ('encoder', 'Object.defineProperty(window,"VideoEncoder",{value:undefined,configurable:true});'),
                 ('float', '''const original=WebGL2RenderingContext.prototype.getExtension;WebGL2RenderingContext.prototype.getExtension=function(name){return name==='EXT_color_buffer_float'?null:original.call(this,name);};'''),
@@ -131,15 +204,30 @@ def run():
                 context = browser.new_context(viewport={'width': 1200, 'height': 800})
                 context.add_init_script(init)
                 page = suite.watch(context.new_page())
+                if mode == 'webgl':
+                    page.goto(BASE)
+                    page.click('#openStudioBtn')
+                    page.wait_for_function('() => tetraStudioDiagnostics.owner==="explore" && !tetraStudioDiagnostics.entered')
+                    assert page.locator('#viewport').is_visible()
+                    assert page.locator('#toast').is_visible()
+                    suite.record('Unavailable WebGL restores Explore with an explanation')
+                    context.close()
+                    continue
                 setup(page)
                 if mode == 'float':
+                    page.click('#studioLookTab')
                     page.get_by_label('Preset', exact=True).select_option('Neon Pulse')
                 value = page.evaluate('() => tetraStudioDiagnostics.project')
+
                 export(page)
                 failure = terminal(page, 'failed')
                 assert failure['url'] is None and page.evaluate('() => tetraStudioDiagnostics.project') == value, failure
                 needle = {'encoder': 'WebCodecs', 'float': 'half-float', 'webgl': 'WebGL2'}[mode]
                 assert needle in failure['error'], failure
+                page.click('#studioEditOutput')
+                assert page.evaluate('() => document.activeElement.matches("#studioOutputControls select")')
+                if mode == 'encoder':
+                    assert failure['profile'] is None
                 page.click('#studioReturnEdit')
                 page.click('#studioSave')
                 assert not page.evaluate('() => tetraStudioDiagnostics.dirty')

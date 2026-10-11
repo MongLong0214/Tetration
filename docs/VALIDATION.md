@@ -1,6 +1,103 @@
 # Validation — 1.1.0
 
-## Motion Studio integration (2026-10-11)
+## Studio first-video UX follow-up (2026-10-11, issues #20–#26)
+
+Tested implementation `d8b36837a714c83f7fa15548f9d5b5fe5eff253f` plus
+resource-observer/version repair `2bbded7377ed3316f4e79bcea65234d0ee88f259`,
+from main `8c869473d5e9fd1d8374fde29fbf9caf8269e099`. Version remains 1.1.0;
+no new version tag. Production-build HTML SHA-256:
+`f2e5eded3dec0aa01a2f0d16d21ee7f2d34f6d17a38ec5b320693bac3545fa69` (698,085 bytes).
+
+Native Chromium 153.0.8010.12 / ANGLE Metal on Apple M4 Pro, Node 22.23.2,
+Python 3.14.3 and Playwright 1.63.0, served CSP on localhost:4174.
+`npm test`: 184 passed, none skipped; lint/build passed. The same runtime passes
+Studio media 13, FX 3, UI 27, failures/recovery 12 and deep adapter 2 checks
+(57 total), Explorer 27, release/offline 16 and production/recovery 22.
+Native desktop WebKit 26.6 separately passes four Studio checks, including a real
+1280×720 / 24 fps / 48-frame Neon Pulse AVC file. No uncaught exceptions were
+observed in those completed suites. These are local results; CI and deployment
+results are attached to the integration PRs rather than inferred from local runs.
+
+A fresh 1440×900 context uses visible UI controls through unchanged Start → real
+End zoom → End & animate → Look Glow / Rhythm Pulse → Play → Export settings →
+Create video → Download. No model/localStorage injection or force clicks in that
+first-shot scenario. The downloaded AVC has one silent track, 1080×1920 pixels,
+300 frames, 10.000 seconds, and 15,069,707 bytes; every PTS agrees
+with k/30 within the existing 2 ms container tolerance. The renderer reports
+WebGPU, AA4, 384 fixed shot-wide iterations, 300 complete source frames and 300
+compositions. After cleanup: no cached source images or FX targets/programs.
+
+Independent decoding of frames 0/150/299 is compared with separately rendered
+references at the same size/backend/sampling/FX settings. Mean RGB differences
+are 6.90 / 6.75 / 5.81 levels after downsampling; midpoint/end differences from
+an A-only reference with the same time effects are 14.59 / 14.68. This separates
+camera travel from color/time-only changes. Exact endpoint cameras and live
+preview cameras also match the existing camera evaluator. Existing AA16,
+24 fps, square/landscape, all four presets, 20-second Hold and deep-reference
+continuity checks remain unchanged in their numerical tolerances.
+
+Regressions cover clean drafts after Reverse/Undo, single Undo for End & animate
+and native keyrepeat, pointercancel, invalid inputs/focus/reveal, effect Off/On
+value preservation, bypass explanations, saved Continue, paused modal close,
+latest asynchronous framing, and nonmodal canvas/Pause at 390×844, 320×568 and
+844×390. Real two-touch input at 45° ends safely on resize; text enlargement and
+keyboard-sized viewports retain accessible inputs. The same Reverse/invalid
+Save/invalid Export reproducer fails on 8c86947 and passes here; the native
+five-keyrepeat reproducer changes 0→5→4 after one Undo before repair and 0→5→0
+after repair. An actual failure action exposed a null-selector exception;
+Edit output settings now focuses the existing select without browser errors.
+
+Fault tests separately verify unsupported codec ⇒ zero prepare/render/FX calls,
+explicit confirmed WebM selection and actual VP9 output, rolled source limits,
+both throwing cleanup functions, fresh-job recovery, cancellation/late finalize,
+hidden Resume and GPU loss. Original errors survive additional cleanup errors;
+no failed or canceled job publishes a Download result. These injected scenarios
+are distinguished from the fresh public-UI video flow.
+
+The first PR CI run (38130555659) passed 18 jobs but failed the Studio resource
+observer: it attached after GPU construction and saw a partial pool count
+1→0→0. The repaired observer starts before construction on a fresh context and
+waits for completed Detailed pixels and the current thumbnail revision. It
+retains equal texture/FBO counts across three success/cancel/success groups and
+zero new result URLs/bitmaps. The one existing reference-worker script URL is
+identified before any export and excluded by exact identity; new URLs are still
+counted. No image/sample/time tolerance was relaxed. Runtime diagnostics now
+match package version 1.1.0; the same version witness fails before and passes
+after repair. Final-head qualification follows the repair; the failed run is
+not counted as a full CI pass.
+
+The second CI run (38131378546) found an early first-shot observation: a first
+useful frame at k≥3 can be the new Quick pipeline's first completed source.
+The UI test now waits for displayed k≥3 and two completed source frames together,
+retaining the same two-frame/camera assertions and 120-second deadline. Product
+coalescing, rendering and the final runtime bytes are unchanged by this repair.
+
+Observed preview timing on 1440×900 / DPR2, one sequential native WebGPU run per
+case, comparing baseline 8c86947 with implementation d8b3683 (deep span 7e−30,
+fixed cap512; before the version-diagnostic-only runtime change):
+
+| Build / scene | First complete display | Settled display | Actual backing pixels |
+| --- | --- | --- | --- |
+| before · shallow | 349.7 ms | 351.7 ms | 288×512 |
+| before · deep | 412.2 ms | 413.9 ms | 288×512 |
+| after · shallow | 114.5 ms | 581.8 ms | 648×1152 |
+| after · deep | 215.5 ms | 548.7 ms | 648×1152 |
+
+Detailed refinement costs additional work and produces more real pixels; these
+single-run observations are not device-wide speed guarantees. A separate
+landscape DPR2 UI check reaches 1536×864 and an output720 cap reaches 1280×720;
+FX-only edits reuse the compatible Detailed orbit frame. Failed refinement keeps
+completed pixels, performs no automatic retry loop and permits explicit Retry.
+
+Current captures: [desktop](review/studio-ux/desktop.png),
+[390px mobile with nonmodal Look settings](review/studio-ux/mobile.png).
+Physical iPhone/Safari, real mobile IME behavior, OS sleep and independent novice
+human usability observations were not tested. Mobile emulation and desktop
+WebKit automation do not certify those environments. App-owned resource counts
+do not bound total browser/driver/encoder RAM or prove zero bugs on every device.
+
+## Historical Motion Studio integration (2026-10-11)
+
 
 Native Chromium 153.0.8010.12 / ANGLE Metal on Apple M4 Pro, Python 3.14.3,
 Playwright 1.63.0, served production CSP. Final Studio runtime

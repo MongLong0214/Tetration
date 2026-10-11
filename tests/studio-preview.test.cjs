@@ -1,6 +1,28 @@
 const {test}=require('node:test'),assert=require('node:assert/strict');
 const Preview=require('../src/studio-preview.js');
 const flush=()=>new Promise(resolve=>setTimeout(resolve,0));
+test('Quick/Detailed size follows actual display, density, output, aspect and GPU budgets',()=>{
+ const args={width:960,height:540,aspect:'16:9',outputWidth:1920,outputHeight:1080,dpr:2};
+ assert.deepEqual(Preview.sizeFor({...args,detailed:true}),{width:1536,height:864});
+ assert.deepEqual(Preview.sizeFor(args),{width:512,height:288});
+ assert.deepEqual(Preview.sizeFor({...args,outputWidth:1280,outputHeight:720,detailed:true}),{width:1280,height:720});
+ assert.deepEqual(Preview.sizeFor({...args,dpr:.5,detailed:true}),{width:480,height:270});
+ assert.deepEqual(Preview.sizeFor({...args,width:0,detailed:true}),null);
+ const mobile=Preview.sizeFor({...args,width:366,height:500,aspect:'9:16',outputWidth:1080,outputHeight:1920,dpr:3,detailed:true});
+ assert.equal(mobile.width/mobile.height,9/16);assert.ok(mobile.height<=1000&&mobile.width<=732);
+ const limited=Preview.sizeFor({...args,maxTexture:512,rolled:true,detailed:true});assert.ok(Math.hypot(limited.width,limited.height)+2<=512);
+});
+test('resolution generation cancels old work and presents only the completed latest size',async()=>{
+ const requests=[],shown=[];const preview=Preview.create({frameCount:60,fps:30,renderBase:(k,meta)=>new Promise(resolve=>requests.push({meta,resolve:()=>resolve({release(){}})})),compose:async()=>({}),present:(canvas,meta)=>shown.push(meta.request)});
+ preview.setRequest({width:512,height:288});preview.setRequest({width:1536,height:864});assert.ok(requests[0].meta.signal.aborted);
+ requests[0].resolve();await flush();requests[1].resolve();await flush();assert.deepEqual(shown,[{width:1536,height:864}]);await preview.dispose();
+});
+test('idle thumbnail work drains on cancellation before a newer frame, and failure does not poison suspend',async()=>{
+ let complete;const f=fixture();f.preview.seek(0);await f.complete();
+ const idle=f.preview.idleTask(signal=>new Promise((resolve,reject)=>{complete=()=>signal.aborted?reject(new Error('thumbnail failed')):resolve();}));
+ await flush();const suspended=f.preview.suspend();complete();await assert.rejects(idle,/thumbnail failed/);await suspended;
+ assert.equal(f.preview.state().inFlight,0);f.preview.resume();await f.complete();await f.preview.dispose();
+});
 function fixture(){
  let clock=0,tick=null;const requests=[],shown=[],composed=[];
  const preview=Preview.create({frameCount:60,fps:30,now:()=>clock,requestTick:fn=>{tick=fn;return 1;},cancelTick:()=>{tick=null;},renderBase:(k,{signal})=>new Promise(resolve=>requests.push({k,signal,resolve:()=>resolve({k,release(){}})})),compose:async(base,meta)=>{composed.push(meta);return base;},present:(canvas,{k})=>shown.push(k)});
