@@ -1,6 +1,6 @@
 # Changelog
 
-### Motion Studio — 2026-10-11, development
+### 1.1.0 · Motion Studio — 2026-10-11
 
 - Exact A/B shots, draft framing with roll, zoom-aware motion, transactional Undo/Redo,
   local projects and JSON import/export. Native desktop controls and a mobile settings

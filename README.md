@@ -29,9 +29,9 @@ The app opens on the overview of the complex plane (centre −0.5, width 8). Sev
 
 **Share** copies the exact view link (or opens the native share sheet on touch devices). **Save image** downloads a PNG at the rendered resolution; on touch devices that support file sharing it opens the share sheet with the image. Up to 24 named views can be saved on the device. TETRA installs as an app and reopens offline.
 
-## Motion Studio — development branch
+## Motion Studio
 
-On `dev`, **Studio** copies the exact Explore camera and palette into a shot.
+**Studio** copies the exact Explore camera and palette into a shot.
 Frame Start A and End B with drag, pinch, zoom and roll; **Set / Update** applies
 each draft. Choose Hold, Tunnel In/Out or Drift, then adjust duration, easing,
 color, Bloom, Pulse, Prism, Kaleidoscope and Glow Wave. Four looks provide starting
@@ -44,7 +44,6 @@ It needs WebGL2 and a supported WebCodecs encoder; non-neutral FX also need
 half-float targets. A hidden export waits at the next frame boundary for explicit
 Resume. File ready appears after finalization; files stay on the device.
 See [Motion Studio](docs/MOTION_STUDIO.md) for editing, output and practical limits.
-This development work has not been published to the production `main` deployment.
 
 ## Run
 

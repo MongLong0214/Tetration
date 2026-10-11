@@ -1,8 +1,5 @@
 # Motion Studio
 
-Studio is development work on `dev`. The production `main` deployment remains
-the Explorer until the maintainer reviews and authorizes its merge.
-
 Open Studio from an Explore view. Start A and End B store exact decimal camera
 coordinates, horizontal span and roll. Selecting an endpoint opens a draft:
 drag/arrow keys pan, scroll/pinch/double-click zoom, and Roll changes its angle.

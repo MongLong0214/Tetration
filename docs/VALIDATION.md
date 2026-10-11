@@ -1,6 +1,6 @@
-# Validation — 1.0.0
+# Validation — 1.1.0
 
-## Motion Studio integration (2026-10-11, development)
+## Motion Studio integration (2026-10-11)
 
 Native Chromium 153.0.8010.12 / ANGLE Metal on Apple M4 Pro, Python 3.14.3,
 Playwright 1.63.0, served production CSP. Final Studio runtime
@@ -91,9 +91,16 @@ WebGL/WebGPU direct pixel-identity assertion (62/206/595 differing pixels at
 counts and statistics; Studio is identical. The assertion is not weakened.
 Native Studio WebGPU outputs are qualified separately above. Remote CI at
 `404ae5c` passes all 19 jobs, including the full deep suite. The final visibility
-repair and deployment qualification are tracked in PR #18. Physical iPhone and
-Safari movie export remain unqualified; the checked scope does not establish
-absolute absence of defects on every device or shot.
+repair passes all 19 jobs at `12f975e` in
+[CI 38115411993](https://github.com/MongLong0214/Tetration/actions/runs/38115411993).
+All 43 Studio checks also pass on its actual protected Vercel preview; inline
+runtime and CSP match the local build, including an offline media reload using
+the existing CLI authentication scoped to that preview host. Native desktop
+WebKit 26.6 additionally passes Studio editing, Save/JSON and exact Explore return,
+and independently decoded Neon Pulse MP4: 1280×720, 24fps, 48 frames, 2 seconds,
+every PTS correct and distinct first/middle/last images, zero uncaught errors.
+Physical iPhone and Safari movie export remain unqualified; the checked scope
+does not establish absolute absence of defects on every device or shot.
 
 ## Motion foundations (2026-10-11, development)
 
