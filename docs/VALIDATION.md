@@ -1,5 +1,44 @@
 # Validation — 1.1.0
 
+## Studio preview responsiveness follow-up (2026-10-11)
+
+After the owner reported shimmering playback, slow framing and confusing controls,
+they clarified that downloaded video was clean. This follow-up changes preview
+and framing; final video keeps the existing independent full-sample rendering.
+The visible workflow is Start → End → Preview above the canvas, with confirmation
+beside the instruction and explicit zoom buttons outside the gesture surface.
+
+On Apple M4 Pro / native Chromium 153, twelve matching 40 ms framing inputs at
+the Bloom view reduced preparation median from 118.5 ms to 0.2 ms. This measures
+camera/source preparation, not a 592× improvement in total GPU rendering.
+Completed pixels also reproject immediately while the exact new view renders;
+the regression delays preparation by 180 ms to distinguish this from waiting.
+Camera transforms are checked with 1e-200 decimal spans and rotated world points.
+
+For 32 moving 128×72 frames at the Bloom view, camera-aligned mean RGB changes
+drop from 18.62 to 5.44 for AA4 and 9.74 to 2.81 for AA16, about 71% in this
+particular path. Native WebKit observes comparable reduction. A crisp moving
+edge has no changes beyond its two-pixel boundary neighbourhood; first frames,
+seeks, extreme translations, and Original reset/bypass history exactly. These
+measurements do not establish a universal shimmer-free guarantee. Playback
+uses display density up to DPR 2 / 1024px; framing stays within 512px, and both
+refine after idle. The GPU retains at most two motion history images.
+
+Local lint/build and all 186 unit tests pass without skips. Browser evidence and
+integration CI are attached to the follow-up PR; the existing real 10-second
+1080×1920 / 30fps video test additionally requires zero motion-history passes
+in final export. Version remains 1.1.0; no release tag is added.
+
+The first preserved review at `408429a` found a resize cleanup exception that
+skipped disposal of the detached source, plus a canceled frame starting camera
+preparation after awaiting disposal. The real injected cleanup witness retained
+one 2,663,424-byte source before repair and retains zero afterwards. The repair
+attempts both owners, preserves cleanup errors, and observes an already-aborted
+signal before preparation. The motion suite covers this and delayed-disposal
+cancellation in addition to normal input and history reset paths. The first
+head's local ten-suite run passed 155 checks, illustrating why routine success
+tests alone did not close these failure paths.
+
 ## Studio first-video UX follow-up (2026-10-11, issues #20–#26)
 
 Tested implementation `d8b36837a714c83f7fa15548f9d5b5fe5eff253f` plus

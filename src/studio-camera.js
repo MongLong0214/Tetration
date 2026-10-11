@@ -42,13 +42,25 @@
   return {x:F.text(F.parse(camera.x)+F.mul(span,F.parse(String(sx/width)))),y:F.text(F.parse(camera.y)-F.mul(span,F.parse(String(sy/width))))};
  }
  function autoIterations(camera){return root.TetraRender.autoIterations(camera.span);}
+ // Canvas affine transform from a completed camera to a new camera. Subtract
+ // decimal centres before conversion so this also works at 1e-200 zoom.
+ function screenMatrix(from,to,width,height){
+  const span=F.parse(to.span),scale=F.number(F.div(F.parse(from.span),span)),angle=(to.rollDeg-from.rollDeg)*Math.PI/180,
+   a=scale*Math.cos(angle),b=scale*Math.sin(angle),c=-b,d=a,roll=to.rollDeg*Math.PI/180,
+   x=F.number(F.div(F.parse(from.x)-F.parse(to.x),span))*width,y=F.number(F.div(F.parse(from.y)-F.parse(to.y),span))*width,
+   tx=Math.cos(roll)*x+Math.sin(roll)*y,ty=Math.sin(roll)*x-Math.cos(roll)*y;
+  return [a,b,c,d,width/2+tx-a*width/2-c*height/2,height/2+ty-b*width/2-d*height/2];
+ }
  async function plan(input,{signal,size=M.dimensions(input.output),yieldTask=()=>new Promise(resolve=>setTimeout(resolve,0))}={}){
   canceled(signal);const project=M.validate(input),evaluate=createEvaluator(project),frames=[];
-  for(let k=0;k<project.shot.frameCount;k++){canceled(signal);frames.push(evaluate(k));if((k+1)%12===0)await yieldTask();}
+  // A held camera has no interpolation work. In particular, framing a single
+  // endpoint must not pay a timer hop for every twelve unused video frames.
+  const held=project.shot.motion==='hold';
+  for(let k=0;k<project.shot.frameCount;k++){canceled(signal);frames.push(evaluate(k));if(!held&&(k+1)%12===0)await yieldTask();}
   canceled(signal);const extent=sourceExtent(size.width,size.height,frames.map(frame=>frame.camera.rollDeg));
   const iterations=project.numerics.iterations==='fixed'?project.numerics.fixedIterations:Math.max(...frames.map(frame=>autoIterations(frame.camera)));
   return {project,frames,size:{...size},extent,iterations};
  }
- root.TetraStudioCamera={createEvaluator,evaluateFrame,reverseEndpoints,matchEndSpan,sourceExtent,sourceCamera,screenToWorld,autoIterations,plan};
+ root.TetraStudioCamera={createEvaluator,evaluateFrame,reverseEndpoints,matchEndSpan,sourceExtent,sourceCamera,screenToWorld,screenMatrix,autoIterations,plan};
  if(typeof module!=='undefined')module.exports=root.TetraStudioCamera;
 })(globalThis);
