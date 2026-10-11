@@ -1,5 +1,21 @@
 # Changelog
 
+### Studio first-video UX · 1.1.0 follow-up — 2026-10-11
+
+- Expose Studio on mobile; use real Motion/Look/Rhythm tabs and nonmodal settings
+  that leave the canvas and Pause accessible.
+- Guide Start → End with explicit End & animate, preserve ordinary Hold edits,
+  synchronize clean drafts after Reverse/Undo and offer saved/unsaved Continue.
+- Group effect switches with controls, explain bypass and framing, validate numeric
+  drafts before committing actions, and restore canceled slider transactions.
+- Compute Quick / Detailed preview at actual display budgets without clearing
+  completed pixels; cancel stale resolutions and preserve gesture coordinates.
+- Move output settings into Export video, distinguish Save project, check codecs
+  before GPU preparation, and restore ownership even when cleanup throws.
+- Add in-app help and public-UI first-video / regression coverage; preserve JSON v1,
+  camera/FX math, AA4/16, fixed output timing and offline security.
+
+
 ### 1.1.0 · Motion Studio — 2026-10-11
 
 - Exact A/B shots, draft framing with roll, zoom-aware motion, transactional Undo/Redo,

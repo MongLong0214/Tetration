@@ -6,7 +6,7 @@ A browser-native tetration explorer. Inspect internal fractal structure down to 
 
 [![Validate](https://github.com/MongLong0214/Tetration/actions/workflows/ci.yml/badge.svg)](https://github.com/MongLong0214/Tetration/actions)
 
-**1.0.0** · Live at **[tetration.vercel.app](https://tetration.vercel.app)**. Device qualification is tracked in the [production review](docs/PRODUCTION_REVIEW.md). The app observes finite iterations; it does not prove convergence or divergence.
+**1.1.0** · Live at **[tetration.vercel.app](https://tetration.vercel.app)**. Device qualification is tracked in the [production review](docs/PRODUCTION_REVIEW.md). The app observes finite iterations; it does not prove convergence or divergence.
 
 ## Explore
 
@@ -31,18 +31,22 @@ The app opens on the overview of the complex plane (centre −0.5, width 8). Sev
 
 ## Motion Studio
 
-**Studio** copies the exact Explore camera and palette into a shot.
-Frame Start A and End B with drag, pinch, zoom and roll; **Set / Update** applies
-each draft. Choose Hold, Tunnel In/Out or Drift, then adjust duration, easing,
-color, Bloom, Pulse, Prism, Kaleidoscope and Glow Wave. Four looks provide starting
-points; every value remains editable. Save up to 10 projects locally or exchange
-project JSON, with Undo/Redo. **Original** compares the same framing and palette.
+Open **Studio** from the desktop or mobile toolbar. Frame a view and **Use as
+Start**, then zoom or drag and **Use as End & animate**. **Keep camera still**
+is also a valid video. Adjust the **Look / Rhythm** tabs and press **Play**.
+**Export video** contains output settings: **Create video → Download**.
+**Save project** keeps editable settings on the device; Projects exchanges JSON.
+The app includes **How to make a video**. No console or external manual is needed.
+
+Quick preview stays responsive at up to 512px; paused Detailed preview recomputes
+actual display pixels within a 1536px / 1.5MP budget. Video uses its own output
+size and 4/16 samples. All effects retain their values when switched off.
 
 Video export computes every selected sample offline, then writes a silent MP4/AVC
 or confirmed WebM/VP9 in the browser: 720/1080, three aspects, 24/30 fps, 2–20 seconds.
 It needs WebGL2 and a supported WebCodecs encoder; non-neutral FX also need
 half-float targets. A hidden export waits at the next frame boundary for explicit
-Resume. File ready appears after finalization; files stay on the device.
+Resume. File ready appears after finalization and cleanup; files stay on the device.
 See [Motion Studio](docs/MOTION_STUDIO.md) for editing, output and practical limits.
 
 ## Run
@@ -174,7 +178,7 @@ npm run test:webkit
 | `src/sw.js`, `src/manifest.webmanifest`, `src/assets/` | Offline shell and app icons |
 | `src/index.html`, `src/style.css` | Interface around the map |
 | `tests/` | Numerical references, unit tests and browser suites |
-| `docs/review/v1.0.0/` | Current review evidence |
+| `docs/review/v1.0.0/` | Historical 1.0.0 review evidence |
 | `docs/HANDOFF_PERFORMANCE.md`, `tools/perf/` | Performance handoff (architecture, baselines, bottlenecks, next optimizations) and measurement probes |
 
 Report bugs with a shared view URL, device/browser, iteration limit and engine. Numerical changes should include a reproducible case and independent reference values.

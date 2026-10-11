@@ -2,7 +2,7 @@
   'use strict';
   const $ = id => document.getElementById(id);
   const F = createFixed(256);
-  const VERSION = '1.0.0';
+  const VERSION = '1.1.0';
   const workerSource = __WORKER_SOURCE__;
   const workerURL = URL.createObjectURL(new Blob([workerSource], {type: 'text/javascript'}));
   const presets = [
@@ -1555,6 +1555,7 @@
   // Explicit ownership handoff: cancel Explore, drain its submitted GPU work,
   // then let Studio borrow the same kernels, device and reference worker.
   studio = globalThis.TetraStudio.create({
+    error: message => toast(message),
     snapshot: () => ({...serialize(), palette: globalThis.TetraStudioModel.ENUMS.palette[palette]}),
     async enter() {
       updateURL(); closeSettings(); owner = 'studio'; serial++; stopCPU(); cancelGesture(); stopMotion();
