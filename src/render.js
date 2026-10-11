@@ -1,6 +1,8 @@
 /* Bounded image work, independent of orbit precision. */
 (function(root){
  'use strict';
+ const AUTO_STEPS=[256,384,512,768,1024,1536,2048,3072,4096,6144,8192,12288,16384];
+ function autoIterations(span){const wanted=320+34*Math.max(0,Math.log10(7/Number(span)));return AUTO_STEPS.find(n=>n>=wanted)||AUTO_STEPS.at(-1);}
  function size(width,height,dpr=1,budget=8294400,maxWidth=8192){
   const d=Math.min(Math.max(dpr,0.25),3);let w=Math.max(1,width*d),h=Math.max(1,height*d);
   const shrink=Math.min(1,Math.sqrt(budget/(w*h)),maxWidth/w,maxWidth/h);
@@ -62,6 +64,6 @@
   if(F.abs(x)+F.abs(y)<view.span*2n){x+=view.span*37n/100n;y+=view.span*29n/100n;}
   return {x,y:y<0n?-y:y};
  }
- root.TetraRender={size,tiles,boxView,exposedTiles,huePixels,perturbScene,referencePoint};
+ root.TetraRender={AUTO_STEPS,autoIterations,size,tiles,boxView,exposedTiles,huePixels,perturbScene,referencePoint};
  if(typeof module!=='undefined')module.exports=root.TetraRender;
 })(globalThis);

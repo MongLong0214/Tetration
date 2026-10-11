@@ -1,7 +1,7 @@
 name: Validate
 on:
   push:
-    branches: [main]
+    branches: [main, dev, 'release/**', 'hotfix/**']
   pull_request:
   workflow_dispatch:
     inputs:
@@ -34,14 +34,15 @@ jobs:
     needs: unit
     env:
       TETRA_SUITE: ${{ matrix.suite }}
-    # The largest native Ultra scenes also exercise latency bounds. Use the
-    # desktop macOS renderer for those; keep Linux pixel/recovery suites below.
-    runs-on: ${{ (matrix.suite == 'explorer' || matrix.suite == 'reuse' || matrix.suite == 'production' || startsWith(matrix.suite, 'maximum') || matrix.suite == 'cpu-recovery') && 'macos-15' || 'ubuntu-latest' }}
+    # Native Ultra/video qualification uses macOS. The large deep benchmark
+    # also runs there, with SwiftShader explicitly selected by its suite;
+    # Linux retains the quality, pixel, interaction and recovery checks.
+    runs-on: ${{ (matrix.suite == 'deep' || matrix.suite == 'studio' || matrix.suite == 'explorer' || matrix.suite == 'reuse' || matrix.suite == 'production' || startsWith(matrix.suite, 'maximum') || matrix.suite == 'cpu-recovery') && 'macos-15' || 'ubuntu-latest' }}
     timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
-        suite: ${{ fromJSON(inputs.suite == 'cpu-recovery' && '["cpu-recovery"]' || startsWith(inputs.suite, 'production') && '["production"]' || inputs.suite == 'maximum-kernel-webkit-trace' && '["maximum-webkit"]' || startsWith(inputs.suite, 'maximum') && '["maximum"]' || '["review","release","deep","quality","explorer","perf","reuse","interactions","production","zoom","webkit","reuse-webkit","interactions-webkit","production-webkit","zoom-webkit","maximum","maximum-webkit"]') }}
+        suite: ${{ fromJSON(inputs.suite == 'cpu-recovery' && '["cpu-recovery"]' || startsWith(inputs.suite, 'production') && '["production"]' || inputs.suite == 'maximum-kernel-webkit-trace' && '["maximum-webkit"]' || startsWith(inputs.suite, 'maximum') && '["maximum"]' || '["studio","review","release","deep","quality","explorer","perf","reuse","interactions","production","zoom","webkit","reuse-webkit","interactions-webkit","production-webkit","zoom-webkit","maximum","maximum-webkit"]') }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
@@ -58,6 +59,9 @@ jobs:
           echo "$GITHUB_WORKSPACE/.browser-venv/bin" >> "$GITHUB_PATH"
           .browser-venv/bin/python -m pip install -r tests/requirements.txt
           if [[ "$TETRA_SUITE" == *webkit ]]; then .browser-venv/bin/python -m playwright install --with-deps webkit; else .browser-venv/bin/python -m playwright install --with-deps chromium; fi
+      - name: Install independent video decoder
+        if: matrix.suite == 'studio'
+        run: command -v ffmpeg || brew install ffmpeg
       - name: Browser suite on a served origin
         run: |
           node serve.cjs dist >/tmp/tetra-server.log 2>&1 &
@@ -70,10 +74,20 @@ jobs:
           curl -fsS http://127.0.0.1:4173/ >/dev/null
           SUITE="$TETRA_SUITE"
           if [[ "$SUITE" == *-webkit ]]; then export TETRA_BROWSER=webkit; SUITE="${SUITE%-webkit}"; fi
-          if [[ "$SUITE" == cpu-recovery ]]; then python3 tools/perf/cpu_recovery.py; else python3 "tests/browser_${SUITE}.py"; fi
+          if [[ "$SUITE" == cpu-recovery ]]; then
+            python3 tools/perf/cpu_recovery.py
+          elif [[ "$SUITE" == studio ]]; then
+            python3 tests/browser_studio.py
+            python3 tests/browser_studio_fx.py
+            python3 tests/browser_studio_ui.py
+            python3 tests/browser_studio_failures.py
+            python3 tests/browser_studio_deep.py
+          else
+            python3 "tests/browser_${SUITE}.py"
+          fi
         env:
           TETRA_BASE_URL: http://127.0.0.1:4173
-          TETRA_HARDWARE_BROWSER: ${{ runner.os == 'macOS' && '1' || '0' }}
+          TETRA_HARDWARE_BROWSER: ${{ runner.os == 'macOS' && matrix.suite != 'deep' && '1' || '0' }}
           TETRA_TRACE_GPU: ${{ (startsWith(inputs.suite, 'production') || inputs.suite == 'maximum-trace' || inputs.suite == 'maximum-kernel-webkit-trace') && '1' || '0' }}
           TETRA_KERNEL_ONLY: ${{ inputs.suite == 'maximum-kernel-webkit-trace' && '1' || '0' }}
           TETRA_SKIP_PENDING_LOSS: ${{ inputs.suite == 'production-skip-loss' && '1' || '0' }}

@@ -1,5 +1,20 @@
 # Changelog
 
+### Motion Studio — 2026-10-11, development
+
+- Exact A/B shots, draft framing with roll, zoom-aware motion, transactional Undo/Redo,
+  local projects and JSON import/export. Native desktop controls and a mobile settings
+  sheet expose all Look/Rhythm fields and four complete presets.
+- Complete existing-kernel GPU frames feed deterministic linear-light FX and one
+  Mediabunny 1.61.3 CanvasSource path. Preview keeps useful work during playback;
+  export freezes the shot, serializes frames, supports cancellation/hidden Resume,
+  and retains one finalized MP4/WebM result. No runtime network or install is needed.
+- Resuming a visible Studio tab refreshes the selected preview without autoplay;
+  hidden exports retain their explicit Resume and finalized result ownership.
+- Git Flow integrates through `dev` before an authorized `main` delivery.
+  Versioned tags build an offline archive and publish a GitHub Release.
+  Validation is in docs/VALIDATION.md.
+
 ### WebGPU fallback frees its device — 2026-10-07
 
 - When a WebGPU error hands the stage or the live frames back to WebGL, the accelerator's device is now destroyed instead of only marked failed, so its sample, lane and slot buffers (up to about 200 MB) no longer stay allocated beside the WebGL programs for the rest of the session. The README's WebGL paragraph now says the dense high-cap Worker rule applies without WebGPU compute, and its file table lists the live-frame passes.
