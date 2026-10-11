@@ -53,3 +53,19 @@ test('plans fix cap and extent, remain FX independent, and cancel at yield bound
  const controller=new AbortController();await assert.rejects(C.plan(p,{signal:controller.signal,yieldTask:async()=>controller.abort()}),{name:'AbortError'});
  assert.equal(first.frames.length,300);assert.equal(first.frames.at(-1).durationUs,33333);
 });
+test('held framing plans keep every exact timestamp without video-length timer waits',async()=>{
+ const p=shot();p.shot.frameCount=600;let yields=0;
+ const plan=await C.plan(p,{yieldTask:async()=>{yields++;}});
+ assert.equal(yields,0);assert.equal(plan.frames.length,600);
+ for(const k of [0,1,299,599])assert.deepEqual(plan.frames[k],C.evaluateFrame(p,k));
+ const aborted=new AbortController();aborted.abort();await assert.rejects(C.plan(p,{signal:aborted.signal}),{name:'AbortError'});
+});
+test('camera reprojection preserves world points including rotated deep decimal deltas',()=>{
+ const from={x:'-2.5',y:'0.437',span:'1e-200',rollDeg:45},to={...from,x:F.text(F.parse(from.x)+F.parse('2e-202')),y:F.text(F.parse(from.y)-F.parse('3e-202')),span:'8e-201',rollDeg:-30},W=720,H=1280;
+ const [a,b,c,d,tx,ty]=C.screenMatrix(from,to,W,H);
+ for(const [x,y]of [[360,640],[100,200],[620,1050]]){
+  const expected=C.screenToWorld(from,x,y,W,H),actual=C.screenToWorld(to,a*x+c*y+tx,b*x+d*y+ty,W,H);
+  assert.ok(F.abs(F.parse(expected.x)-F.parse(actual.x))<F.parse('1e-213'));assert.ok(F.abs(F.parse(expected.y)-F.parse(actual.y))<F.parse('1e-213'));
+ }
+ assert.deepEqual(C.screenMatrix(from,from,W,H),[1,0,-0,1,0,0]);
+});

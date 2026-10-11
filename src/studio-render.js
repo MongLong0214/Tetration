@@ -7,8 +7,10 @@
  const magnitude=camera=>Math.max(1,Math.abs(Number(camera.x)),Math.abs(Number(camera.y)));
  const needDigits=camera=>Math.min(256,Math.ceil(Math.log10(magnitude(camera)/Number(camera.span)))+24);
  function referencePlan(plan){
-  const descriptors=[],states=[];let current=null;
+  const descriptors=[],states=[];let current=null,previous=null,previousKey=null;
   for(const frame of plan.frames){
+   const key=JSON.stringify(frame.camera);
+   if(key===previousKey){states.push(previous);continue;}
    const camera=C.sourceCamera(frame.camera,plan.size.width,plan.extent),view=fixed(camera);
    const mode=Number(camera.span)/plan.extent.width>=magnitude(camera)*2**-16?'direct':'perturb';
    if(mode==='perturb'){
@@ -17,7 +19,7 @@
      const point=R.referencePoint(F,view);current={id:descriptors.length,startFrame:frame.k,x:F.text(point.x),y:F.text(point.y),digits:Math.min(256,Math.max(30,need+16)),iterations:plan.iterations,maxRe:80};descriptors.push(current);
     }
    }
-   states.push({camera,mode,descriptor:mode==='perturb'?current.id:null});
+   previous={camera,mode,descriptor:mode==='perturb'?current.id:null};previousKey=key;states.push(previous);
   }
   return {descriptors,states};
  }
@@ -59,7 +61,7 @@
    const ref=await abortedAwait(reference({x,y,digits,iterations,maxRe}),[renderSignal,signal,lifetime.signal]);activeCheck(renderSignal);
    ref.point={x:F.parse(x),y:F.parse(y)};ref.maxRe=maxRe;ref.digits=digits;refs.set(id,ref);if(refs.size>6)refs.delete(refs.keys().next().value);return ref;
   }
-  function handle(item,k){item.readers++;let released=false;return {frame:item.frame,renderer,complete:true,frameIndex:k,descriptor:item.descriptor,backend,samples:item.samples,iterations:plan.iterations,
+  function handle(item,k){item.readers++;let released=false;return {frame:item.frame,renderer,complete:true,frameIndex:k,camera:plan.frames[k].camera,descriptor:item.descriptor,backend,samples:item.samples,iterations:plan.iterations,
    release(){if(!released){released=true;item.readers--;}}};}
   return {
    plan,numerical,backend,
