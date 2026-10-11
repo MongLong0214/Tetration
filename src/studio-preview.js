@@ -1,10 +1,11 @@
 /* One active frame and one desired target. Play ticks never cancel useful work. */
 (function(root){
  'use strict';
- function sizeFor({width,height,aspect,outputWidth,outputHeight,dpr=1,detailed=false,maxTexture=8192,rolled=false}){
+ function sizeFor({width,height,aspect,outputWidth,outputHeight,dpr=1,detailed=false,motion=false,maxTexture=8192,rolled=false}){
   if(!(width>0&&height>0))return null;
-  const [a,b]=aspect==='16:9'?[16,9]:aspect==='9:16'?[9,16]:[1,1],density=detailed?Math.min(2,dpr):1;
-  let n=Math.min(width*density/a,height*density/b,outputWidth/a,outputHeight/b,(detailed?1536:512)/Math.max(a,b),Math.sqrt((detailed?1500000:512*512)/(a*b)),maxTexture/a,maxTexture/b);
+  const [a,b]=aspect==='16:9'?[16,9]:aspect==='9:16'?[9,16]:[1,1],density=detailed||motion?Math.min(2,dpr):1;
+  const edge=detailed?1536:motion?1024:512;
+  let n=Math.min(width*density/a,height*density/b,outputWidth/a,outputHeight/b,edge/Math.max(a,b),Math.sqrt((detailed?1500000:edge*edge)/(a*b)),maxTexture/a,maxTexture/b);
   if(rolled)n=Math.min(n,(maxTexture-2)/Math.hypot(a,b),Math.sqrt(8294400)/(Math.hypot(a,b)+2));
   n=Math.floor(n/2)*2;
   return n>=2?{width:a*n,height:b*n}:null;

@@ -5,6 +5,7 @@ test('Quick/Detailed size follows actual display, density, output, aspect and GP
  const args={width:960,height:540,aspect:'16:9',outputWidth:1920,outputHeight:1080,dpr:2};
  assert.deepEqual(Preview.sizeFor({...args,detailed:true}),{width:1536,height:864});
  assert.deepEqual(Preview.sizeFor(args),{width:512,height:288});
+ assert.deepEqual(Preview.sizeFor({...args,motion:true}),{width:1024,height:576});
  assert.deepEqual(Preview.sizeFor({...args,outputWidth:1280,outputHeight:720,detailed:true}),{width:1280,height:720});
  assert.deepEqual(Preview.sizeFor({...args,dpr:.5,detailed:true}),{width:480,height:270});
  assert.deepEqual(Preview.sizeFor({...args,width:0,detailed:true}),null);

@@ -73,6 +73,16 @@
  vec3 encodedRGB(vec3 c){return mix(12.92*c,1.055*pow(max(c,vec3(0)),vec3(1./2.4))-.055,step(vec3(.0031308),c));}
  `;
  const SHADERS={
+  motion:COMMON+`uniform sampler2D History;uniform vec3 MapX;uniform vec3 MapY;uniform float Feedback;
+   void main(){ivec2 p=ivec2(gl_FragCoord.xy),s=textureSize(Source,0);vec3 current=texelFetch(Source,p,0).rgb,lo=current,hi=current;
+    // Reject stale colours at real edges; retain subpixel detail in the noisy
+    // neighbourhood rather than blending unaligned frames or time effects.
+    const ivec2 taps[4]=ivec2[4](ivec2(-1,0),ivec2(1,0),ivec2(0,-1),ivec2(0,1));
+    for(int i=0;i<4;i++){vec3 v=texelFetch(Source,clamp(p+taps[i],ivec2(0),s-1),0).rgb;lo=min(lo,v);hi=max(hi,v);}
+    vec3 q=vec3(gl_FragCoord.xy,1.);vec2 old=vec2(dot(MapX,q),dot(MapY,q));
+    bool valid=all(greaterThanEqual(old,vec2(.5)))&&all(lessThanEqual(old,Size-.5));
+    vec3 history=clamp(sampleAt(History,old/Size),lo,hi);
+    Color=vec4(mix(current,history,valid?Feedback:0.),1.);}`,
   frame:COMMON+`uniform float Roll;uniform vec2 SourceSize;
    void main(){vec2 p=gl_FragCoord.xy-Size*.5;float c=cos(Roll),s=sin(Roll);vec2 q=vec2(c*p.x-s*p.y,s*p.x+c*p.y);Color=vec4(sampleAt(Source,(q+SourceSize*.5)/SourceSize),1.);}`,
   effect:COMMON+`uniform vec4 Kaleido;uniform vec3 Prism;uniform vec3 Tone;uniform vec3 Wave;uniform float Seconds;
@@ -110,7 +120,7 @@
   if(!Number.isInteger(width)||!Number.isInteger(height)||width<1||height<1||width>renderer.maxTexture||height>renderer.maxTexture)throw Error('Invalid FX output size');
   const gl=renderer.gl,programs={},targets={},output=canvas||document.createElement('canvas');output.width=width;output.height=height;
   const ctx=output.getContext('2d',{alpha:false});if(!ctx)throw Error('The video canvas is unavailable');
-  let active=false,disposed=false,drain=Promise.resolve(),done=null,compositions=0;
+  let active=false,disposed=false,drain=Promise.resolve(),done=null,compositions=0,motionHistory=null,motionPasses=0;
   function program(name){
    if(programs[name])return programs[name];const shaders=[];let linked=null;
    try{
@@ -142,13 +152,27 @@
   function check(signal){if(signal?.aborted||disposed)throw new DOMException('FX composition canceled','AbortError');if(renderer.lost())throw Error('GPU lost during FX composition');}
   return {
    canvas:output,
-   diagnostics(){return {active,compositions,targets:Object.keys(targets).length,bytes:Object.values(targets).reduce((sum,frame)=>sum+frame.bytes,0),programs:Object.keys(programs).length};},
-   async compose(source,{look,k=0,fps=30,rollDeg=0,original=false,framing=false,signal}={}){
+   diagnostics(){return {active,compositions,motionPasses,targets:Object.keys(targets).length,bytes:Object.values(targets).reduce((sum,frame)=>sum+frame.bytes,0),programs:Object.keys(programs).length};},
+   async compose(source,{look,k=0,fps=30,rollDeg=0,original=false,framing=false,motion=false,sequence=0,signal}={}){
     if(active)throw Error('Only one FX frame may compose at a time');check(signal);if(!source.complete||source.renderer!==renderer)throw Error('FX requires a completed owned source frame');
-    active=true;drain=new Promise(resolve=>{done=resolve;});let snapshot=null;
+    active=true;drain=new Promise(resolve=>{done=resolve;});let snapshot=null,nextHistory=null;
     try{
-     const frame=target('framed'),base=source.frame;renderer.refreshFrame(base);
+     let frame=target('framed');const base=source.frame;renderer.refreshFrame(base);
      draw('frame',frame,{Source:base},{Roll:rollDeg*Math.PI/180,SourceSize:[base.width,base.height]});
+     if(motion&&!framing&&!original&&source.camera){
+      const previous=motionHistory,camera=source.camera,key=JSON.stringify(camera),step=previous?k-previous.k:0;
+      if(previous&&previous.sequence===sequence&&previous.key===key&&k>=previous.k)frame=previous.frame;
+      else{
+       const next=target(previous?.name==='motionA'?'motionB':'motionA');let matrix=[1,0,0,1,0,0],feedback=0;
+       if(previous&&previous.sequence===sequence&&previous.fps===fps&&step>0&&step<=4){
+        const candidate=root.TetraStudioCamera.screenMatrix(camera,previous.camera,width,height),scale=Math.hypot(candidate[0],candidate[1]);
+        if(scale>=.8&&scale<=1.25&&candidate.every(v=>Number.isFinite(v)&&Math.abs(v)<=1e6)){matrix=candidate;feedback=Math.pow(.7,step);}
+       }
+       const [a,b,c,d,tx,ty]=matrix;
+       draw('motion',next,{Source:frame,History:previous?.frame||frame},{MapX:[a,-c,c*height+tx],MapY:[-b,d,height-d*height-ty],Feedback:feedback});
+       frame=next;nextHistory={frame:next,name:next===targets.motionA?'motionA':'motionB',camera:{...camera},key,k,fps,sequence};motionPasses++;
+      }
+     }else motionHistory=null;
      const applied=framing?{...look,prism:{...look.prism,enabled:false},kaleido:{...look.kaleido,enabled:false}}:look;
      let final=frame;
      if(!identity(applied,k,fps,original)){
@@ -164,7 +188,7 @@
      }
      // Drain GPU writes before presenting. capture invokes createImageBitmap
      // immediately, before the browser may clear the transient drawing buffer.
-     await renderer.fence();check(signal);snapshot=await renderer.capture(final);check(signal);ctx.drawImage(snapshot,0,0);compositions++;
+     await renderer.fence();check(signal);snapshot=await renderer.capture(final);check(signal);ctx.drawImage(snapshot,0,0);if(nextHistory)motionHistory=nextHistory;compositions++;
      return output;
     }finally{snapshot?.close?.();active=false;done();}
    },

@@ -20,7 +20,10 @@ Returning to Studio offers **Continue shot** for saved and unsaved work in this
 same tab. Export JSON for a separate copy; restarting the browser does not
 restore an unsaved session. Up to 10 projects and 50 Undo entries are supported.
 
-**Edit Start / Edit End** opens a draft. Ordinary **Use as End** preserves an
+The **1 · Start / 2 · End / 3 · Preview** buttons stay above the canvas. Start
+and End open a draft; the confirmation sits beside its instruction. Visible
+**+ / −** buttons zoom about the centre, and the zoom readout is relative to Start.
+Ordinary **Use as End** preserves an
 intentional still camera; **Animate A → B** explicitly enables travel. Switching
 views asks Apply / Discard / Cancel for changed framing. Reverse and Undo update
 an untouched draft. Duration uses whole frames; changing FPS preserves its time.
@@ -33,12 +36,22 @@ bypasses effects. Invalid numbers block Save project, Play and video creation:
 the relevant tab opens and focuses the error. Reset restores that field; a preset
 only replaces Look/Rhythm fields. Explicit Discard permits leaving invalid input.
 
-Quick preview uses at most 512 pixels on its long side while playing or framing.
+Framing uses at most 512 pixels on its long side. Completed pixels immediately
+follow a drag or zoom while the GPU refines the new view. Moving playback uses
+actual display density up to DPR 2 and 1024 pixels on its long side.
 After 300 ms idle, Detailed preview computes actual display pixels at up to DPR 2,
 1536 pixels on the long side and 1.5 million output pixels, limited by the selected
 output and GPU source budget. Its label distinguishes completed pixels from a
 pending target. Final video always uses the selected output size and 4/16 samples.
 A failed refinement keeps the last complete image and offers an explicit retry.
+
+Moving preview reprojects the preceding camera frame before the time
+effects, limit its colours to the current local neighbourhood, and combine it
+with the new full-sample frame. This reduces sparkling in subpixel fractal detail.
+Seeking, changing views and large camera jumps reset the history; a still camera
+and Original retain their exact ordinary pixels. History uses two bounded GPU
+images and never changes orbit rules or iteration limits. Final video retains
+its existing independent full-frame rendering and selected 4/16 sampling.
 
 Output requires WebGL2 and a supported WebCodecs encoder. Non-neutral effects
 need half-float GPU targets. MP4 is preferred; a confirmed WebM alternative must

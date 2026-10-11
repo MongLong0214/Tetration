@@ -82,6 +82,7 @@ jobs:
             python3 tests/browser_studio_ui.py
             python3 tests/browser_studio_failures.py
             python3 tests/browser_studio_deep.py
+            python3 tests/browser_studio_motion.py
           else
             python3 "tests/browser_${SUITE}.py"
           fi

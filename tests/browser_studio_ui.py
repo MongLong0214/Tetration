@@ -339,6 +339,7 @@ def run():
             state = page.evaluate('() => tetraStudioDiagnostics.export')
             assert state['state'] == 'ready', state
             assert state['submitted'] == 300 and state['profile']['samples'] == 4, state
+            assert state['profile']['resourcesAfterCleanup']['fx']['motionPasses'] == 0, 'Preview history must not affect the final video'
             assert not page.locator('#studioResultVideo').evaluate('(v) => !v.paused')
             with page.expect_download() as download:
                 page.click('#studioDownload')
