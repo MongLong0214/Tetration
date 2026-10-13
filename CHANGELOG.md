@@ -10,6 +10,8 @@
   cancellation and GPU loss, and report active/suspended export timings.
 - Add desktop/mobile Studio regressions and native-browser deep-zoom/export
   performance qualification.
+- Keep pending pan strips filled when final refinement starts before a live
+  preview, while preserving exact overlap and requested antialiasing samples.
 
 ### Studio first-video UX · 1.1.0 follow-up — 2026-10-11
 
