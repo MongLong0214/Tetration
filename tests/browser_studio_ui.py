@@ -1,7 +1,7 @@
 """User-facing Studio edits and moving fractal+FX output, independently decoded."""
 import json
 import subprocess
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import expect, sync_playwright
 from browser_common import BASE, OUT, ROOT, Suite, launch
 
 
@@ -311,7 +311,8 @@ def regressions(browser, suite):
         page.click('#studioSettingsClose')
         assert page.locator('#studioSettingsBtn').evaluate('(el)=>el===document.activeElement')
         page.click('#studioVideo')
-        assert page.get_by_label('Resolution', exact=True).is_visible()
+        # Opening waits for in-flight preview work to release its GPU resources.
+        expect(page.get_by_label('Resolution', exact=True)).to_be_visible(timeout=30000)
         page.click('#studioExportClose')
         suite.record(f'{width}×{height}: exposed Studio, nonmodal gesture and Pause, resize preserves model, output in dialog')
         context.close()
