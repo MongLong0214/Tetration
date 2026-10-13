@@ -23,20 +23,89 @@
 
 #detailCanvas{z-index:1;transform-origin:50% 50%;will-change:transform}#gridCanvas{z-index:2}
 
-/* Studio shares the explorer's neutral controls and preserves a visible canvas. */
-body[data-app=studio]>.topbar,body[data-app=studio]>#viewport,body[data-app=studio]>.statusbar,body[data-app=studio]>#exitFocusBtn{display:none}
-
-#studio{position:fixed;inset:0;z-index:6;display:grid;grid-template-rows:auto minmax(0,1fr) auto;background:#0a0a0a}
-.studio-top{display:flex;align-items:center;gap:6px;padding:6px 12px;border-bottom:1px solid #333;flex-wrap:wrap}.studio-top input{width:190px;min-width:80px;flex:1}.studio-top>span{color:#aaa;font:10px var(--mono);max-width:110px}.studio-workspace{display:grid;grid-template-columns:minmax(0,1fr) 320px;min-height:0}.studio-stage{min-height:0;display:flex;flex-direction:column;padding:12px 16px;overflow:hidden}.studio-stage-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;font:11px var(--mono);min-height:44px}#studioSettingsBtn{display:none}#studioCanvasArea{flex:1;min-height:80px;position:relative;display:flex;align-items:center;justify-content:center;overflow:hidden}#studioCanvas{position:static;inset:auto;width:auto;height:auto;max-width:100%;max-height:100%;object-fit:contain;pointer-events:auto;touch-action:none;cursor:default;border:1px solid #444}#studioFrameNote,#studioNotice{font:10px var(--mono);margin:7px 0;color:#bbb;min-height:15px}#studioNotice{overflow-wrap:anywhere}#studioSettings{position:static;width:320px;margin:0;border-left:1px solid #333;min-height:0;padding:14px 18px;overflow:auto;background:#111}#studioSettings .panel-heading{display:none}#studioFields,#studioTransport,#studioOutputFields{border:0;padding:0;margin:0;min-width:0}#studioFields>div{border-bottom:1px solid #333;padding:8px 0 18px}#studioFields h2{font:12px var(--mono);margin:8px 0 14px}#studioFields details,#studioOutputFields details{border-top:1px solid #333;margin-top:12px}#studioFields summary,#studioOutputFields summary{padding:12px 0;cursor:pointer;font:11px var(--mono)}.studio-number{display:grid;grid-template-columns:minmax(0,1fr) 70px 40px;gap:6px;align-items:center;margin:10px 0}.studio-number>label{grid-column:1 / -1;font-size:11px}.studio-number input[type=range]{padding:0;min-width:0;accent-color:#eee}.studio-number input[type=number]{padding:8px 4px;width:70px;min-width:0}.studio-number button{padding:0 5px;font:10px var(--mono);border-color:#444}.studio-number small{grid-column:1 / -1;color:#aaa;font:10px var(--mono)}.studio-select,.studio-switch{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:8px 0;min-height:44px;font-size:11px}.studio-select select{min-width:0;max-width:65%}.studio-switch input{flex:none}.studio-timeline{border-top:1px solid #333;padding:8px 16px;background:#111}.studio-endpoints,.studio-playback{display:flex;align-items:center;gap:8px;min-width:0}.studio-endpoints button{border-color:#444;font-size:11px;white-space:normal}.studio-endpoints canvas{position:static;inset:auto;width:48px;height:36px;object-fit:contain}.studio-endpoints small{font-size:9px;color:inherit}#studioScrub{flex:1;min-width:50px;accent-color:#eee;padding:0}#studioTime{font:10px var(--mono);white-space:nowrap}.studio-playback{margin-top:8px;font-size:11px}.studio-playback button{border-color:#444}#studioConfirmChoices,.studio-export-actions{display:flex;gap:8px;flex-wrap:wrap}#studioConfirmChoices button{border-color:#777}#studioProjectList{display:grid;gap:8px;margin:12px 0}#studioProjectList>div{display:flex;border-bottom:1px solid #333}#studioProjectList button{white-space:normal;text-align:left;overflow-wrap:anywhere}#studioProjectList button:first-child{flex:1;justify-content:flex-start}#studioExportProgress{width:100%;height:10px;accent-color:#eee}#studioResultVideo{max-width:100%;max-height:50dvh;display:block;margin:16px auto}#studioDownload{min-height:44px;display:inline-flex;align-items:center;border:1px solid #777;padding:8px 12px}.studio-export-actions{margin-top:16px}
-
-.studio-tabs{display:flex;position:sticky;top:-14px;background:#111;z-index:2;border-bottom:1px solid #444}.studio-tabs button{flex:1;padding:0 6px}.studio-tabs [aria-selected=true]{border-bottom:2px solid #eee}.studio-tabs [data-invalid=true]::after{content:'!';color:#eee}.studio-guidance{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.studio-guidance p{flex:1;margin:0;color:#ccc;font-size:12px}.studio-guidance button{border-color:#777;white-space:normal}.studio-bypass{font-size:11px;color:#ccc;display:flex;align-items:center;gap:8px;flex-wrap:wrap}.studio-bypass:has(span:empty){display:none}.studio-bypass button{min-height:36px;border-color:#555}.studio-preview-note{display:flex;gap:8px;align-items:center;flex-wrap:wrap}#studioDetailRetry{font-size:11px;border-color:#555}.studio-effect{border-top:1px solid #444;padding:10px 0}.studio-effect h3{font:12px var(--mono);margin:0}.studio-effect-header{display:flex;align-items:center;justify-content:space-between}.studio-effect-note,.studio-error{font-size:11px;grid-column:1 / -1;margin:0;color:#ccc}.studio-error{color:#eee}#studioCanvas[data-editing=true]{cursor:grab}#studioCanvasArea{min-height:0}.studio-endpoints{flex-wrap:wrap}.studio-top #studioHelp{font-size:11px}.studio-top>input{flex:1 1 120px;width:160px;min-width:80px}.studio-top>span{max-width:none}.studio-top>button{padding:0 8px;font-size:12px}#studioHelpDialog li{margin:12px 0}#studioOutputControls h2{font:12px var(--mono)}
-@media(max-width:760px),(max-height:480px){.studio-top{gap:2px;padding:4px 6px}.studio-top input{flex:1 1 80px;width:100px}.studio-top>span{display:none}.studio-top button{padding:0 6px;font-size:11px}.studio-top #studioHelp{font-size:10px}.studio-workspace{display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr)}.studio-workspace:has(#studioSettings:not([hidden])){grid-template-rows:minmax(0,1fr) minmax(0,40%)}.studio-stage{padding:4px 8px}#studioSettingsBtn{display:inline-flex}#studioSettings{position:static;width:100%;min-width:0;border-left:0;border-top:1px solid #777;padding:8px 12px;min-height:0;overflow:auto}#studioSettings .panel-heading{display:flex;margin:0;min-height:36px}#studioSettings .panel-heading h2{font-size:13px}#studioSettingsClose{min-height:36px}.studio-tabs{top:-8px}.studio-timeline{padding:4px 8px}.studio-endpoints{display:flex;gap:4px}.studio-endpoints button{padding:2px 5px;font-size:10px;gap:4px;min-height:38px}.studio-endpoints canvas{width:22px;height:26px}.studio-endpoints small{font-size:9px}.studio-playback{display:grid;grid-template-columns:auto auto 1fr auto;gap:4px;margin-top:4px}.studio-playback button{padding:0 7px;font-size:10px}#studioTime{grid-column:1 / -1;grid-row:2;text-align:center;font-size:10px}.studio-stage-heading{font-size:10px;min-height:36px}.studio-stage-heading button{min-height:36px}.studio-guidance p{font-size:11px}.studio-guidance button{min-height:36px;font-size:11px}#studioFrameNote,#studioNotice{margin:3px 0;min-height:0;font-size:9px}}
-@media(max-width:360px){.header-actions #settingsBtn svg{display:none}.header-actions button{padding:0 5px;min-width:44px}.topbar{gap:4px;padding-left:8px;padding-right:8px}.brand{font-size:15px}.studio-top #studioHelp{justify-content:flex-start}.studio-endpoints canvas{display:none}.studio-endpoints button{font-size:10px}}
-@media(max-height:480px){.studio-workspace:has(#studioSettings:not([hidden])){grid-template-columns:minmax(0,1fr) 300px;grid-template-rows:minmax(0,1fr)}.studio-top input{max-width:160px}.studio-endpoints canvas{display:none}.studio-stage-heading{min-height:28px}.studio-guidance p{font-size:10px}#studioFrameNote{font-size:9px}.studio-timeline{padding:2px 8px}.studio-playback #studioTime{grid-column:auto;grid-row:auto}.studio-playback{display:flex}#studioNotice:empty{display:none}}
-
-#studioStillNote{flex-basis:100%;font-size:11px;color:#bbb}
-.studio-workflow{padding:0 0 8px;flex-wrap:nowrap}.studio-workflow button{flex:1;min-height:44px}.studio-workflow canvas{width:24px;height:30px}.studio-guidance{padding:4px 0 10px}.studio-guidance #studioDiscard{font-size:11px;min-height:36px}#studioFramingTools{display:flex;align-items:center;gap:4px;max-width:100%;flex:none}#studioFramingTools span{font-size:11px;padding:0 8px;white-space:nowrap}#studioFramingTools button{width:40px;min-height:40px;padding:0;font-size:20px}#studioZoom{font:11px var(--mono);min-width:48px;text-align:center}.studio-stage-heading{min-height:24px}.studio-timeline .studio-playback{margin:0}
-@media(max-width:760px),(max-height:480px){.studio-workflow{padding:0;gap:4px}.studio-workflow button{padding:0 4px;font-size:11px}.studio-guidance{padding:3px 0}.studio-guidance p{flex-basis:100%}.studio-guidance button{min-height:36px;padding:0 8px}.studio-workflow canvas,.studio-workflow small,#studioFramingTools span{display:none}.studio-stage-heading{min-height:20px}}
-.studio-preview-note{justify-content:space-between}.studio-preview-note #studioFrameNote{flex:1;min-width:0}
-@media(max-width:760px) and (min-height:481px){.studio-preview-note{flex-wrap:nowrap}.studio-workspace:has(#studioSettings:not([hidden])){grid-template-rows:minmax(0,1fr) minmax(0,min(40%,max(0px,calc(100% - 280px))))}}
-@media(max-height:480px){.studio-guidance p{flex-basis:auto}.studio-workflow button{min-height:36px}#studioStillNote{display:none}#studioNotice:empty{display:none}}
+/* Studio overlays the full Explore viewport; only controls receive pointer input. */
+body[data-app=studio]>.topbar,body[data-app=studio]>.statusbar,body[data-app=studio]>#exitFocusBtn{display:none}
+body[data-app=studio] #viewport .map-top,body[data-app=studio] #viewport .map-bottom,body[data-app=studio] #viewport .gesture-hint,body[data-app=studio] #viewport .precision-note,body[data-app=studio] #viewport .detail-tool,body[data-app=studio] #viewport #loading,body[data-app=studio] #viewport #progressTrack{display:none}
+#studio{position:fixed;inset:0;z-index:6;display:grid;grid-template-rows:auto minmax(0,1fr) auto;pointer-events:none;background:transparent}
+.studio-top{display:flex;align-items:center;gap:4px;padding:4px 10px;border-bottom:1px solid #333;background:#0a0a0af2;pointer-events:auto}
+.studio-top input{flex:1;min-width:80px;width:160px;max-width:280px;padding:6px 8px}
+.studio-top>span{font:10px var(--mono);color:#aaa;margin-right:auto}
+.studio-top>button{padding:0 8px;font-size:12px;flex:none}
+.studio-workspace{display:grid;grid-template-columns:minmax(0,1fr);min-height:0}
+.studio-workspace:has(#studioSettings:not([hidden])){grid-template-columns:minmax(0,1fr) 320px}
+.studio-stage{min-width:0;min-height:0;display:flex;flex-direction:column;padding:8px 12px;overflow:hidden}
+.studio-camera-toolbar{display:flex;align-items:center;gap:4px;flex-wrap:wrap;width:max-content;max-width:100%;padding:4px;background:#111e;border:1px solid #333;border-radius:8px;pointer-events:auto}
+.studio-camera-toolbar button{border-color:#444;font-size:11px;padding:0 8px}
+.studio-camera-toolbar canvas{position:static;inset:auto;width:20px;height:28px;object-fit:contain}
+.studio-camera-toolbar small{font-size:9px}
+#studioAspect{width:76px;padding:8px 4px;font-size:11px}
+#studioFramingTools{display:flex;align-items:center;gap:2px}
+#studioFramingTools button{width:36px;padding:0;font-size:20px}
+#studioZoom{font:10px var(--mono);min-width:42px;text-align:center}
+#studioCanvasArea{flex:1;min-height:0;position:relative;display:flex;align-items:center;justify-content:center;overflow:hidden}
+#studioCanvas{position:static;inset:auto;width:auto;height:auto;max-width:100%;max-height:100%;object-fit:contain;border:1px solid #444;pointer-events:none}
+#studioFrameOverlay{position:fixed;border:1px solid #eee;box-shadow:0 0 0 100vmax #0005;pointer-events:none;transform-origin:center}
+body[data-studio-framing=true] #studioCanvas{visibility:hidden}
+body[data-studio-framing=true] #viewport{cursor:grab}
+body[data-studio-framing=true] #viewport:active{cursor:grabbing}
+.studio-preview-note,.studio-bypass{display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:#111e;width:max-content;max-width:100%;padding:3px 8px;pointer-events:auto;font:10px var(--mono);color:#bbb}
+#studioFrameNote{margin:4px 0;overflow-wrap:anywhere}
+#studioViewLabel{color:#eee}
+.studio-bypass:has(span:empty){display:none}
+.studio-bypass button,#studioDetailRetry{font-size:11px;border-color:#555}
+#studioNotice{font:10px var(--mono);color:#bbb;overflow-wrap:anywhere;background:#111e;padding:3px 8px;margin:4px 0 0;width:max-content;max-width:100%;pointer-events:auto}
+#studioNotice:empty{display:none}
+#studioSettings{width:320px;min-height:0;border-left:1px solid #444;padding:12px 16px;overflow:auto;background:#111;pointer-events:auto}
+#studioSettings .panel-heading{display:flex;margin:0 0 8px;min-height:36px}
+#studioSettings .panel-heading h2{font:13px var(--mono)}
+#studioSettingsClose{min-height:36px}
+#studioFields,#studioTransport,#studioOutputFields{border:0;padding:0;margin:0;min-width:0}
+#studioFields>div{border-bottom:1px solid #333;padding:8px 0 18px}
+#studioFields h2,#studioOutputControls h2{font:12px var(--mono);margin:8px 0 14px}
+#studioFields details,#studioOutputFields details{border-top:1px solid #333;margin-top:12px}
+#studioFields summary,#studioOutputFields summary{padding:12px 0;cursor:pointer;font:11px var(--mono)}
+.studio-tabs{display:flex;position:sticky;top:-12px;background:#111;z-index:2;border-bottom:1px solid #444}
+.studio-tabs button{flex:1;padding:0 6px}
+.studio-tabs [aria-selected=true]{border-bottom:2px solid #eee}
+.studio-tabs [data-invalid=true]::after{content:'!';color:#eee}
+.studio-number{display:grid;grid-template-columns:minmax(0,1fr) 70px 40px;gap:6px;align-items:center;margin:10px 0}
+.studio-number>label{grid-column:1 / -1;font-size:11px}
+.studio-number input[type=range]{padding:0;min-width:0;accent-color:#eee}
+.studio-number input[type=number]{padding:8px 4px;width:70px;min-width:0}
+.studio-number button{padding:0 5px;font:10px var(--mono);border-color:#444}
+.studio-number small{grid-column:1 / -1;color:#aaa;font:10px var(--mono)}
+.studio-select,.studio-switch{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:8px 0;min-height:44px;font-size:11px}
+.studio-select select{min-width:0;max-width:65%}
+.studio-switch input{flex:none}
+.studio-effect{border-top:1px solid #444;padding:10px 0}
+.studio-effect h3{font:12px var(--mono);margin:0}
+.studio-effect-header{display:flex;align-items:center;justify-content:space-between}
+.studio-effect-note,.studio-error{font-size:11px;grid-column:1 / -1;margin:0;color:#ccc}
+.studio-error{color:#eee}
+.studio-effect[data-enabled=false] .studio-number,.studio-effect[data-enabled=false] details,.studio-effect[data-enabled=false]>button{display:none}
+.studio-timeline{border-top:1px solid #333;padding:4px 12px;background:#111e;pointer-events:auto}
+.studio-playback{display:flex;align-items:center;gap:8px;min-width:0;font-size:11px}
+.studio-playback button{border-color:#444;font-size:11px;padding:0 10px}
+#studioScrub{flex:1;min-width:40px;accent-color:#eee;padding:0}
+#studioTime{font:10px var(--mono);white-space:nowrap}
+#studioConfirmChoices,.studio-export-actions{display:flex;gap:8px;flex-wrap:wrap}
+#studioConfirmChoices button{border-color:#777}
+#studioProjectList{display:grid;gap:8px;margin:12px 0}
+#studioProjectList>div{display:flex;border-bottom:1px solid #333}
+#studioProjectList button{white-space:normal;text-align:left;overflow-wrap:anywhere}
+#studioProjectList button:first-child{flex:1;justify-content:flex-start}
+#studioExportProgress{width:100%;height:10px;accent-color:#eee}
+#studioResultVideo{max-width:100%;max-height:50dvh;display:block;margin:16px auto}
+#studioDownload{min-height:44px;display:inline-flex;align-items:center;border:1px solid #777;padding:8px 12px}
+.studio-export-actions{margin-top:16px}
+#studioHelpDialog li{margin:12px 0}
+@media(max-width:760px){
+ .studio-top{flex-wrap:wrap;padding:4px 6px;gap:2px}.studio-top input{flex:1;max-width:none}.studio-top>span{display:none}.studio-top>button{padding:0 6px;font-size:11px}
+ .studio-workspace:has(#studioSettings:not([hidden])){grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr) minmax(0,45%)}
+ .studio-stage{padding:4px 6px}.studio-camera-toolbar{gap:2px;padding:2px}.studio-camera-toolbar button{padding:0 5px}.studio-camera-toolbar canvas,.studio-camera-toolbar small{display:none}
+ #studioFramingTools{display:none}#studioSettings{width:100%;border-left:0;border-top:1px solid #444;padding:8px 12px}.studio-tabs{top:-8px}
+ .studio-timeline{padding:4px 6px}.studio-playback{display:grid;grid-template-columns:auto minmax(40px,1fr) auto;gap:4px}#studioTime{grid-row:2;grid-column:1 / -1;text-align:center}
+ .studio-preview-note,#studioNotice{font-size:9px}
+}
+@media(max-width:360px){.header-actions #settingsBtn svg{display:none}.header-actions button{padding:0 5px;min-width:44px}.topbar{gap:4px;padding-left:8px;padding-right:8px}.brand{font-size:15px}}
+@media(max-height:480px) and (min-width:600px){.studio-workspace:has(#studioSettings:not([hidden])){grid-template-columns:minmax(0,1fr) 300px;grid-template-rows:minmax(0,1fr)}#studioSettings{width:300px}.studio-camera-toolbar canvas{display:none}.studio-stage{padding:4px 8px}.studio-top input{max-width:160px}}

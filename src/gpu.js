@@ -587,12 +587,13 @@ ${orbitLoop}` + perturbTail;
     /* BLA table for a reference and the view's largest |dL| (TetraCore.blaTable),
      * as RGBA32F floatexp texels. A table built for a larger |dL| stays valid, so it
      * is rebuilt only when the view grows past it or shrinks 64-fold. */
-    useBla(ref, rules, dL) {
+    useBla(ref, rules, dL, policy = 'opportunistic') {
       const cached = this.bla;
-      if (cached && cached.ref === ref && cached.rules === rules && dL <= cached.dL && dL * 64 >= cached.dL) return cached;
       // One octave of headroom, so small changes of the view do not rebuild the table.
       const bound = 2 ** (Math.ceil(Math.log2(Math.max(dL, 1e-300))) + 1);
+      if (cached && cached.ref === ref && cached.rules === rules && (policy === 'deterministic' ? cached.dL === bound : dL <= cached.dL && dL * 64 >= cached.dL)) return cached;
       const table = TetraCore.blaTable(ref, bound, rules, TetraCore.BLA_EPS.gpu);
+      this.blaBuilds = (this.blaBuilds || 0) + 1;
       this.bla = {ref, rules, dL: bound, levels: 0, reach: 0, base: null};
       if (!table) return this.bla;
       // Lookups can reach one entry past the table; every unused slot reads as radius 0.
@@ -636,7 +637,7 @@ ${orbitLoop}` + perturbTail;
         scene.spanMant * 0.52, scene.spanMant * (0.5 * (scene.aspect || frame.height / frame.width) + 0.02));
       const dL = TetraCore.logOffsetBound(offset * Math.hypot(scene.inv[0], scene.inv[1]) * 2 ** (scene.scale + scene.invExp));
       if (!(dL < Infinity)) return 0;
-      const bla = this.useBla(scene.ref, scene.rules, dL);
+      const bla = this.useBla(scene.ref, scene.rules, dL, scene.blaPolicy);
       // Worth the larger program only when the edge pixel alone skips a quarter of a typical orbit.
       return !bla.levels || (this.blaMode === 'auto' && bla.reach < Math.max(32, 0.25 * Math.min(scene.ref.length, scene.iterations))) ? 0 : bla.levels;
     }

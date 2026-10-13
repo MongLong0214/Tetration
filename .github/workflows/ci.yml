@@ -83,6 +83,8 @@ jobs:
             python3 tests/browser_studio_failures.py
             python3 tests/browser_studio_deep.py
             python3 tests/browser_studio_motion.py
+            python3 tests/browser_studio_shared_view.py
+            python3 tests/browser_studio_performance.py --origins "$TETRA_BASE_URL" --output /tmp/tetration-studio-performance.json
           else
             python3 "tests/browser_${SUITE}.py"
           fi

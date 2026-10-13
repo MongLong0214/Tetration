@@ -9,12 +9,13 @@ def setup(page):
     page.goto(BASE)
     page.click('#openStudioBtn')
     page.wait_for_function('() => tetraStudioDiagnostics.entered')
+    page.click('#studioSettingsBtn')
     page.locator('#studio-duration-number').fill('2')
     page.locator('#studio-duration-number').press('Tab')
     page.click('#studioPreviewView')
+    page.get_by_label('Aspect', exact=True).select_option('16:9')
     page.click('#studioVideo')
     page.get_by_label('Resolution', exact=True).select_option('720')
-    page.get_by_label('Aspect', exact=True).select_option('16:9')
     page.click('#studioExportClose')
 
 
@@ -162,6 +163,7 @@ def run():
             page.evaluate('() => {window.__studioHidden=true;document.dispatchEvent(new Event("visibilitychange"));}')
             page.wait_for_function('() => tetraStudioDiagnostics.preview.suspended')
             page.evaluate('() => {window.__studioHidden=false;document.dispatchEvent(new Event("visibilitychange"));}')
+            page.wait_for_function('() => !tetraStudioDiagnostics.preview.suspended')
             visible = page.evaluate('() => tetraStudioDiagnostics.preview')
             assert not visible['suspended'] and not visible['playing'], visible
             page.click('#studioLookTab')
@@ -243,10 +245,14 @@ def run():
                 if mode == 'webgl':
                     page.goto(BASE)
                     page.click('#openStudioBtn')
-                    page.wait_for_function('() => tetraStudioDiagnostics.owner==="explore" && !tetraStudioDiagnostics.entered')
+                    page.wait_for_function('() => tetraStudioDiagnostics.owner==="explore" && tetraStudioDiagnostics.entered')
                     assert page.locator('#viewport').is_visible()
-                    assert page.locator('#toast').is_visible()
-                    suite.record('Unavailable WebGL restores Explore with an explanation')
+                    export(page)
+                    failure = terminal(page, 'failed')
+                    assert 'WebGL2' in failure['error'] and failure['url'] is None
+                    page.click('#studioReturnEdit');page.click('#leaveStudio')
+                    page.wait_for_function('() => !tetraStudioDiagnostics.entered && tetraStudioDiagnostics.owner==="explore"')
+                    suite.record('CPU framing remains available without WebGL; video fails explicitly and Explore is restored')
                     context.close()
                     continue
                 setup(page)
@@ -274,7 +280,7 @@ def run():
             page.goto(BASE)
             page.click('#settingsBtn')
             page.click('#openStudioFromSettings')
-            page.wait_for_function('() => tetraStudioDiagnostics.entered && tetraStudioDiagnostics.preview.displayedK>=0', timeout=120000)
+            page.wait_for_function('() => tetraStudioDiagnostics.entered && tetraStudioDiagnostics.owner==="explore" && tetraStudioDiagnostics.endpoint==="start"', timeout=120000)
             assert not page.locator('#sidebar').is_visible()
             assert page.locator('#studioSettingsBtn').is_visible()
             suite.record('Mobile Explore controls open Studio and hand off the renderer')

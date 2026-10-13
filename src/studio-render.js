@@ -51,7 +51,7 @@
    if(compute.failed)throw Error('WebGPU is unavailable for this shot');
   }
   check(signal);
-  const refs=new Map(),stats={backend,submits:0,releases:0,cacheHits:0,completedFrames:0,source:extent,output:plan.size,samples,iterations:plan.iterations};
+  const refs=new Map(),rates=new Map(),initialBuilds=renderer.blaBuilds||0,stats={backend,submits:0,releases:0,cacheHits:0,completedFrames:0,renderMs:0,source:extent,output:plan.size,samples,iterations:plan.iterations};
   const lifetime=new AbortController();let cache=null,disposed=false,active=false,drain=Promise.resolve(),finishDrain=null;
   function activeCheck(renderSignal){check(signal);check(renderSignal);if(disposed)throw new DOMException('Render session ended','AbortError');if(renderer.lost()||(backend==='webgpu'&&compute.failed))throw Error('GPU device was lost; retry the shot from frame 0.');}
   function dropCache(){if(cache){if(cache.readers)throw Error('A source frame is still being composed');renderer.releaseFrame(cache.frame);stats.releases++;cache=null;}}
@@ -59,41 +59,42 @@
    if(refs.has(id)){const value=refs.get(id);refs.delete(id);refs.set(id,value);return value;}
    const descriptor=numerical.descriptors[id],{x,y,digits,iterations,maxRe}=descriptor;
    const ref=await abortedAwait(reference({x,y,digits,iterations,maxRe}),[renderSignal,signal,lifetime.signal]);activeCheck(renderSignal);
-   ref.point={x:F.parse(x),y:F.parse(y)};ref.maxRe=maxRe;ref.digits=digits;refs.set(id,ref);if(refs.size>6)refs.delete(refs.keys().next().value);return ref;
+   ref.point={x:F.parse(x),y:F.parse(y)};ref.maxRe=maxRe;ref.digits??=digits;refs.set(id,ref);if(refs.size>6)refs.delete(refs.keys().next().value);return ref;
   }
-  function handle(item,k){item.readers++;let released=false;return {frame:item.frame,renderer,complete:true,frameIndex:k,camera:plan.frames[k].camera,descriptor:item.descriptor,backend,samples:item.samples,iterations:plan.iterations,
+  function handle(item,k){item.readers++;let released=false;return {frame:item.frame,contentKey:item,renderer,complete:true,frameIndex:k,camera:plan.frames[k].camera,descriptor:item.descriptor,backend,samples:item.samples,iterations:plan.iterations,
    release(){if(!released){released=true;item.readers--;}}};}
   return {
    plan,numerical,backend,
-   diagnostics(){return {...stats,source:{...extent},output:{...plan.size},cachedFrames:cache?1:0,cachedSamples:cache?.samples??null,cachedBytes:cache?extent.width*extent.height*4:0,references:refs.size,active};},
+   diagnostics(){return {...stats,blaBuilds:(renderer.blaBuilds||0)-initialBuilds,source:{...extent},output:{...plan.size},cachedFrames:cache?1:0,cachedSamples:cache?.samples??null,cachedBytes:cache?extent.width*extent.height*4:0,references:refs.size,active};},
    async renderBase(k,profile='final',renderSignal){
     if(active)throw Error('Only one source frame may render at a time');if(!['preview','final'].includes(profile))throw Error('Invalid frame profile');activeCheck(renderSignal);M.timing(plan.project,k);
     const selected=profile==='final'?samples:4,state=numerical.states[k],palette=M.ENUMS.palette.indexOf(plan.project.look.palette);
     const key=JSON.stringify([state.camera,extent,palette,plan.iterations,selected,state.descriptor,backend]);
     if(cache?.key===key){stats.cacheHits++;return handle(cache,k);}
-    dropCache();active=true;drain=new Promise(resolve=>{finishDrain=resolve;});let frame=null,writesPending=false;
+    dropCache();active=true;drain=new Promise(resolve=>{finishDrain=resolve;});const started=performance.now();let frame=null,writesPending=false;
     try{
      activeCheck(renderSignal);const ref=state.mode==='perturb'?await getReference(state.descriptor,renderSignal):null,view=fixed(state.camera);
-     const base={iterations:plan.iterations,palette,rules:root.TetraCore.RULES.gpu,aspect:extent.height/extent.width};
+     const base={iterations:plan.iterations,palette,rules:root.TetraCore.RULES.gpu,aspect:extent.height/extent.width,blaPolicy:'deterministic'};
      const scene=state.mode==='direct'?{...base,mode:'direct',center:[F.number(view.x),F.number(view.y)],span:F.number(view.span)}:{...base,...R.perturbScene(F,view,ref.point.x,ref.point.y),ref};
      activeCheck(renderSignal);frame=renderer.beginFrame(extent.width,extent.height,null,false);writesPending=true;
-     // Clear BLA's previous view bound so seeking cannot choose another frame's table.
-     renderer.bla=null;const levels=scene.mode==='perturb'?renderer.blaPolicy(frame,scene):0;
+     const levels=scene.mode==='perturb'?renderer.blaPolicy(frame,scene):0;
      const partial=backend==='webgl'&&((plan.iterations>=8192&&selected>=4)||(plan.iterations>=4096&&selected>=16));
-     const effective=renderer.effectiveIterations(scene,frame.width,frame.height),edge=partial?32:Math.max(16,Math.min(128,Math.floor(Math.sqrt(8e7/(effective*selected))/16)*16));
-     const tiles=R.tiles(frame.width,frame.height,edge),kernel=backend==='webgpu'?compute.kernel(scene,levels):null;
+     const effective=renderer.effectiveIterations(scene,frame.width,frame.height),kernel=backend==='webgpu'?compute.kernel(scene,levels):null;
      if(backend==='webgpu'&&!kernel)throw Error('The prepared GPU kernel is unavailable');
-     const budget=partial?edge*edge:Math.max(edge*edge,Math.min(Math.floor(8e7/(effective*selected)),backend==='webgpu'?Math.floor(compute.capacity(kernel)/selected):Infinity));
+     const rateKey=[backend,scene.mode,scene.iterations,selected,levels,effective].join('|');
+     const policy=R.batchPolicy({backend,effective,samples:selected,capacity:backend==='webgpu'?compute.capacity(kernel):Infinity,partial,highCap:scene.iterations>=8192,edge:partial?32:undefined,rate:rates.get(rateKey)??60,area:frame.width*frame.height});
+     const tiles=R.tiles(frame.width,frame.height,policy.edge);let budget=policy.budget;
      let index=0;
      while(index<tiles.length){
       activeCheck(renderSignal);const batch=[];let pixels=0;
       do{const tile=tiles[index++];batch.push(tile);pixels+=tile.width*tile.height;}while(index<tiles.length&&pixels+tiles[index].width*tiles[index].height<=budget);
-      stats.submits++;
+      stats.submits++;const batchStarted=performance.now();
       writesPending=true;
       if(backend==='webgpu'){const completed=await compute.draw(renderer,frame,scene,selected,0,batch,kernel,levels,null,()=>disposed||signal?.aborted||renderSignal?.aborted);if(completed===false){activeCheck(renderSignal);throw Error('GPU sampling did not complete');}}
       else if(partial){for(const tile of batch){const completed=await renderer.drawAATile(frame,tile,scene,()=>disposed||signal?.aborted||renderSignal?.aborted,0,selected);if(!completed){activeCheck(renderSignal);throw Error('GPU sampling did not complete');}}writesPending=false;}
       else{renderer.prepare(frame,scene,selected,0);for(const tile of batch)renderer.drawTile(frame,tile);await renderer.fence();writesPending=false;}
       activeCheck(renderSignal);
+      const next=R.adaptBatch(policy,pixels,performance.now()-batchStarted);rates.set(rateKey,next.rate);budget=next.budget;
      }
      if(backend==='webgpu'){compute.complete(frame);await renderer.fence();writesPending=false;}
      activeCheck(renderSignal);stats.completedFrames++;cache={key,frame,samples:selected,descriptor:state.descriptor,readers:0};frame=null;return handle(cache,k);
@@ -101,7 +102,7 @@
      // WebGPU readback may already have queued WebGL texture uploads from an
      // earlier batch. Drain those too before cancel returns the source to its pool.
      try{if(frame&&writesPending&&!renderer.lost())await renderer.fence();}
-     finally{if(frame){renderer.releaseFrame(frame);stats.releases++;}active=false;finishDrain();}
+     finally{if(frame){renderer.releaseFrame(frame);stats.releases++;}stats.renderMs+=performance.now()-started;active=false;finishDrain();}
     }
    },
    async dispose(){disposed=true;lifetime.abort();await drain;dropCache();refs.clear();}

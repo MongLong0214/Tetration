@@ -65,3 +65,17 @@ test('only a confirmed WebM alternative is offered, and auto never changes forma
  const auto=await f.exporter.start(f.p,f.resources);assert.equal(auto.state,'failed');assert.equal(auto.errorCode,'MP4_UNAVAILABLE');assert.equal(auto.alternative.container,'webm');assert.equal(f.counters.renders,0);
  f.p.output.container='mp4';const explicit=await f.exporter.start(f.p,f.resources);assert.equal(explicit.state,'failed');assert.equal(explicit.alternative.container,'webm');assert.equal(f.counters.renders,0);
 });
+test('stage timings exclude suspension, stay monotonic, and cover finalize and cleanup before file ready',async()=>{
+ let clock=0,adds=0,hidden=false;const add=deferred(),first=deferred(),finalize=deferred(),finishing=deferred();
+ const f=fixture({now:()=>clock,isHidden:()=>hidden,
+  prepare:async p=>{clock+=20;return {backend:'webgl',plan:{extent:M.dimensions(p.output),iterations:384,frames:Array.from({length:60},()=>({camera:p.shot.start}))},renderBase:async()=>{clock+=10;return {release(){}};},dispose:async()=>{clock+=4;}};},
+  createCompositor:()=>({canvas:{},compose:async()=>{clock+=5;},dispose:async()=>{clock+=3;}}),
+  createSink:async()=>({addFrame:async()=>{clock+=2;if(++adds===1){first.resolve();await add.promise;}},finish:async()=>{finishing.resolve();await finalize.promise;clock+=30;return {blob:new Blob(['ok']),bytes:2,extension:'mp4'};},cancel:async()=>{}})});
+ const work=f.exporter.start(f.p,f.resources);await first.promise;hidden=true;f.exporter.hidden();add.resolve();await tick();
+ const before=f.exporter.snapshot();assert.equal(before.state,'suspended');clock+=100000;
+ const during=f.exporter.snapshot();assert.equal(during.activeMs,before.activeMs);assert.equal(during.fps,before.fps);assert.equal(during.etaMs,null);assert.equal(during.suspendedMs,100000);
+ hidden=false;f.exporter.resume();await finishing.promise;const finalizing=f.exporter.snapshot();assert.equal(finalizing.state,'finalizing');assert.equal(finalizing.submitted,60);assert.equal(finalizing.result,null);assert.equal(finalizing.etaMs,null);
+ finalize.resolve();const result=await work;assert.equal(result.state,'ready');assert.deepEqual(result.timings,{prepareMs:20,renderMs:600,fxMs:300,encodeMs:120,finalizeMs:30,cleanupMs:7});assert.equal(result.activeMs,1077);assert.equal(result.elapsedMs,101077);assert.equal(result.completedFrames,60);
+ let previous=0;for(const s of f.states.filter(s=>s.active||s.state==='ready')){assert.ok(s.activeMs>=previous);previous=s.activeMs;for(const value of [s.fps,s.elapsedMs,s.activeMs,...Object.values(s.timings)])assert.ok(Number.isFinite(value)&&value>=0);}
+ clock+=5000;assert.equal(f.exporter.snapshot().elapsedMs,result.elapsedMs);f.exporter.clearResult();
+});
