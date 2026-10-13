@@ -240,13 +240,16 @@
    context.save();context.fillStyle='#080812';context.fillRect(0,0,stage.width,stage.height);context.setTransform(...matrix);context.drawImage(completedImage,0,0);context.restore();
   }
   function draftChanged(){clearTimeout(detailTimer);detailTimer=null;detailError=null;sync();}
+  function refreshDraftFromView(settle=false){
+   if(!endpoint)return true;const rollDeg=draft.rollDeg;try{draft={...bridge.camera(aspect(),rollDeg,{settle}),rollDeg};cameraError=null;return true;}catch(reason){cameraError=reason.message;announce(cameraError);return false;}
+  }
   function applyDraft({advance=true}={}){
-   if(!endpoint)return;if(cameraError){announce(cameraError);return;}M.validate({...project(),shot:{...project().shot,[endpoint]:draft}});if(advance&&!commitNumbers())return;const which=endpoint,value=copy(draft);
+   if(!endpoint)return;if(!refreshDraftFromView(true))return;M.validate({...project(),shot:{...project().shot,[endpoint]:draft}});if(advance&&!commitNumbers())return;const which=endpoint,value=copy(draft);
    if(draftDirty())edit(p=>{p.shot[which]=value;if(which==='end'&&p.shot.motion==='hold'&&JSON.stringify(p.shot.start)!==JSON.stringify(p.shot.end))p.shot.motion='travel';});draft=copy(project().shot[which]);
    setup=null;announce((which==='start'?'Start':'End')+' camera captured.');sync();
   }
   async function settleDraft({discardInputs=false}={}){
-   pause();if(cameraError&&endpoint){announce(cameraError);return false;}if(!commitNumbers()){
+   pause();if(!refreshDraftFromView(true))return false;if(!commitNumbers()){
     if(!discardInputs||await ask('Discard invalid numeric entries and continue? Valid project values will be preserved.',[['discard','Discard invalid inputs'],['cancel','Cancel']])!=='discard'){nextTransition=[];return false;}clearInvalidNumbers();
    }
    if(!draftDirty())return true;
@@ -321,7 +324,7 @@
     await pause();
     await exporter.dispose();await drainPreview();await preview.dispose();await clearThumbnails();entered=false;completedImage.width=completedImage.height=0;$('studioSettings').hidden=true;$('studio').hidden=true;$('studioFrameOverlay').hidden=true;$('viewport').style.visibility='visible';$('studioCanvas').style.visibility='visible';document.body.dataset.studioFraming='false';document.body.dataset.app='explore';await bridge.leave();$('openStudioBtn').focus();
    },
-   viewChanged(options={}){if(!entered||!endpoint||options.resize||options.camera)return;try{draft={...bridge.camera(aspect(),draft.rollDeg),rollDeg:draft.rollDeg};cameraError=null;}catch(reason){cameraError=reason.message;announce(cameraError);}sync();},
+   viewChanged(options={}){if(!entered||!endpoint||options.resize||options.camera)return;refreshDraftFromView();sync();},
    deviceLost(){if(!entered)return;thumbAbort?.abort();preview.suspend();exporter.fail('GPU device was lost. Restore the device and retry from frame 0.');announce('GPU device was lost. Return to Explore to restore it, then retry from frame 0.');},
    diagnostics(){const output=exporter.snapshot();return {entered,setup,activeTab,cameraError,previewTiming:previewTiming&&copy(previewTiming),displayedCamera:displayedCamera&&copy(displayedCamera),requested:requested&&copy(requested),displayedSize:displayedSize&&copy(displayedSize),detailError,transitioning,endpoint,draft:draft&&copy(draft),draftDirty:!!session&&!!draftDirty(),project:session&&copy(project()),dirty:session?.dirty,revision:session?.revision,preview:preview?.state(),render:pipeline?.render.diagnostics(),fx:pipeline?.fx.diagnostics(),export:{...output,config:copy(output.config),profile:copy(output.profile),result:output.result?{filename:output.result.filename,bytes:output.result.bytes}:null},notice,thumbnails:{revision:thumbRevision,completed:thumbDone,active:!!thumbPromise}};}
   };
