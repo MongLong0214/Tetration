@@ -39,3 +39,14 @@ test('pan strips cover precisely the new pixels for every shift direction, witho
   for(let y=0;y<h;y++)for(let x=0;x<w;x++)assert.equal(coverage[y*w+x],x+dx<0||x+dx>=w||y-dy<0||y-dy>=h?1:0,`${dx},${dy}: ${x},${y}`);
  }
 });
+test('shared batches bound first tiles by capacity, grow at most twice, and shrink after a slow draw',()=>{
+ const R=require('../src/render.js');
+ for(const samples of [1,4,16])for(const capacity of [64,65536,1048576]){
+  const policy=R.batchPolicy({backend:'webgpu',effective:64,samples,capacity,rate:1e9,area:921600});
+  assert.ok(policy.edge**2*samples<=capacity);assert.ok(policy.budget<=policy.maxPixels);assert.ok(policy.maxPixels*samples<=capacity);
+  const fast=R.adaptBatch(policy,policy.edge**2,1);assert.ok(fast.budget<=2*policy.edge**2);assert.ok(fast.budget<=policy.maxPixels);
+  assert.equal(R.adaptBatch(policy,policy.budget,1000).budget,policy.edge**2);
+ }
+ const partial=R.batchPolicy({effective:8192,samples:16,partial:true,highCap:true});assert.equal(partial.budget,32**2);assert.equal(partial.maxPixels,32**2);
+ assert.throws(()=>R.batchPolicy({backend:'webgpu',effective:64,samples:16,capacity:8}),/capacity/);
+});

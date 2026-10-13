@@ -38,3 +38,15 @@ test('orbit programs, the BLA one included, are linked twice so a first visit ge
  assert.equal(proto.blaProgram.call(pending),made[5]);
  assert.deepEqual(deleted,[0,2,4]);
 });
+test('offline BLA reuses only the canonical bound while View keeps opportunistic reuse',t=>{
+ const proto=globalThis.TetraGPU.prototype,ref={},rules={},calls=[];
+ t.mock.method(globalThis.TetraCore,'blaTable',(r,bound)=>{calls.push({r,bound});return null;});
+ const renderer={bla:null,useBla:proto.useBla};
+ renderer.useBla(ref,rules,3,'deterministic');assert.equal(renderer.bla.dL,8);
+ renderer.useBla(ref,rules,2.1,'deterministic');assert.equal(calls.length,1);
+ renderer.useBla(ref,rules,1,'deterministic');assert.equal(renderer.bla.dL,2);assert.equal(calls.length,2);
+ renderer.useBla(ref,rules,3,'deterministic');assert.equal(calls.length,3);assert.equal(renderer.bla.dL,8);
+ renderer.useBla(ref,rules,1);assert.equal(calls.length,3);assert.equal(renderer.bla.dL,8);
+ renderer.useBla({},rules,3,'deterministic');assert.equal(calls.length,4);
+ renderer.useBla(ref,{},3,'deterministic');assert.equal(calls.length,5);
+});

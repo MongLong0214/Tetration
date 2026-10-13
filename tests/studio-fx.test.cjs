@@ -29,3 +29,11 @@ test('Kaleidoscope keeps radial distance/aspect and finite center; Prism has no 
   assert.deepEqual(FX.prismOffset(0.5,0.5,W,H,0.01),[0,0]);const offset=FX.prismOffset(0.75,0.75,W,H,0.01);assert.ok(offset.every(Number.isFinite));
  }
 });
+test('static reuse depends on every effective time effect, including identity at frame zero',()=>{
+ const look=M.neutralLook();assert.equal(FX.timeInvariant(look),true);
+ look.hueRate=.1;assert.equal(FX.identity(look,0),true);assert.equal(FX.timeInvariant(look),false);look.hueRate=0;
+ look.pulse.enabled=true;assert.equal(FX.identity(look,0),true);assert.equal(FX.timeInvariant(look),false);
+ look.pulse.exposureEV=0;assert.equal(FX.timeInvariant(look),true);look.bloom.enabled=true;assert.equal(FX.timeInvariant(look),false);
+ look.bloom.intensity=0;assert.equal(FX.timeInvariant(look),true);look.wave.enabled=true;assert.equal(FX.timeInvariant(look),false);
+ look.wave.speed=0;assert.equal(FX.timeInvariant(look),true);look.wave.speed=.25;look.amount=0;assert.equal(FX.timeInvariant(look),true);look.amount=1;assert.equal(FX.timeInvariant(look,true),true);
+});

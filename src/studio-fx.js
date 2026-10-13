@@ -35,6 +35,11 @@
   if(original||look.amount===0)return true;const time=evaluateLook(look,k,fps);
   return time.hueDeg===0&&look.saturation===1&&time.exposureEV===0&&time.bloomIntensity===0&&(!look.prism.enabled||look.prism.amount===0||look.prism.offsetRatio===0)&&(!look.kaleido.enabled||look.kaleido.blend===0)&&(!look.wave.enabled||look.wave.strengthEV===0);
  }
+ function timeInvariant(look,original=false){
+  if(original||look.amount===0)return true;
+  const pulse=look.pulse,bloom=look.bloom,wave=look.wave;
+  return look.hueRate===0&&!(pulse.enabled&&pulse.strength>0&&(pulse.exposureEV>0||(bloom.enabled&&bloom.radiusRatio>0&&bloom.intensity>0&&pulse.bloomGain>0)))&&!(wave.enabled&&wave.strengthEV>0&&wave.speed!==0);
+ }
  function waveEV(look,seconds,u,v,width,height){
   if(!look.wave.enabled||look.wave.strengthEV===0)return 0;
   const L=Math.min(width,height),radius=Math.hypot((u-0.5)*width/L,(v-0.5)*height/L);
@@ -120,7 +125,7 @@
   if(!Number.isInteger(width)||!Number.isInteger(height)||width<1||height<1||width>renderer.maxTexture||height>renderer.maxTexture)throw Error('Invalid FX output size');
   const gl=renderer.gl,programs={},targets={},output=canvas||document.createElement('canvas');output.width=width;output.height=height;
   const ctx=output.getContext('2d',{alpha:false});if(!ctx)throw Error('The video canvas is unavailable');
-  let active=false,disposed=false,drain=Promise.resolve(),done=null,compositions=0,motionHistory=null,motionPasses=0;
+  let active=false,disposed=false,drain=Promise.resolve(),done=null,compositions=0,motionHistory=null,motionPasses=0,cached=null,cacheHits=0,composeMs=0;
   function program(name){
    if(programs[name])return programs[name];const shaders=[];let linked=null;
    try{
@@ -152,13 +157,18 @@
   function check(signal){if(signal?.aborted||disposed)throw new DOMException('FX composition canceled','AbortError');if(renderer.lost())throw Error('GPU lost during FX composition');}
   return {
    canvas:output,
-   diagnostics(){return {active,compositions,motionPasses,targets:Object.keys(targets).length,bytes:Object.values(targets).reduce((sum,frame)=>sum+frame.bytes,0),programs:Object.keys(programs).length};},
+   diagnostics(){return {active,compositions,cacheHits,composeMs,motionPasses,targets:Object.keys(targets).length,bytes:Object.values(targets).reduce((sum,frame)=>sum+frame.bytes,0),programs:Object.keys(programs).length};},
    async compose(source,{look,k=0,fps=30,rollDeg=0,original=false,framing=false,motion=false,sequence=0,signal}={}){
     if(active)throw Error('Only one FX frame may compose at a time');check(signal);if(!source.complete||source.renderer!==renderer)throw Error('FX requires a completed owned source frame');
-    active=true;drain=new Promise(resolve=>{done=resolve;});let snapshot=null,nextHistory=null;
+    const applied=framing?{...look,prism:{...look.prism,enabled:false},kaleido:{...look.kaleido,enabled:false}}:look;
+    // Only the offline renderer's immutable content identity can certify reuse.
+    // A pooled texture object alone can contain an entirely different frame.
+    const key=!motion&&source.contentKey&&timeInvariant(applied,original)?JSON.stringify([source.camera,rollDeg,applied,original,framing,fps]):null;
+    if(key&&cached?.content===source.contentKey&&cached.key===key){cacheHits++;return output;}
+    cached=null;active=true;drain=new Promise(resolve=>{done=resolve;});const started=performance.now();let snapshot=null,nextHistory=null;
     try{
-     let frame=target('framed');const base=source.frame;renderer.refreshFrame(base);
-     draw('frame',frame,{Source:base},{Roll:rollDeg*Math.PI/180,SourceSize:[base.width,base.height]});
+     const base=source.frame;renderer.refreshFrame(base);let frame=base;
+     if(rollDeg!==0||base.width!==width||base.height!==height){frame=target('framed');draw('frame',frame,{Source:base},{Roll:rollDeg*Math.PI/180,SourceSize:[base.width,base.height]});}
      if(motion&&!framing&&!original&&source.camera){
       const previous=motionHistory,camera=source.camera,key=JSON.stringify(camera),step=previous?k-previous.k:0;
       if(previous&&previous.sequence===sequence&&previous.key===key&&k>=previous.k)frame=previous.frame;
@@ -173,7 +183,6 @@
        frame=next;nextHistory={frame:next,name:next===targets.motionA?'motionA':'motionB',camera:{...camera},key,k,fps,sequence};motionPasses++;
       }
      }else motionHistory=null;
-     const applied=framing?{...look,prism:{...look.prism,enabled:false},kaleido:{...look.kaleido,enabled:false}}:look;
      let final=frame;
      if(!identity(applied,k,fps,original)){
       const time=evaluateLook(applied,k,fps),effect=target('effect',width,height,true),{prism,kaleido,wave,bloom}=applied;
@@ -189,12 +198,13 @@
      // Drain GPU writes before presenting. capture invokes createImageBitmap
      // immediately, before the browser may clear the transient drawing buffer.
      await renderer.fence();check(signal);snapshot=await renderer.capture(final);check(signal);ctx.drawImage(snapshot,0,0);if(nextHistory)motionHistory=nextHistory;compositions++;
+     if(key)cached={content:source.contentKey,key};
      return output;
-    }finally{snapshot?.close?.();active=false;done();}
+    }finally{snapshot?.close?.();composeMs+=performance.now()-started;active=false;done();}
    },
-   async dispose(){disposed=true;await drain;for(const frame of Object.values(targets)){gl.deleteFramebuffer(frame.buffer);gl.deleteTexture(frame.texture);}for(const p of Object.values(programs))gl.deleteProgram(p.program);Object.keys(targets).forEach(key=>delete targets[key]);Object.keys(programs).forEach(key=>delete programs[key]);}
+   async dispose(){disposed=true;await drain;cached=null;motionHistory=null;for(const frame of Object.values(targets)){gl.deleteFramebuffer(frame.buffer);gl.deleteTexture(frame.texture);}for(const p of Object.values(programs))gl.deleteProgram(p.program);Object.keys(targets).forEach(key=>delete targets[key]);Object.keys(programs).forEach(key=>delete programs[key]);}
   };
  }
- root.TetraStudioFX={PRESET_NAMES:Object.keys(PRESETS),applyPreset,presetName,evaluateLook,identity,waveEV,foldUV,prismOffset,mirror,srgbToLinear,linearToSrgb,createCompositor};
+ root.TetraStudioFX={PRESET_NAMES:Object.keys(PRESETS),applyPreset,presetName,evaluateLook,identity,timeInvariant,waveEV,foldUV,prismOffset,mirror,srgbToLinear,linearToSrgb,createCompositor};
  if(typeof module!=='undefined')module.exports=root.TetraStudioFX;
 })(globalThis);

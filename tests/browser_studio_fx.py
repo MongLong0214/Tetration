@@ -40,8 +40,32 @@ def run():
             assert all(result[k]['different'] == 0 for k in ['neutral', 'original', 'zero', 'ordered']), result
             assert result['exposure']['max'] <= 1 and result['waveMatch']['max'] <= 1, result
             assert all(r['changed'] > 0 for r in result['rows'] if r['name'] != 'Neutral'), result
-            assert result['diagnostic']['targets'] <= 5 and result['diagnostic']['programs'] == 5, result
+            assert result['diagnostic']['targets'] <= 5 and result['diagnostic']['programs'] <= 5, result
             suite.record('Opaque byte identity, independent linear EV/Wave and deterministic preset GPU passes', result)
+            animation = page.evaluate('''async () => {
+             const M=TetraStudioModel,FX=TetraStudioFX,gpu=new TetraGPU(document.createElement('canvas')),size={width:64,height:48};
+             const session=await TetraStudioRender.prepare(M.createProject({x:'-2.5',y:'0',span:'1.8'}),{renderer:gpu,size}),fx=FX.createCompositor(gpu,size),rows=[];
+             const read=()=>Uint8Array.from(fx.canvas.getContext('2d').getImageData(0,0,size.width,size.height).data);
+             const diff=(a,b)=>a.reduce((n,v,i)=>n+(v!==b[i]),0);
+             try{
+              for(const name of ['neutral','hue','pulse','wave']){
+               const look=M.neutralLook();if(name==='hue')look.hueRate=.25;if(name==='pulse')look.pulse.enabled=true;if(name==='wave')look.wave.enabled=true;
+               const first=await session.renderBase(0);await fx.compose(first,{look,k:0,fps:24});const bytes=read();first.release();const before=fx.diagnostics();
+               const second=await session.renderBase(12);await fx.compose(second,{look,k:12,fps:24});const changed=diff(bytes,read());second.release();const after=fx.diagnostics();
+               rows.push({name,changed,reused:after.cacheHits-before.cacheHits,composed:after.compositions-before.compositions});
+              }
+              // Revisit a different camera in the same pool. Its texture identity
+              // may recur, but the immutable content token must never recur.
+              const before=await session.renderBase(0),token=before.contentKey;before.release();await session.dispose();
+              const other=await TetraStudioRender.prepare(M.createProject({x:'0',y:'0',span:'8'}),{renderer:gpu,size}),handle=await other.renderBase(0);
+              const look=M.neutralLook();await fx.compose(handle,{look,k:0});const bytes=read();handle.release();
+              rows.push({name:'different content',newToken:token!==handle.contentKey,changed:diff(bytes,await (async()=>{const original=await TetraStudioRender.prepare(M.createProject({x:'-2.5',y:'0',span:'1.8'}),{renderer:gpu,size}),frame=await original.renderBase(0);await fx.compose(frame,{look,k:0});const bytes=read();frame.release();await original.dispose();return bytes;})())});await other.dispose();
+             }finally{await session.dispose();await fx.dispose();gpu.releaseAll();gpu.destroy();}return rows;
+            }''')
+            assert animation[0]['changed'] == 0 and animation[0]['reused'] == 1, animation
+            assert all(r['changed'] > 0 and r['reused'] == 0 and r['composed'] == 1 for r in animation[1:4]), animation
+            assert animation[4]['newToken'] and animation[4]['changed'] > 0, animation
+            suite.record('Hold reuses a neutral canvas but Hue, Pulse, Wave animate and pooled content changes', animation)
             geometry = page.evaluate('''async () => {
              const gpu=new TetraGPU(document.createElement('canvas')),gl=gpu.gl,FX=TetraStudioFX,C=TetraStudioCamera,rows=[];
              const lerp=(a,b,t)=>a+(b-a)*t;
