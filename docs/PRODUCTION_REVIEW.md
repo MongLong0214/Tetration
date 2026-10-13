@@ -1,4 +1,18 @@
-# Production review — TETRA 1.0.0
+# Production review — TETRA
+
+## 2026-10-13 Studio production follow-up
+
+The v1.2.0 audit found two reproducible defects: capture could persist stale coordinates after inertia or an interrupted glide, and a withheld WebGPU completion could keep export cancellation active indefinitely. The 1.2.1 repair reads and freezes the shared camera at capture/settling and bounds GPU readback/error-scope completion without changing numerical kernels. Native regressions are in `browser_studio_shared_view.py` and `browser_studio_failures.py`; unit regressions cover buffer ownership, late completion, camera precision and discard.
+
+Measured v1.2.0 behavior on Chrome 155 / ANGLE Metal / Apple M2 Pro (one machine):
+
+- Seven 12-second real-pointer exploration cases, shallow through span 1e-200 and Studio framing: rAF p95 16.7–16.8 ms, approximately 697–718 rendered live frames per interval. Input-event-to-next-rAF p95 was 14.4–15.3 ms; this is not photon presentation latency.
+- Four sustained deep interaction cycles with 16,384 iterations and AA16: rAF p95 16.7 ms; two 52–53 ms long tasks occurred. Final 2880×1624 AA16 refinement after zoom took 13.39–14.39 s. Post-GC JS heap increased from 3.85 to 4.52 MiB and logical GPU pools remained bounded; this is a finite sample, not a long thermal soak or peak native-memory proof.
+- Actual 1080p/30fps AA16 travel export with all effects: 600 frames / 20 seconds decoded correctly; rendering took 455.3 s, effects 3.46 s, encoding 0.17 s. A deep portrait 60-frame / 2-second AA16 output took 338.3 s to render. A square 60-frame AA4 Hold with animated effects completed in 0.68 s.
+- Five deep-output cancellations completed in 68–117 ms. A fresh 60-frame export after cancellation decoded with the same sampled frame hashes, then returned to Explore. These are ordinary cancellations; injected stalled native completion follows the 10-second failure deadline.
+- Four shallow AA16 1080p frames took 2.99 s total through WebGPU versus 28.63 s through WebGL, with identical pre-encode pixel hashes. The current backend selection remains appropriate on this device.
+
+**Readiness limit:** these results do not establish zero stutter or fast high-quality export at every coordinate. Highest-quality deep exports remain computationally expensive. Current support is span 1e-200 to 1e12, coordinate magnitude at most 1e12, 720/1080 output, 24/30fps, 2–20 seconds, AA4/AA16 and 16:9/9:16/1:1, with a 64 MiB output limit. Physical Safari/iPhone and broad device/thermal qualification remain unverified.
 
 ## 2026-10-06 first-visit link, pan strips and opening view follow-up
 
