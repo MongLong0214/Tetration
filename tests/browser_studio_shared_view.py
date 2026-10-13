@@ -1,4 +1,5 @@
 """Studio framing stays on Explore's real viewport and preserves output framing."""
+import time
 from playwright.sync_api import sync_playwright
 from browser_common import BASE, Suite, launch, ready
 
@@ -79,6 +80,19 @@ def settled_capture(browser, suite):
     box=page.locator('#viewport').bounding_box()
     x,y=box['x']+box['width']*.45,box['y']+box['height']*.5
 
+    def inertial_drag():
+        # Keep native, trusted input timestamps inside the app's 90 ms velocity
+        # window even when CI protocol round trips are slow or events coalesce.
+        cdp=page.context.new_cdp_session(page);started=time.time()
+        try:
+            for kind,dx,dt,buttons in [('mouseMoved',0,0,0),('mousePressed',0,.001,1),
+                                     ('mouseMoved',40,.017,1),('mouseMoved',90,.033,1),('mouseReleased',90,.034,0)]:
+                cdp.send('Input.dispatchMouseEvent',{'type':kind,'x':x+dx,'y':y,
+                         'button':'left' if kind!='mouseMoved' else 'none','buttons':buttons,
+                         'clickCount':1 if kind!='mouseMoved' else 0,'timestamp':started+dt})
+        finally:
+            cdp.detach()
+
     def current_camera():
         return page.evaluate('''()=>{const d=tetraStudioDiagnostics,r=document.querySelector('#viewport').getBoundingClientRect(),
           aspect=d.project.output.aspect==='9:16'?9/16:d.project.output.aspect==='1:1'?1:16/9;
@@ -90,8 +104,7 @@ def settled_capture(browser, suite):
         actual=page.evaluate('()=>tetraStudioDiagnostics.project.shot.start')
         assert actual == expected, {'expectedLiveCamera':expected,'saved':actual}
 
-    page.mouse.move(x,y);page.mouse.down();page.mouse.move(x+40,y)
-    page.wait_for_timeout(16);page.mouse.move(x+90,y);page.mouse.up()
+    inertial_drag()
     released=page.evaluate('()=>tetraDiagnostics.view')
     page.wait_for_function('()=>!tetraDiagnostics.animating',timeout=10000)
     assert page.evaluate('()=>tetraDiagnostics.view') != released, 'The gesture must exercise inertia'
@@ -107,8 +120,7 @@ def settled_capture(browser, suite):
     capture_current_view()
     suite.record('Capture saves the displayed camera after grabbing an unfinished glide without dragging')
 
-    page.mouse.move(x,y);page.mouse.down();page.mouse.move(x+40,y)
-    page.wait_for_timeout(16);page.mouse.move(x+90,y);page.mouse.up()
+    inertial_drag()
     assert page.evaluate('()=>tetraDiagnostics.animating'), 'The capture must interrupt motion'
     page.click('#studioApply');stable(page)
     assert not page.evaluate('()=>tetraDiagnostics.animating')
