@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.1 — 2026-10-13
+
+- Capture and camera transitions now freeze and read the authoritative shared View, including inertial movement and interrupted glides. Capture no longer saves an earlier camera or keeps drifting after the click.
+- WebGPU readback and error-scope completion have a shared 10-second deadline. A stalled accelerator is retired, cancellation releases its resources and ownership, and a fresh export can use WebGL. Normal sampling, kernels and output quality are unchanged.
+- Native input and injected GPU-completion regression tests cover these failures, including a decoded fresh export after recovery. See the production review for measured performance and remaining device/output limits.
+
 ### 1.2.0 · Shared View Studio and bounded export — 2026-10-13
 
 - Add output-frame capture and framing through Explore's current camera and input,

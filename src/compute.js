@@ -13,6 +13,7 @@
   // Samples per dispatch: 12 bytes of colour each, plus the queue entry. LANES workgroups of 64 cover
   // the resident threads of 64 Apple GPU cores; STEPS iterations keep a round to about ten milliseconds (a round also costs ~0.3 ms of dispatch, so shorter ones are slower).
   const CAPACITY = 1 << 21, LANES = 1024, STEPS = 4096, FLAT = 0xffffffff;
+  const COMPLETION_TIMEOUT = 10000;
   // Readback counters of a batch with one sample still queued: what remains if a submission never ran.
   const UNFINISHED = new Uint32Array([1, 0, 1, 0, 0, 0, 0, 0]);
   // gpu.js polyCosSin: range-reduced cos/sin from multiply-adds, for drivers whose builtins err.
@@ -430,16 +431,33 @@
       if (!adapter) return null;
       const compute = new TetraCompute(await adapter.requestDevice());
       compute.precise = await compute.probeTrig();
+      if (compute.failed) { compute.destroy(); return null; }
       for (const name of ['mask', 'resolve', ...Object.keys(BINDINGS).filter(name => name !== 'mask' && name !== 'resolve')]) compute.pipeline(name);
       return compute;
     }
     constructor(device) {
-      this.device = device; this.failed = false; this.precise = true;
+      this.device = device; this.failed = false; this.destroyed = false; this.precise = true;
       this.modules = {}; this.pipelines = {}; this.pending = new Set();
       this.buffers = null; this.slots = [{buffer: null, owner: null}, {buffer: null, owner: null}];
       this.reference = null; this.bla = null; this.batches = 0;
       device.lost.then(info => { this.failed = true; if (info.reason !== 'destroyed') console.warn('WebGPU device lost:', info.message); });
       device.addEventListener?.('uncapturederror', event => { this.failed = true; console.warn('WebGPU error:', event.error?.message); });
+    }
+    // A native completion can be withheld indefinitely even while the caller is canceling.
+    // Retire this accelerator on timeout so callers can return to the WebGL path.
+    async waitForCompletion(promises, operation) {
+      let timer;
+      const timeout = new Promise((_, reject) => {
+        timer = setTimeout(() => reject(Error(`WebGPU completion timed out while waiting for ${operation}`)), COMPLETION_TIMEOUT);
+      });
+      try { return await Promise.race([Promise.all(promises), timeout]); }
+      catch (error) { this.failed = true; this.destroy(); throw error; }
+      finally { clearTimeout(timer); }
+    }
+    async readback(buffer, mode, offset, size, consume, completion = Promise.resolve([])) {
+      const [, errors] = await this.waitForCompletion([buffer.mapAsync(mode, offset, size), completion], 'buffer readback and error scopes');
+      try { return consume(buffer.getMappedRange(offset, size), errors); }
+      finally { buffer.unmap(); }
     }
     /* Builtin cos/sin against the multiply-add version over |x| <= 60, as TetraGPU.probeTrig does
      * for WebGL: true (use the polynomial) when the builtins err by more than 4e-6 anywhere. */
@@ -458,8 +476,7 @@
         const encoder = device.createCommandEncoder(), pass = encoder.beginComputePass();
         pass.setPipeline(pipeline); pass.setBindGroup(0, device.createBindGroup({layout: pipeline.getBindGroupLayout(0), entries: [{binding: 0, resource: {buffer: out}}]}));
         pass.dispatchWorkgroups(8); pass.end(); encoder.copyBufferToBuffer(out, 0, read, 0, 2048); device.queue.submit([encoder.finish()]);
-        await read.mapAsync(GPUMapMode.READ);
-        return new Uint32Array(read.getMappedRange()).some(Boolean);
+        return await this.readback(read, GPUMapMode.READ, 0, 2048, range => new Uint32Array(range).some(Boolean));
       } catch { return true; } finally { out.destroy(); read.destroy(); }
     }
     // Pipeline for a kernel, compiled in the background on first request (null until then).
@@ -531,6 +548,7 @@
      * live: a live frame's accumulation (scene.accum in gpu.js), its history read in place of a seed. */
     async draw(renderer, frame, scene, samples, threshold, tiles, kernel, levels, live = null, canceled = () => false) {
       if (canceled()) return false;
+      if (this.failed) throw Error('WebGPU compute is unavailable');
       if (!this.buffers) this.allocate();
       const device = this.device, b = this.buffers, gl = renderer.gl, history = live?.mode ? live.frame : null;
       if (history === frame) throw Error('Live history cannot be its own target');
@@ -591,15 +609,14 @@
         device.pushErrorScope('validation'); device.pushErrorScope('out-of-memory');
         device.queue.submit([encoder.finish()]);
         const errors = Promise.all([device.popErrorScope(), device.popErrorScope()]);
-        await read.mapAsync(GPUMapMode.READ, 0, pixels * 4 + 32);
-        const error = (await errors).find(Boolean);
         let drained = false;
-        try {
+        await this.readback(read, GPUMapMode.READ, 0, pixels * 4 + 32, (range, errors) => {
+          const error = errors.find(Boolean);
           if (error || this.failed) throw Error(error?.message || 'WebGPU device failed');
           if (gl.isContextLost()) throw Error('GPU context lost');
           // Queue length, claims, lanes still holding a sample, orbit steps, approach blocks, samples finished.
           // An aborted round loses the samples its lanes held, so every sample must also have finished.
-          const range = read.getMappedRange(0, pixels * 4 + 32), queue = new Uint32Array(range, pixels * 4, 8);
+          const queue = new Uint32Array(range, pixels * 4, 8);
           drained = queue[1] >= queue[0] && queue[2] === 0 && queue[5] === queue[0];
           if (drained) {
             if (queue[0]) this.mean = {key, steps: queue[3] / queue[0]};
@@ -608,7 +625,7 @@
             for (let n = 0; n < tiles.length; n++) gl.texSubImage2D(gl.TEXTURE_2D, 0, rects[4 * n], rects[4 * n + 1], rects[4 * n + 2], rects[4 * n + 3], gl.RGBA, gl.UNSIGNED_BYTE, data, starts[n] * 4);
             gl.bindTexture(gl.TEXTURE_2D, null);
           }
-        } finally { read.unmap(); }
+        }, errors);
         if (canceled()) return false;
         if (drained) break;
         // An aborted round leaves the queue unfinished for good; anything else just needs more rounds.
@@ -619,6 +636,8 @@
       this.batches++;
     }
     destroy() {
+      if (this.destroyed) return;
+      this.destroyed = true;
       this.failed = true;
       for (const buffer of Object.values(this.buffers || {})) buffer?.destroy();
       for (const slot of this.slots) slot.buffer?.destroy();

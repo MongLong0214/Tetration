@@ -2,7 +2,7 @@
   'use strict';
   const $ = id => document.getElementById(id);
   const F = createFixed(256);
-  const VERSION = '1.2.0';
+  const VERSION = '1.2.1';
   const workerSource = __WORKER_SOURCE__;
   const workerURL = URL.createObjectURL(new Blob([workerSource], {type: 'text/javascript'}));
   const presets = [
@@ -1085,7 +1085,7 @@
     }
     if (moved) { reproject(); drawGrid(); requestInteractive(); }
     if (!same(visual, view) || motion.vx || motion.vy) motion.raf = requestAnimationFrame(stepMotion);
-    else { motion.raf = 0; clearTimeout(settleTimer); settleTimer = setTimeout(finalRender, 0); scheduleURL(); }
+    else { motion.raf = 0; studio?.viewChanged?.(); clearTimeout(settleTimer); settleTimer = setTimeout(finalRender, 0); scheduleURL(); }
   }
   function stopMotion() { motion.vx = 0; motion.vy = 0; }
 
@@ -1153,6 +1153,7 @@
     // Grabbing during a glide freezes the camera where it is on screen.
     stopMotion();
     if (!same(visual, view)) { view = clone(visual); locationIndex = -1; invalidate(); syncControls(); updateReadout(); }
+    studio?.viewChanged?.();
     visual = clone(view);
     // Selection can become a pinch when a second finger arrives. Both paths need
     // the camera at the first touch, rather than the previous gesture's history.
@@ -1560,7 +1561,16 @@
   studio = globalThis.TetraStudio.create({
     error: message => toast(message),
     snapshot: () => ({...serialize(), palette: globalThis.TetraStudioModel.ENUMS.palette[palette]}),
-    camera(aspect, rollDeg = 0) { return globalThis.TetraStudioFrame.fromView(serialize(), globalThis.TetraStudioFrame.geometry(dims.w, dims.h, aspect, rollDeg), F); },
+    camera(aspect, rollDeg = 0, {settle = false} = {}) {
+      if (settle) {
+        cancelGesture(); stopMotion();
+        if (motion.raf) cancelAnimationFrame(motion.raf);
+        motion.raf = 0;
+        if (!same(view, visual)) { view = clone(visual); locationIndex = -1; changed({studioCamera: true}); }
+        else { clearTimeout(settleTimer); settleTimer = setTimeout(finalRender, 0); scheduleURL(); }
+      }
+      return globalThis.TetraStudioFrame.fromView(serialize(), globalThis.TetraStudioFrame.geometry(dims.w, dims.h, aspect, rollDeg), F);
+    },
     applyCamera(camera, aspect, {history = true} = {}) {
       const frame = globalThis.TetraStudioFrame.geometry(dims.w, dims.h, aspect, camera.rollDeg ?? 0), next = globalThis.TetraStudioFrame.toView(camera, frame, F);
       const target = validate({x: F.parse(next.x), y: F.parse(next.y), span: F.parse(next.span)});

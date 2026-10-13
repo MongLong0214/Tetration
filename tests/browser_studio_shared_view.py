@@ -17,6 +17,7 @@ def framing(page):
     page.mouse.move(x, y);page.mouse.down();page.mouse.move(x + 32, y + 18, steps=4);page.mouse.up()
     page.wait_for_function('''(old) => tetraStudioDiagnostics.owner === "explore" &&
       JSON.stringify(tetraStudioDiagnostics.draft) !== JSON.stringify(old)''', arg=before['camera'], timeout=30000)
+    page.wait_for_function('()=>!tetraDiagnostics.animating')
     moved = page.evaluate('''() => ({box:document.querySelector('#viewport').getBoundingClientRect().toJSON(),
       camera:tetraStudioDiagnostics.draft, view:tetraDiagnostics.view, overlay:document.querySelector('#studioFrameOverlay').getBoundingClientRect().toJSON()})''')
     assert moved['box']['width'] == before['box']['width'] and moved['box']['height'] == before['box']['height']
@@ -68,6 +69,55 @@ def framing(page):
 
 def stable(page):
     page.wait_for_function('() => !tetraStudioDiagnostics.transitioning', timeout=120000)
+
+
+def settled_capture(browser, suite):
+    page=suite.watch(browser.new_page(viewport={'width':1100,'height':760}, reduced_motion='no-preference'))
+    page.goto(BASE);ready(page);page.click('#openStudioBtn');stable(page)
+    if page.evaluate('()=>tetraStudioDiagnostics.endpoint') != 'start':
+        page.click('#studioStart');stable(page)
+    box=page.locator('#viewport').bounding_box()
+    x,y=box['x']+box['width']*.45,box['y']+box['height']*.5
+
+    def current_camera():
+        return page.evaluate('''()=>{const d=tetraStudioDiagnostics,r=document.querySelector('#viewport').getBoundingClientRect(),
+          aspect=d.project.output.aspect==='9:16'?9/16:d.project.output.aspect==='1:1'?1:16/9;
+          return {...TetraStudioFrame.fromView(tetraDiagnostics.view,TetraStudioFrame.geometry(r.width,r.height,aspect,d.draft.rollDeg),createFixed(256)),rollDeg:d.draft.rollDeg};}''')
+
+    def capture_current_view():
+        expected=current_camera()
+        page.click('#studioApply');stable(page)
+        actual=page.evaluate('()=>tetraStudioDiagnostics.project.shot.start')
+        assert actual == expected, {'expectedLiveCamera':expected,'saved':actual}
+
+    page.mouse.move(x,y);page.mouse.down();page.mouse.move(x+40,y)
+    page.wait_for_timeout(16);page.mouse.move(x+90,y);page.mouse.up()
+    released=page.evaluate('()=>tetraDiagnostics.view')
+    page.wait_for_function('()=>!tetraDiagnostics.animating',timeout=10000)
+    assert page.evaluate('()=>tetraDiagnostics.view') != released, 'The gesture must exercise inertia'
+    capture_current_view()
+    suite.record('Capture saves the settled shared View after real pointer inertia')
+
+    page.locator('#viewport').focus();page.keyboard.press('+')
+    assert page.evaluate('()=>JSON.stringify(tetraDiagnostics.visual)!==JSON.stringify(tetraDiagnostics.view)'), 'The zoom must exercise a glide'
+    page.mouse.move(x,y);page.mouse.down()
+    grabbed=page.evaluate('()=>tetraDiagnostics.view')
+    page.mouse.up();page.wait_for_function('()=>!tetraDiagnostics.animating',timeout=10000)
+    assert page.evaluate('()=>tetraDiagnostics.view') == grabbed
+    capture_current_view()
+    suite.record('Capture saves the displayed camera after grabbing an unfinished glide without dragging')
+
+    page.mouse.move(x,y);page.mouse.down();page.mouse.move(x+40,y)
+    page.wait_for_timeout(16);page.mouse.move(x+90,y);page.mouse.up()
+    assert page.evaluate('()=>tetraDiagnostics.animating'), 'The capture must interrupt motion'
+    page.click('#studioApply');stable(page)
+    assert not page.evaluate('()=>tetraDiagnostics.animating')
+    saved=page.evaluate('()=>tetraStudioDiagnostics.project.shot.start')
+    assert saved==current_camera()
+    page.wait_for_timeout(150)
+    assert saved==current_camera() and not page.evaluate('()=>tetraStudioDiagnostics.draftDirty')
+    suite.record('Capture during inertia freezes the shared View and leaves no later unsaved camera drift')
+    page.close()
 
 
 def camera_history(browser, suite):
@@ -271,6 +321,7 @@ def main():
             ownership_and_timing(page, suite)
             assert page.locator('#viewport').bounding_box() == initial
             camera_history(browser, suite)
+            settled_capture(browser, suite)
             queued_path_handoff(browser, suite)
             compact_inspector(browser, suite)
             suite.record('Explore input updates the Start/End camera through the shared View renderer; frame aspect changes leave viewport dimensions intact')

@@ -2,7 +2,7 @@
 import json
 import subprocess
 from playwright.sync_api import sync_playwright
-from browser_common import BASE, OUT, Suite, launch
+from browser_common import BASE, OUT, Suite, launch, ready
 
 
 def setup(page):
@@ -31,11 +31,47 @@ def terminal(page, expected):
     return state
 
 
+def withheld_completion(browser, suite):
+    for method in ['mapAsync', 'popErrorScope']:
+        page=suite.watch(browser.new_page(viewport={'width':1200,'height':800},accept_downloads=True))
+        setup(page)
+        if not page.evaluate('()=>tetraDiagnostics.compute&&!tetraDiagnostics.compute.failed'):
+            suite.report['webgpu_completion_stall']='Unavailable: this browser has no working WebGPU accelerator'
+            page.close();return
+        page.click('#studioVideo')
+        page.evaluate('''method=>{
+          const proto=method==='mapAsync'?GPUBuffer.prototype:GPUDevice.prototype,original=proto[method];let armed=true;
+          window.__heldCompletion=false;window.__restoreCompletion=()=>{proto[method]=original;};
+          proto[method]=function(...args){const pending=original.apply(this,args);if(!armed)return pending;armed=false;
+            return pending.then(value=>{__heldCompletion=true;return new Promise(resolve=>window.__releaseCompletion=()=>resolve(value));});};
+        }''',method)
+        page.click('#studioExportStart');page.wait_for_function('()=>window.__heldCompletion',timeout=30000)
+        page.click('#studioExportCancel')
+        page.wait_for_function('()=>!tetraStudioDiagnostics.export.active',timeout=15000)
+        state=page.evaluate('()=>({export:tetraStudioDiagnostics.export,owner:tetraStudioDiagnostics.owner,compute:tetraDiagnostics.compute})')
+        assert state['export']['state']=='failed' and 'timed out' in state['export']['error'] and state['owner']=='studio' and state['compute']['failed'],state
+        assert state['export']['url'] is None
+        page.evaluate('()=>{__restoreCompletion();__releaseCompletion();}')
+        page.click('#studioExportClose');page.click('#leaveStudio')
+        page.wait_for_function('()=>tetraStudioDiagnostics.owner==="explore"&&!tetraStudioDiagnostics.entered')
+        ready(page)
+        page.click('#openStudioBtn');export(page)
+        recovered=terminal(page,'ready')
+        assert recovered['profile']['backend']=='webgl' and recovered['submitted']==60,recovered
+        with page.expect_download() as download:page.click('#studioDownload')
+        path=OUT/('studio-recovered-'+method+'.mp4');download.value.save_as(path)
+        stream=json.loads(subprocess.check_output(['ffprobe','-v','error','-count_frames','-show_streams','-of','json',str(path)],text=True))['streams'][0]
+        assert int(stream['nb_read_frames'])==60 and (stream['width'],stream['height'])==(1280,720),stream
+        suite.record('Withheld WebGPU '+method+' completion times out, releases cancellation, returns to Explore and exports a decoded fresh video',{'fault':'native completion withheld after resolution','decodedFrames':60})
+        page.close()
+
+
 def run():
     suite = Suite('studio-failures', ['Visibility is driven through the real app handler with a controlled document.hidden getter.'])
     try:
         with sync_playwright() as p:
             browser = launch(p)
+            withheld_completion(browser, suite)
             page = suite.watch(browser.new_page(viewport={'width': 1200, 'height': 800}, accept_downloads=True))
             setup(page)
             before = page.evaluate('() => tetraStudioDiagnostics.project')

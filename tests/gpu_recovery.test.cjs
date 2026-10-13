@@ -3,6 +3,60 @@ const {test}=require('node:test');
 const assert=require('node:assert/strict');
 require('../src/core.js');
 require('../src/gpu.js');
+require('../src/compute.js');
+
+const compute=()=>Object.assign(Object.create(globalThis.TetraCompute.prototype),{failed:false});
+const deferred=()=>{let resolve,reject;const promise=new Promise((yes,no)=>{resolve=yes;reject=no;});return {promise,resolve,reject};};
+
+test('a withheld WebGPU readback disables compute and late completion cannot touch its buffer',async t=>{
+ t.mock.timers.enable({apis:['setTimeout']});
+ const c=compute(),map=deferred();let ranges=0,unmaps=0,destroys=0,deviceDestroys=0;
+ const buffer={mapAsync:()=>map.promise,getMappedRange:()=>{ranges++;return new ArrayBuffer(4);},unmap:()=>unmaps++,destroy:()=>destroys++};
+ c.buffers={read:buffer};c.slots=[];c.device={destroy(){deviceDestroys++;}};
+ const result=assert.rejects(c.readback(buffer,1,0,4,()=>assert.fail('timed-out mapping must not be read')),/timed out.*buffer readback/);
+ t.mock.timers.tick(10000);await result;
+ assert.equal(c.failed,true);assert.equal(c.destroyed,true);assert.equal(ranges,0);assert.equal(unmaps,0);
+ assert.equal(destroys,1);assert.equal(deviceDestroys,1);
+ c.destroy();assert.equal(destroys,1,'retiring an already failed accelerator is idempotent');
+ map.resolve();await Promise.resolve();await Promise.resolve();
+ assert.equal(ranges,0);assert.equal(unmaps,0,'late map completion has no continuation that touches the retired buffer');
+});
+
+test('a late error-scope rejection is handled after its bounded wait fails',async t=>{
+ t.mock.timers.enable({apis:['setTimeout']});
+ const c=compute(),scope=deferred();let deviceDestroys=0;c.buffers={};c.slots=[];c.device={destroy(){deviceDestroys++;}};
+ const result=assert.rejects(c.waitForCompletion([scope.promise],'error scopes'),/timed out.*error scopes/);
+ t.mock.timers.tick(10000);await result;
+ assert.equal(c.failed,true);assert.equal(deviceDestroys,1);
+ scope.reject(Error('late validation error'));
+ await Promise.resolve();await Promise.resolve();
+});
+
+test('successful WebGPU readback consumes and unmaps once, including consumer errors',async()=>{
+ const c=compute();let unmaps=0;
+ const buffer={mapAsync:async()=>{},getMappedRange:()=>new Uint8Array([7]).buffer,unmap:()=>unmaps++};
+ assert.equal(await c.readback(buffer,1,0,1,range=>new Uint8Array(range)[0]),7);
+ assert.equal(unmaps,1);assert.equal(c.failed,false);
+ await assert.rejects(c.readback(buffer,1,0,1,()=>{throw Error('consumer failed');}),/consumer failed/);
+ assert.equal(unmaps,2);
+});
+
+test('a successful error-scope completion remains healthy',async()=>{
+ const c=compute();
+ assert.deepEqual(await c.waitForCompletion([Promise.resolve(null),Promise.resolve(null)],'error scopes'),[null,null]);
+ assert.equal(c.failed,false);
+});
+
+test('a mapped readback cannot consume pixels while its error scope is stalled',async t=>{
+ t.mock.timers.enable({apis:['setTimeout']});
+ const c=compute(),scope=deferred();let destroyed=0,consumed=0;
+ const buffer={mapAsync:async()=>{},getMappedRange:()=>assert.fail('error scopes must settle before readback'),destroy:()=>destroyed++};
+ c.buffers={read:buffer};c.slots=[];c.device={destroy(){}};
+ const result=assert.rejects(c.readback(buffer,1,0,4,()=>consumed++,scope.promise),/timed out/);
+ await Promise.resolve();t.mock.timers.tick(10000);await result;
+ scope.resolve([]);await Promise.resolve();await Promise.resolve();
+ assert.equal(destroyed,1);assert.equal(consumed,0);
+});
 
 test('a pending GPU fence rejects before teardown and retires only after completion',async t=>{
  let complete=false,deleted=0,lost=0,clock=0,calls=0,finish,notice;
