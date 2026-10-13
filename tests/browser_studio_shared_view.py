@@ -88,7 +88,7 @@ def settled_capture(browser, suite):
             for kind,dx,dt,buttons in [('mouseMoved',0,0,0),('mousePressed',0,.001,1),
                                      ('mouseMoved',40,.017,1),('mouseMoved',90,.033,1),('mouseReleased',90,.034,0)]:
                 cdp.send('Input.dispatchMouseEvent',{'type':kind,'x':x+dx,'y':y,
-                         'button':'left' if kind!='mouseMoved' else 'none','buttons':buttons,
+                         'button':'left' if buttons or kind=='mouseReleased' else 'none','buttons':buttons,
                          'clickCount':1 if kind!='mouseMoved' else 0,'timestamp':started+dt})
         finally:
             cdp.detach()
