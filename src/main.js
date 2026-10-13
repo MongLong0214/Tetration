@@ -781,7 +781,10 @@
       for (let s = 0; s < stages.length; s++) {
         const stage = stages[s];
         renderStage = stage.name;
-        const frame = hold(renderer.beginFrame(target.width, target.height, reuse && s === 0 ? null : previous, stage.samples > 1));
+        // If no live frame arrived before release, the old picture still fills
+        // pending strips. It is provisional colour, never an adaptive AA seed.
+        const firstReuse = reuse && s === 0;
+        const frame = hold(renderer.beginFrame(target.width, target.height, previous, !firstReuse && stage.samples > 1));
         if (reuse && s === 0) {
           // The exposed strips stay pending, while every overlapping 16x sample is preserved.
           // Until computed they keep the picture on screen (usually the live frame), not blank tiles.

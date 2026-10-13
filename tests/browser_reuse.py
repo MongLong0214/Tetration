@@ -5,7 +5,9 @@ from playwright.sync_api import sync_playwright
 
 suite = Suite('reuse', ['Chromium graphics on the local runner; no physical mobile qualification.'])
 VIEWS = json.loads((ROOT / 'tools/perf/views.json').read_text())
-HOOK = '''(() => {const timer=setInterval(()=>{if(!window.TetraGPU)return;clearInterval(timer);
+HOOK = '''(() => {const raf=window.requestAnimationFrame;
+ window.requestAnimationFrame=callback=>raf.call(window,window.__holdLive&&callback.name==='runInteractive'?()=>{}:callback);
+ const timer=setInterval(()=>{if(!window.TetraGPU)return;clearInterval(timer);
  const prepare=TetraGPU.prototype.prepare;TetraGPU.prototype.prepare=function(f,s,n,...r){
  if(!s.accum){window.__nativeRenderer=this;window.__nativeScene=s;window.__nativeCompute=false;}return prepare.call(this,f,s,n,...r);};
  if(window.TetraCompute){const draw=TetraCompute.prototype.draw;TetraCompute.prototype.draw=function(r,f,s,...a){
@@ -22,9 +24,13 @@ def body():
         suite.report['browser_version'] = browser.version
         page = suite.watch(browser.new_page(viewport={'width': 480, 'height': 320}, device_scale_factor=1))
         page.add_init_script(HOOK)
-        for name, mx, my in [('plume', 12, 5), ('abyss', -12, 5), ('horizon', 12, -5), ('horizon', -12, -5)]:
+        for name, mx, my, hold_live in [('plume', 12, 5, False), ('abyss', -12, 5, False),
+                                       ('abyss', -12, 5, True), ('horizon', 12, -5, False), ('horizon', -12, -5, False)]:
             v = VIEWS[name]
             first = open_app(page, f"v=1&x={v['x']}&y={v['y']}&s={v['span']}&q=16", 'perturb')
+            # A quick release or a busy GPU may start final refinement before
+            # any live frame covers the newly exposed strips.
+            page.evaluate('(hold) => {window.__holdLive=hold;window.__blankPending=null;}', hold_live)
             suite.report['graphics'] = graphics(page)
             before = page.evaluate(GRAB)
             box = page.locator('#viewport').bounding_box()
@@ -36,6 +42,8 @@ def body():
             assert not page.locator('#detailCanvas').is_hidden()
             page.mouse.up(); settle(page)
             final, after = state(page), page.evaluate(GRAB)
+            if hold_live:
+                assert final['interactiveFrames'] == first['interactiveFrames'], (first, final)
             last = final['lastCompleted']
             assert (after['w'], after['h']) == (before['w'], before['h'])
             reused = (before['w'] - 12) * (before['h'] - 5)
@@ -64,7 +72,7 @@ def body():
              for(let y=0;y<H;y++)for(let x=0;x<W;x++)if(x<left||x>=right||y<top||y>=bottom)for(let k=0;k<3;k++)worst=Math.max(worst,Math.abs(actual[(y*W+x)*4+k]-expected[((H-1-y)*W+x)*4+k]));
              r.releaseFrame(f);return worst;}''', [mx, my])
             assert diff <= 1, (name, diff)
-            suite.record('Native pan preserves every overlapping Ultra sample and computes only new strips: ' + name,
+            suite.record('Native pan preserves every overlapping Ultra sample and computes only new strips: ' + name + (' before a live frame' if hold_live else ''),
                          {'shift': [mx, my], 'before_ms': first['lastCompleted']['elapsed'], 'pan_ms': last['elapsed'], 'reused_pixels': reused,
                           'computed_pixels': last['computedPixels'], 'exposed_pixel_error': diff})
             hits = final['completedCache']['hits']
