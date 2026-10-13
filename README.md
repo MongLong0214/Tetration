@@ -6,7 +6,7 @@ A browser-native tetration explorer. Inspect internal fractal structure down to 
 
 [![Validate](https://github.com/MongLong0214/Tetration/actions/workflows/ci.yml/badge.svg)](https://github.com/MongLong0214/Tetration/actions)
 
-**1.1.0** · Live at **[tetration.vercel.app](https://tetration.vercel.app)**. Device qualification is tracked in the [production review](docs/PRODUCTION_REVIEW.md). The app observes finite iterations; it does not prove convergence or divergence.
+**1.2.0** · Live at **[tetration.vercel.app](https://tetration.vercel.app)**. Device qualification is tracked in the [production review](docs/PRODUCTION_REVIEW.md). The app observes finite iterations; it does not prove convergence or divergence.
 
 ## Explore
 

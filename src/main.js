@@ -2,7 +2,7 @@
   'use strict';
   const $ = id => document.getElementById(id);
   const F = createFixed(256);
-  const VERSION = '1.1.0';
+  const VERSION = '1.2.0';
   const workerSource = __WORKER_SOURCE__;
   const workerURL = URL.createObjectURL(new Blob([workerSource], {type: 'text/javascript'}));
   const presets = [
@@ -28,7 +28,7 @@
   let dims = {w: 1, h: 1, dpr: 1};
   // compute: the WebGPU accelerator for final stages (null until ready, or without WebGPU).
   let gpu = null, compute = null, gpuFailure = '', serial = 0, jobSerial = -1, settleTimer = 0, currentMode = 'gpu';
-  let owner = 'explore', studio = null, studioFlow = false;
+  let owner = 'explore', studio = null, studioFlow = false, studioAcquire = Promise.resolve();
   let lastRenderComplete = false, lastCompletedInfo = null, renderStage = 'initial', started = 0, workerTransfer = 'pixels';
   let gpuBusy = false, interactiveFrame = 0, interactivePending = false, interactiveCount = 0;
   const rates = new Map(), idleWaiters = [];
@@ -381,12 +381,19 @@
     const found = findReference(v, mode);
     if (found) return Promise.resolve(found);
     const {point, options} = referenceSpec(v, mode);
-    const key = JSON.stringify(options);
+    return ensureReferenceOptions(options, point);
+  }
+  function ensureReferenceOptions(options, point = {x: F.parse(options.x), y: F.parse(options.y)}) {
+    options = {...options, x: String(options.x), y: String(options.y), digits: Math.ceil(options.digits), iterations: Math.ceil(options.iterations), maxRe: options.maxRe ?? 80};
+    const key = JSON.stringify([options.x, options.y, options.digits, options.iterations, options.maxRe]);
+    const exact = references.cache.find(r => r.iterations >= options.iterations && r.maxRe === options.maxRe && r.digits >= options.digits && F.text(r.point.x) === options.x && F.text(r.point.y) === options.y);
+    if (exact) return Promise.resolve(exact);
     if (references.inflight.has(key)) return references.inflight.get(key);
     const store = ref => {
-      ref.point = point; ref.maxRe = options.maxRe; ref.digits = options.digits; references.computed++;
-      references.cache = [ref, ...references.cache.filter(r => r !== ref)].slice(0, 6);
-      return ref;
+      const result = {...ref, digits: ref.digits ?? options.digits, point: {x: point.x, y: point.y}, maxRe: options.maxRe};
+      references.computed++;
+      references.cache = [result, ...references.cache.filter(r => !(r.iterations >= options.iterations && r.maxRe === options.maxRe && r.digits >= options.digits && F.text(r.point.x) === options.x && F.text(r.point.y) === options.y))].slice(0, 6);
+      return result;
     };
     const worker = referenceWorker();
     let promise;
@@ -412,7 +419,6 @@
   }
   function sceneKey(scene, v) { return [scene.mode, F.text(v.x), F.text(v.y), F.text(v.span), scene.iterations, scene.palette, dims.w, dims.h].join('|'); }
   function rateKey(scene, samples) { return scene.mode + '|' + scene.iterations + '|' + samples; }
-  function tileEdge(iterations, samples) { return Math.max(16, Math.min(256, Math.round(Math.sqrt(4096 * 256 * 16 / (iterations * samples)) / 16) * 16)); }
   // Resolution that should finish within the interactive frame budget.
   // Display-resolution target within the pixel budget and the device's texture limit.
   let budgetScale = 1;
@@ -642,7 +648,6 @@
       }
     }
     const effective = renderer.effectiveIterations(scene, frame.width, frame.height);
-    const workCap = 8e7;
     const highCap = scene.iterations >= 8192;
     // A seeded 4096-step BLA pass has already skipped the long approach.
     // Splitting its AA adds a measured fivefold Auto Horizon regression.
@@ -652,18 +657,12 @@
     const atlas = scene.mode === 'perturb' && scene.iterations === 512 && samples === 16 && renderer.floatColor;
     // A partial pass evaluates one orbit per pixel. Use that per-pass work
     // when sizing its tile; charging all AA samples here quadruples fences.
-    const edge = partial ? Math.min(highCap ? 32 : 64, tileEdge(effective, 1)) : highCap ? Math.min(16, tileEdge(effective, samples)) : tileEdge(effective, samples);
-    const tiles = work ? TetraRender.exposedTiles(frame.width, frame.height, work.dx, work.dy, edge) : TetraRender.tiles(frame.width, frame.height, edge), key = rateKey(scene, samples);
-    const area = frame.width * frame.height;
-    // Cheap tiles can precede a dense, unresolved basin. Measured throughput
-    // alone cannot bound that next batch: keep its worst-case orbit work below
-    // the live-frame cap without changing the image, AA or iteration limit.
-    const maxPixels = highCap || partial ? edge * edge : Math.max(edge * edge, Math.floor(workCap / (effective * samples)));
-    // Final tiles keep their own rate (live frames smooth theirs over whole frames). The first
-    // batch is at most 4 tiles and a batch at most doubles, so a dense centre after cheap
-    // corners cannot become seconds of GPU work.
-    const tileKey = 'tile|' + key;
-    let budget = Math.max(edge * edge, Math.min(maxPixels, 4 * edge * edge, (rates.get(tileKey) ?? (rates.get(rateKey(scene, 1)) ?? 60) / samples) * BATCH_MS));
+    const key = rateKey(scene, samples), tileKey = 'tile|' + key;
+    const policy = TetraRender.batchPolicy({effective, samples, partial, highCap, area: frame.width * frame.height,
+      rate: rates.get(tileKey) ?? (rates.get(rateKey(scene, 1)) ?? 60) / samples, batchMs: BATCH_MS});
+    const edge = policy.edge;
+    const tiles = work ? TetraRender.exposedTiles(frame.width, frame.height, work.dx, work.dy, edge) : TetraRender.tiles(frame.width, frame.height, edge);
+    let budget = policy.budget;
     let index = 0;
     while (index < tiles.length) {
       if (id !== serial || renderer !== gpu) return false;
@@ -689,7 +688,7 @@
       const ms = Math.max(0.5, performance.now() - t0), measured = pixels / ms;
       if (renderer.links === links) {
         rates.set(tileKey, measured);
-        budget = ms > 3 * BATCH_MS ? edge * edge : Math.min(area, maxPixels, 2 * pixels, Math.max(edge * edge, measured * BATCH_MS));
+        budget = TetraRender.adaptBatch(policy, pixels, ms).budget;
       }
       if (interactivePending) { interactivePending = false; requestInteractive(); }
       if (id !== serial) return false;
@@ -700,12 +699,12 @@
   // runStage on the WebGPU accelerator: one dispatch per batch, so whole batches run as one queue of samples.
   async function computeStage(id, renderer, frame, scene, samples, onBatch, work, kernel, levels) {
     const effective = levels ? Math.max(64, Math.round(scene.iterations - 0.75 * Math.min(renderer.bla.reach, scene.iterations))) : scene.iterations;
-    const edge = Math.min(256, 2 * tileEdge(effective, samples)), key = 'compute|' + rateKey(scene, samples);
+    const key = 'compute|' + rateKey(scene, samples);
+    const policy = TetraRender.batchPolicy({backend: 'webgpu', effective, samples, capacity: compute.capacity(kernel),
+      area: frame.width * frame.height, rate: rates.get(key) ?? (rates.get('tile|' + rateKey(scene, samples)) ?? 60) * 4, batchMs: BATCH_MS});
+    const edge = policy.edge;
     const tiles = work ? TetraRender.exposedTiles(frame.width, frame.height, work.dx, work.dy, edge) : TetraRender.tiles(frame.width, frame.height, edge);
-    const area = frame.width * frame.height;
-    // As in runStage: a dense basin after cheap tiles stays bounded (here ~0.1 s of orbit work at the worst).
-    const maxPixels = Math.min(Math.floor(compute.capacity(kernel) / samples), Math.max(edge * edge, Math.floor(4e9 / (effective * samples))));
-    let budget = Math.max(edge * edge, Math.min(maxPixels, 4 * edge * edge, (rates.get(key) ?? (rates.get('tile|' + rateKey(scene, samples)) ?? 60) * 4) * BATCH_MS));
+    let budget = policy.budget;
     let index = 0;
     while (index < tiles.length) {
       if (id !== serial || renderer !== gpu) return false;
@@ -720,7 +719,7 @@
       finally { setGPUBusy(false); }
       const ms = Math.max(0.5, performance.now() - t0), measured = pixels / ms;
       rates.set(key, measured);
-      budget = ms > 3 * BATCH_MS ? edge * edge : Math.min(area, maxPixels, 2 * pixels, Math.max(edge * edge, measured * BATCH_MS));
+      budget = TetraRender.adaptBatch(policy, pixels, ms).budget;
       if (interactivePending) { interactivePending = false; requestInteractive(); }
       if (id !== serial) return false;
       onBatch?.(index / tiles.length, index === tiles.length);
@@ -983,10 +982,10 @@
     // Perturbation also serves the default close-up, where the BLA table is empty.
     // Do not compile the large deep-zoom program for a view that cannot use it.
     const deep = canWarmBla();
-    if (!gpu || warmTimer || (deep ? gpu.warmed : gpu.perturbWarm)) return;
+    if (owner !== 'explore' || !gpu || warmTimer || (deep ? gpu.warmed : gpu.perturbWarm)) return;
     warmTimer = setTimeout(() => {
       warmTimer = 0;
-      if (!gpu || document.hidden) return;
+      if (owner !== 'explore' || !gpu || document.hidden) return;
       if (gpuBusy || !lastRenderComplete || pointerMap.size || motion.raf || performance.now() - quietSince < 2500) { scheduleWarm(); return; }
       let done = true;
       try { if (canWarmBla()) done = gpu.warm(); else gpu.warmPerturb(); } catch { /* the programs keep working */ }
@@ -1006,6 +1005,7 @@
     invalidate(); quietSince = performance.now();
     if (!options.keepVisual && (reducedMotion.matches || !options.animate)) visual = clone(view);
     syncControls(); updateReadout(); reproject(); setProgress(0);
+    studio?.viewChanged?.({resize: !!options.resize, camera: !!options.studioCamera});
     showLoading(options.interactive || options.animate ? 'Preview · refining when you pause' : 'Computing view');
     if (options.animate && !reducedMotion.matches) startMotion();
     if (options.interactive || (options.animate && !reducedMotion.matches)) requestInteractive();
@@ -1503,7 +1503,7 @@
     const first = dims.w === 1;
     cancelGesture();
     dims = next;
-    changed(first ? {} : {interactive: true});
+    changed(first ? {} : {interactive: true, resize: true});
   }
   const observer = new ResizeObserver(measure);
   // Browser zoom changes density with a resize; moving to another display may not, so watch the resolution too.
@@ -1557,21 +1557,32 @@
   studio = globalThis.TetraStudio.create({
     error: message => toast(message),
     snapshot: () => ({...serialize(), palette: globalThis.TetraStudioModel.ENUMS.palette[palette]}),
-    async enter() {
-      updateURL(); closeSettings(); owner = 'studio'; serial++; stopCPU(); cancelGesture(); stopMotion();
-      cancelAnimationFrame(motion.raf); motion.raf = 0; cancelAnimationFrame(interactiveFrame); interactiveFrame = 0; interactivePending = false;
-      clearTimeout(settleTimer); clearTimeout(urlTimer); urlTimer = 0; studioFlow = flow; setFlow(false);
-      viewport.inert = true; await gpuIdle(); await new Promise(resolve => setTimeout(resolve, 0));
+    camera(aspect, rollDeg = 0) { return globalThis.TetraStudioFrame.fromView(serialize(), globalThis.TetraStudioFrame.geometry(dims.w, dims.h, aspect, rollDeg), F); },
+    applyCamera(camera, aspect, {history = true} = {}) {
+      const frame = globalThis.TetraStudioFrame.geometry(dims.w, dims.h, aspect, camera.rollDeg ?? 0), next = globalThis.TetraStudioFrame.toView(camera, frame, F);
+      const target = validate({x: F.parse(next.x), y: F.parse(next.y), span: F.parse(next.span)});
+      if (same(view, target)) return;
+      const before = clone(view); view = target; visual = clone(view); stopMotion(); if (history) saveHistory(before); changed({studioCamera: true}); if (history) viewport.focus({preventScroll: true});
     },
-    async leave() { owner = 'explore'; viewport.inert = false; measure(); if (studioFlow) setFlow(true); changed(); },
-    setOwner: value => { owner = value; },
+    zoom(factor) { const before = clone(view); if (zoomAt(factor)) { stopMotion(); saveHistory(before); changed(); } },
+    async enter() {
+      updateURL(); closeSettings(); selectDetail(false); cancelGesture(); stopMotion(); studioFlow = flow; setFlow(false); viewport.inert = false;
+    },
+    async leave() { await studioAcquire; owner = 'explore'; viewport.inert = false; measure(); changed(); if (studioFlow) setFlow(true); },
+    owner: () => owner,
+    acquire() {
+      if (owner !== 'explore') return studioAcquire;
+      updateURL(); owner = 'studio'; serial++; stopCPU(); cancelGesture(); stopMotion(); cancelAnimationFrame(interactiveFrame); interactiveFrame = 0; interactivePending = false;
+      clearTimeout(settleTimer); clearTimeout(warmTimer); warmTimer = 0; cancelAnimationFrame(motion.raf); motion.raf = 0; viewport.inert = true; studioAcquire = gpuIdle(); return studioAcquire;
+    },
+    async release() { await studioAcquire; if (owner === 'explore') return; owner = 'explore'; viewport.inert = false; measure(); changed({studioCamera: true}); },
+    setOwner: value => {
+      if (!['studio', 'export'].includes(value) || owner === 'explore') throw Error('Studio must acquire and drain View before export.');
+      owner = value; viewport.inert = true;
+    },
     resources() {
       if (!gpu || gpu.lost()) throw Error('Video rendering requires WebGL2. Explore remains available with CPU rendering.');
-      return {renderer: gpu, compute: accelerated() ? compute : null, reference: options => {
-        const worker = referenceWorker(); if (!worker) return Promise.resolve(TetraReference.compute(options));
-        const id = references.nextId++;
-        return new Promise((resolve, reject) => { references.waiters.set(id, {resolve, reject}); worker.postMessage({type: 'reference', id, options}); });
-      }};
+      return {renderer: gpu, compute: accelerated() ? compute : null, reference: options => ensureReferenceOptions(options)};
     }
   });
   $('openStudioBtn').onclick = () => studio.enter();

@@ -44,3 +44,18 @@ test('unsupported source size, float target or device loss fail without reducing
  const unavailable=renderer();unavailable.floatColor=false;p.numerics.iterations='fixed';p.numerics.fixedIterations=8192;await assert.rejects(R.prepare(p,{renderer:unavailable,size:{width:64,height:64},yieldTask:async()=>{}}),/float render targets/);
  let lost=false;const failing=renderer({lost:()=>lost});p.numerics.fixedIterations=1024;const session=await R.prepare(p,{renderer:failing,size:{width:64,height:64},yieldTask:async()=>{}});lost=true;await assert.rejects(session.renderBase(0),/device was lost/);assert.equal(failing.calls.draws.length,0);await session.dispose();
 });
+test('offline WebGPU fills every requested sample within capacity and retains compatible measured rates',async()=>{
+ const p=project();p.shot.motion='travel';p.shot.end.span='4';const gpu=renderer(),batches=[];
+ const compute={failed:false,pending:new Map(),pipeline(){},kernel:()=> 'direct',capacity:()=>256,draw:async(renderer,frame,scene,samples,threshold,tiles)=>{
+  const pixels=tiles.reduce((sum,t)=>sum+t.width*t.height,0);assert.ok(pixels*samples<=256);assert.equal(samples,4);assert.equal(threshold,0);assert.equal(scene.blaPolicy,'deterministic');batches.push(pixels);return true;
+ },complete(){}};
+ const session=await R.prepare(p,{renderer:gpu,compute,size:{width:31,height:17}});
+ for(const k of [0,1]){const before=batches.length,frame=await session.renderBase(k);frame.release();assert.equal(batches.slice(before).reduce((a,b)=>a+b,0),31*17);}
+ assert.equal(session.diagnostics().completedFrames,2);await session.dispose();
+});
+test('offline rendering preserves higher precision metadata on a shared reference',async()=>{
+ const p=project(),gpu=renderer();p.shot.start.span=p.shot.end.span='1e-20';
+ let shared;
+ const session=await R.prepare(p,{renderer:gpu,size:{width:16,height:16},reference:options=>{shared={digits:140,iterations:options.iterations};return shared;}});
+ const frame=await session.renderBase(0);frame.release();assert.equal(shared.digits,140);await session.dispose();
+});

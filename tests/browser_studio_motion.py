@@ -60,47 +60,47 @@ def run():
             assert all(r['ratio'] < .5 and r['colourSpread'] > 15 and r['diagnostics']['motionPasses'] == 43 for r in result), result
             suite.record('Camera-aligned AA4/16 motion reduces variation without broad edge trails; first frame, seek, extreme jump and Original stay exact', result)
             page.click('#openStudioBtn')
-            page.wait_for_function('()=>tetraStudioDiagnostics.preview?.displayedK===0 && !tetraStudioDiagnostics.preview.pending')
-            page.wait_for_timeout(700)
-            page.evaluate('''()=>{window.__prepareTimes=[];const prepare=TetraStudioRender.prepare;TetraStudioRender.prepare=async(...args)=>{const t=performance.now(),r=await prepare(...args);__prepareTimes.push(performance.now()-t);return r;};}''')
-            # Delay orbit work to distinguish immediate feedback from waiting
-            # for a completed frame. The completed source must remain intact.
-            page.evaluate('''()=>{window.__delay=true;const prepare=TetraStudioRender.prepare;TetraStudioRender.prepare=async(...args)=>{if(__delay)await new Promise(r=>setTimeout(r,180));return prepare(...args);};}''')
-            before = page.locator('#studioCanvas').evaluate('(canvas)=>canvas.toDataURL()')
+            page.wait_for_function('()=>tetraStudioDiagnostics.entered && tetraStudioDiagnostics.endpoint==="start"')
+            page.evaluate("""()=>{window.__prepareTimes=[];const prepare=TetraStudioRender.prepare;TetraStudioRender.prepare=async(...args)=>{const t=performance.now();await new Promise(r=>setTimeout(r,180));const result=await prepare(...args);__prepareTimes.push(performance.now()-t);return result;};}""")
+            before=page.evaluate('()=>({view:tetraDiagnostics.view,transform:document.querySelector("#gpuCanvas").style.transform})')
             page.click('#studioZoomIn')
-            after = page.locator('#studioCanvas').evaluate('(canvas)=>canvas.toDataURL()')
-            assert before != after, 'Framing waited for delayed GPU work'
-            page.wait_for_function('()=>!tetraStudioDiagnostics.preview.pending && JSON.stringify(tetraStudioDiagnostics.displayedCamera)===JSON.stringify(tetraStudioDiagnostics.draft)')
-            page.evaluate('()=>{__delay=false;}')
-            page.click('#studioZoomOut')
-            page.wait_for_function('()=>!tetraStudioDiagnostics.preview.pending')
-            timing = page.evaluate('()=>__prepareTimes')
-            assert timing and max(timing) < 100, timing
-            suite.record('Public zoom controls immediately reproject completed pixels while delayed GPU work refines; held planning stays under 100 ms', timing)
-            page.click('#studioApply');page.click('#studioZoomIn');page.click('#studioApply');page.click('#studioPlay')
-            page.wait_for_function('()=>tetraStudioDiagnostics.preview.displayedK>=3')
+            after=page.evaluate('()=>({view:tetraDiagnostics.view,transform:document.querySelector("#gpuCanvas").style.transform})')
+            assert before['view'] != after['view'] and before['transform'] != after['transform'], (before,after)
+            assert page.evaluate('()=>__prepareTimes.length')==0
+            assert page.evaluate('()=>tetraStudioDiagnostics.owner==="explore" && tetraStudioDiagnostics.preview.suspended')
+            suite.record('Shared View zoom reprojects immediately while delayed Studio rendering stays suspended during framing')
+            page.click('#studioApply');page.click('#studioEnd')
+            page.wait_for_function('()=>tetraStudioDiagnostics.endpoint==="end" && !tetraStudioDiagnostics.transitioning')
+            page.click('#studioZoomIn');page.click('#studioZoomIn');page.click('#studioApply');page.click('#studioPlay')
+            page.wait_for_function('()=>tetraStudioDiagnostics.preview.displayedK>=3 && tetraStudioDiagnostics.fx?.motionPasses>0',timeout=120000)
             state = page.evaluate('()=>tetraStudioDiagnostics')
             assert state['render']['completedFrames'] > 0 and state['fx']['motionPasses'] > 0, state
             assert max(state['requested']['width'], state['requested']['height']) <= 1024
-            page.click('#studioPause')
-            suite.record('Actual Start → End → Preview uses motion stability and bounded display-density resolution')
+            page.get_by_role('button',name='Pause preview',exact=True).click()
+            assert page.evaluate('()=>tetraStudioDiagnostics.owner')=='studio'
+            suite.record('Actual Start → End → Preview uses motion stability and bounded display-density resolution; pause retains ownership')
             page.close()
             page = suite.watch(browser.new_page(viewport={'width': 1440, 'height': 900}, device_scale_factor=2))
-            page.add_init_script('''window.__renders=[];window.__fxs=[];window.__abortedAtEntry=0;addEventListener('load',()=>{
+            page.add_init_script("""window.__renders=[];window.__fxs=[];window.__abortedAtEntry=0;addEventListener('load',()=>{
              const prepare=TetraStudioRender.prepare;TetraStudioRender.prepare=async(...a)=>{if(a[1]?.signal?.aborted)__abortedAtEntry++;const r=await prepare(...a);__renders.push(r);return r;};
              const create=TetraStudioFX.createCompositor;TetraStudioFX.createCompositor=(...a)=>{const f=create(...a);__fxs.push(f);return f;};
-            });''')
-            page.goto(BASE);page.click('#openStudioBtn')
-            page.wait_for_function('()=>tetraStudioDiagnostics.requested?.quality==="detailed" && !tetraStudioDiagnostics.preview.pending && tetraStudioDiagnostics.thumbnails.completed===tetraStudioDiagnostics.thumbnails.revision')
-            page.evaluate('''()=>{window.__oldRender=__renders.filter(r=>r.plan.size.height>512&&r.diagnostics().cachedFrames===1).at(-1);const fx=__fxs.filter(f=>f.canvas.height>512).at(-1),dispose=fx.dispose;fx.dispose=async()=>{await dispose();throw Error('injected FX cleanup failure');};}''')
-            page.click('#studioZoomIn')
-            page.wait_for_function('()=>!tetraStudioDiagnostics.preview.pending && JSON.stringify(tetraStudioDiagnostics.displayedCamera)===JSON.stringify(tetraStudioDiagnostics.draft)')
-            assert page.evaluate('()=>__oldRender.diagnostics().cachedFrames') == 0, 'FX cleanup failure skipped source cleanup'
-            page.wait_for_function('()=>tetraStudioDiagnostics.requested.quality==="detailed" && !tetraStudioDiagnostics.preview.pending')
-            page.evaluate('''()=>{const r=__renders.filter(r=>r.plan.size.height>512&&r.diagnostics().cachedFrames===1).at(-1),dispose=r.dispose;window.__disposalStarted=false;r.dispose=async()=>{__disposalStarted=true;await new Promise(resolve=>setTimeout(resolve,400));await dispose();};}''')
-            page.click('#studioZoomOut');page.wait_for_function('()=>__disposalStarted');page.click('#studioZoomIn')
-            page.wait_for_function('()=>__abortedAtEntry>0 && !tetraStudioDiagnostics.preview.pending && JSON.stringify(tetraStudioDiagnostics.displayedCamera)===JSON.stringify(tetraStudioDiagnostics.draft)')
-            suite.record('FX cleanup failure still releases its source; input during delayed disposal aborts preparation before camera work')
+            });""")
+            page.goto(BASE);page.click('#openStudioBtn');page.click('#studioPreviewView')
+            page.wait_for_function('()=>tetraStudioDiagnostics.requested?.quality==="detailed" && !tetraStudioDiagnostics.preview.pending && tetraStudioDiagnostics.thumbnails.completed===tetraStudioDiagnostics.thumbnails.revision',timeout=120000)
+            page.evaluate("""()=>{window.__oldRender=__renders.filter(r=>r.plan.size.height>512&&r.diagnostics().cachedFrames===1).at(-1);const fx=__fxs.filter(f=>f.canvas.height>512).at(-1),dispose=fx.dispose;fx.dispose=async()=>{await dispose();throw Error('injected FX cleanup failure');};}""")
+            page.click('#studioEnd')
+            page.wait_for_function('()=>!tetraStudioDiagnostics.transitioning && tetraStudioDiagnostics.notice.includes("injected FX cleanup failure")')
+            assert page.evaluate('()=>__oldRender.diagnostics().cachedFrames')==0, 'FX cleanup failure skipped source cleanup'
+            page.click('#studioEnd')
+            page.wait_for_function('()=>tetraStudioDiagnostics.endpoint==="end" && tetraStudioDiagnostics.owner==="explore"')
+            page.click('#studioPreviewView')
+            page.wait_for_function('()=>tetraStudioDiagnostics.requested.quality==="detailed" && !tetraStudioDiagnostics.preview.pending',timeout=120000)
+            page.evaluate("""()=>{const r=__renders.filter(r=>r.plan.size.height>512&&r.diagnostics().cachedFrames===1).at(-1),dispose=r.dispose;window.__disposalStarted=false;r.dispose=async()=>{__disposalStarted=true;await new Promise(resolve=>setTimeout(resolve,400));await dispose();};}""")
+            page.click('#studioEnd');page.wait_for_function('()=>__disposalStarted');page.click('#studioStart')
+            page.wait_for_function('()=>!tetraStudioDiagnostics.transitioning && tetraStudioDiagnostics.endpoint==="start" && tetraStudioDiagnostics.owner==="explore"')
+            assert page.evaluate('()=>__abortedAtEntry')==0
+            assert page.evaluate('()=>__renders.every(r=>r.diagnostics().cachedFrames===0)')
+            suite.record('FX cleanup failure still releases source; delayed disposal drains before the final requested endpoint regains Explore ownership')
             suite.no_errors()
             browser.close()
         suite.write(True)

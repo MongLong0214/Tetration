@@ -1,5 +1,16 @@
 # Changelog
 
+### 1.2.0 · Shared View Studio and bounded export — 2026-10-13
+
+- Add output-frame capture and framing through Explore's current camera and input,
+  with one renderer, pan/zoom authority and scheduled GPU work.
+- Bound shared interactive and offline GPU batches by device capacity; retain
+  requested samples, numerical limits and deterministic export reuse.
+- Cache immutable Studio frame content, preserve preview ownership through pause,
+  cancellation and GPU loss, and report active/suspended export timings.
+- Add desktop/mobile Studio regressions and native-browser deep-zoom/export
+  performance qualification.
+
 ### Studio first-video UX · 1.1.0 follow-up — 2026-10-11
 
 - Expose Studio on mobile; use real Motion/Look/Rhythm tabs and nonmodal settings

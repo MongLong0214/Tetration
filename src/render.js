@@ -13,6 +13,22 @@
   for(let y=0;y<height;y+=edge)for(let x=0;x<width;x+=edge)out.push({x,y,width:Math.min(edge,width-x),height:Math.min(edge,height-y)});
   return out.sort((a,b)=>(a.x+a.width/2-width/2)**2+(a.y+a.height/2-height/2)**2-((b.x+b.width/2-width/2)**2+(b.y+b.height/2-height/2)**2));
  }
+ function tileEdge(iterations,samples){return Math.max(16,Math.min(256,Math.round(Math.sqrt(4096*256*16/(iterations*samples))/16)*16));}
+ // Shared final-frame scheduling. Capacity bounds even the very first tile;
+ // measured cheap tiles may grow a batch at most twofold before a dense basin.
+ function batchPolicy({backend='webgl',effective,samples,capacity=Infinity,partial=false,highCap=false,edge,rate=60,area=Infinity,batchMs=28}){
+  const limit=Math.floor(capacity/samples);
+  if(!(limit>=1))throw Error('GPU sample capacity is too small');
+  edge=edge??(backend==='webgpu'?Math.min(256,2*tileEdge(effective,samples)):partial?Math.min(highCap?32:64,tileEdge(effective,1)):highCap?Math.min(16,tileEdge(effective,samples)):tileEdge(effective,samples));
+  edge=Math.min(edge,Math.floor(Math.sqrt(limit)));
+  const minimum=edge*edge,work=backend==='webgpu'?4e9:8e7;
+  const maxPixels=Math.min(limit,backend==='webgl'&&(highCap||partial)?minimum:Math.max(minimum,Math.floor(work/(effective*samples))));
+  return {edge,maxPixels,area,batchMs,budget:Math.max(minimum,Math.min(maxPixels,4*minimum,rate*batchMs))};
+ }
+ function adaptBatch(policy,pixels,elapsedMs){
+  const ms=Math.max(.5,elapsedMs),rate=pixels/ms,minimum=policy.edge**2;
+  return {rate,budget:ms>3*policy.batchMs?minimum:Math.min(policy.area,policy.maxPixels,2*pixels,Math.max(minimum,rate*policy.batchMs))};
+ }
  // Fit the selected world rectangle without stretching it. Camera arithmetic stays
  // in the fixed decimal domain, including offsets much smaller than Number's ULP.
  function boxView(F,view,width,height,start,end){
@@ -64,6 +80,6 @@
   if(F.abs(x)+F.abs(y)<view.span*2n){x+=view.span*37n/100n;y+=view.span*29n/100n;}
   return {x,y:y<0n?-y:y};
  }
- root.TetraRender={AUTO_STEPS,autoIterations,size,tiles,boxView,exposedTiles,huePixels,perturbScene,referencePoint};
+ root.TetraRender={AUTO_STEPS,autoIterations,size,tiles,tileEdge,batchPolicy,adaptBatch,boxView,exposedTiles,huePixels,perturbScene,referencePoint};
  if(typeof module!=='undefined')module.exports=root.TetraRender;
 })(globalThis);
