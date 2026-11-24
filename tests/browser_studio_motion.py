@@ -61,6 +61,9 @@ def run():
             suite.record('Camera-aligned AA4/16 motion reduces variation without broad edge trails; first frame, seek, extreme jump and Original stay exact', result)
             page.click('#openStudioBtn')
             page.wait_for_function('()=>tetraStudioDiagnostics.entered && tetraStudioDiagnostics.endpoint==="start"')
+            # Raw is the default; motion stability is an explicit Output choice.
+            page.click('#studioVideo');page.get_by_label('Motion stability',exact=True).select_option('stable');page.click('#studioExportClose');page.click('#studioStart')
+            page.wait_for_function('()=>tetraStudioDiagnostics.endpoint==="start" && !tetraStudioDiagnostics.transitioning')
             page.evaluate("""()=>{window.__prepareTimes=[];const prepare=TetraStudioRender.prepare;TetraStudioRender.prepare=async(...args)=>{const t=performance.now();await new Promise(r=>setTimeout(r,180));const result=await prepare(...args);__prepareTimes.push(performance.now()-t);return result;};}""")
             before=page.evaluate('()=>({view:tetraDiagnostics.view,transform:document.querySelector("#gpuCanvas").style.transform})')
             page.click('#studioZoomIn')

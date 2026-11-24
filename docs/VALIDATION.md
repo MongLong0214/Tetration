@@ -216,8 +216,9 @@ a controlled document.hidden getter, not an OS sleep certification.
 
 The final code review found and repaired a paused preview that stayed suspended
 after a hidden tab became visible. The same added scenario fails before repair
-and passes after it: Look edits render again without autoplay. Active export still
-requires explicit Resume; a ready result retains its modal and URL across hiding.
+and passes after it: Look edits render again without autoplay. An active export
+now resumes automatically when the tab is visible again (Resume remains as a
+fallback); a ready result retains its modal and URL across hiding.
 Hiding during finalization cannot publish a canceled late result.
 
 Small complete AA4 deep frames cover Horizon 7e−80→7e−100, including the planned

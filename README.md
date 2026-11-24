@@ -43,10 +43,13 @@ actual display pixels within a 1536px / 1.5MP budget. Video uses its own output
 size and 4/16 samples. All effects retain their values when switched off.
 
 Video export computes every selected sample offline, then writes a silent MP4/AVC
-or confirmed WebM/VP9 in the browser: 720/1080, three aspects, 24/30 fps, 2–20 seconds.
+or confirmed WebM/VP9 in the browser: 720/1080, three aspects, 24/30 fps, 2–120 seconds, an optional hold on the End camera,
+12/24/40 Mbps (1080) bitrate tiers and Raw or Stable motion. The Motion tab shows the
+total zoom, peak per-frame zoom and a recommended length. Exports estimated above
+64 MiB stream to a file you choose where the browser allows it.
 It needs WebGL2 and a supported WebCodecs encoder; non-neutral FX also need
-half-float targets. A hidden export waits at the next frame boundary for explicit
-Resume. File ready appears after finalization and cleanup; files stay on the device.
+half-float targets. A hidden export waits at the next frame boundary and resumes
+automatically when the tab is visible. File ready appears after finalization and cleanup; files stay on the device.
 See [Motion Studio](docs/MOTION_STUDIO.md) for editing, output and practical limits.
 
 ## Run

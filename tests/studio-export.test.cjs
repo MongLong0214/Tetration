@@ -79,3 +79,53 @@ test('stage timings exclude suspension, stay monotonic, and cover finalize and c
  let previous=0;for(const s of f.states.filter(s=>s.active||s.state==='ready')){assert.ok(s.activeMs>=previous);previous=s.activeMs;for(const value of [s.fps,s.elapsedMs,s.activeMs,...Object.values(s.timings)])assert.ok(Number.isFinite(value)&&value>=0);}
  clock+=5000;assert.equal(f.exporter.snapshot().elapsedMs,result.elapsedMs);f.exporter.clearResult();
 });
+
+test('the selected bitrate reaches both probes and the cache-keyed sink configuration',async()=>{
+ for(const [bitrate,expected] of [['standard',12e6],['high',24e6],['master',40e6]]){
+  const probes=[];const f=fixture({probe:async config=>{probes.push(config.bitrate);return {supported:true,config:{...config,container:'mp4',codec:'avc'}};}});
+  f.p.output.bitrate=bitrate;const state=await f.exporter.start(f.p,f.resources);assert.equal(state.state,'ready');assert.deepEqual(probes,[expected]);assert.equal(state.config.bitrate,expected);
+ }
+ const probes=[],f=fixture({probe:async config=>{probes.push([config.container,config.bitrate,config.resolution]);return config.container==='mp4'?{supported:false,reason:'No AVC'}:{supported:true,config:{...config,codec:'vp9'}};}});
+ f.p.output.container='mp4';f.p.output.resolution=720;f.p.output.bitrate='master';await f.exporter.start(f.p,f.resources);assert.deepEqual(probes,[['mp4',20e6,720],['webm',20e6,720]]);
+});
+test('an estimate above the in-memory limit fails before any GPU work unless a file stream is supplied',async()=>{
+ const p=M.setDuration(M.createProject({x:'0',y:'0',span:'8'}),60);p.output.bitrate='high';
+ assert.ok(Export.estimateBytes(p)>1.8e8&&Export.estimateBytes(p)<1.9e8);assert.equal(Export.estimateBytes(M.setDuration(M.createProject({x:'0',y:'0',span:'8'}),40))<64*1024*1024,true);
+ const f=fixture({maxBytes:64*1024*1024}),rejected=await f.exporter.start(p,f.resources);
+ assert.equal(rejected.state,'failed');assert.equal(rejected.errorCode,'OUTPUT_TOO_LARGE_ESTIMATE');assert.match(rejected.error,/Shorten the duration.*lower bitrate.*720p/);assert.match(rejected.error,/\b17\d MiB|\b18\d MiB/);
+ assert.equal(f.counters.renders,0);assert.ok(!f.events.includes('drain')&&!f.events.includes('export')&&!f.events.includes('prepare'));assert.equal(f.events.at(-1),'studio');assert.equal(rejected.active,false);
+ const small=fixture({maxBytes:1000}),stream={aborts:0,abort(){this.aborts++;return Promise.resolve();}};let sinkOptions=null;
+ const streamed=fixture({maxBytes:1000,createSink:async(canvas,config,options)=>{sinkOptions=options;return {addFrame:async()=>{},finish:async()=>({file:true,bytes:123456,extension:'mp4',mimeType:'video/mp4',submittedFrames:60}),cancel:async()=>{}};}});
+ const done=await streamed.exporter.start(streamed.p,{...streamed.resources,fileStream:stream,fileName:'Picked.mp4'});
+ assert.equal(done.state,'ready');assert.equal(sinkOptions.fileStream,stream);assert.equal(done.result.file,true);assert.equal(done.result.filename,'Picked.mp4');assert.equal(done.result.bytes,123456);assert.equal(done.url,null);assert.equal(stream.aborts,0);
+ const refused=await small.exporter.start(small.p,small.resources);assert.equal(refused.errorCode,'OUTPUT_TOO_LARGE_ESTIMATE');
+});
+test('a file stream that was never handed to a sink is aborted when export fails first',async()=>{
+ const stream={aborts:0,abort(){this.aborts++;return Promise.resolve();}},f=fixture({maxBytes:1000,probe:async()=>({supported:false,reason:'unsupported'})});
+ const state=await f.exporter.start(f.p,{...f.resources,fileStream:stream});assert.equal(state.state,'failed');assert.equal(stream.aborts,1);
+});
+test('Stable passes the motion filter with one constant sequence; Raw and Hold do not',async()=>{
+ const run=async(temporal,motion)=>{
+  const options=[];const f=fixture({createCompositor:()=>({canvas:{},compose:async(frame,option)=>{options.push(option);},dispose:async()=>{}})});
+  f.p.output.temporal=temporal;f.p.shot.motion=motion;if(motion==='travel')f.p.shot.end.span='4';const state=await f.exporter.start(f.p,f.resources);assert.equal(state.state,'ready');return options;
+ };
+ const stable=await run('stable','travel');assert.equal(stable.length,60);assert.ok(stable.every(o=>o.motion===true&&o.sequence===1));assert.deepEqual(stable.map(o=>o.k),Array.from({length:60},(_,k)=>k));
+ for(const options of [await run('raw','travel'),await run('stable','hold'),await run('raw','hold')])assert.ok(options.every(o=>!('motion' in o)&&!('sequence' in o)));
+});
+test('every exported frame records its numerical path, backend and render time without changing the grid',async()=>{
+ let clock=0;const calls=[],states=Array.from({length:60},(_,k)=>k<20?{mode:'direct',descriptor:null}:{mode:'perturb',descriptor:k<40?0:1});
+ const f=fixture({now:()=>clock,prepare:async value=>({backend:'webgpu',numerical:{states},plan:{size:M.dimensions(value.output),extent:M.dimensions(value.output),iterations:384,frames:Array.from({length:60},()=>({camera:value.shot.start}))},renderBase:async(k,profile,signal,option)=>{calls.push([k,profile,option]);clock+=k+1;return {release(){}};},dispose:async()=>{}})});
+ const state=await f.exporter.start(f.p,f.resources);assert.equal(state.state,'ready');const frames=state.profile.frames;assert.equal(frames.length,60);
+ for(const [k,row] of frames.entries()){assert.deepEqual(row,{k,mode:states[k].mode,descriptor:states[k].descriptor,backend:'webgpu',renderMs:k+1});}
+ assert.deepEqual(frames.map(row=>row.descriptor).filter((value,index,all)=>value!==all[index-1]),[null,0,1]);assert.equal(state.timings.renderMs,frames.reduce((sum,row)=>sum+row.renderMs,0));
+ assert.ok(calls.every(([k,profile,option],index)=>k===index&&profile==='final'&&option.fenceBatch===4),'only export asks for batched fences');assert.equal(f.frames.length,60);
+ const plain=await fixture().exporter.start(M.setDuration(M.createProject({x:'0',y:'0',span:'8'}),2),{renderer:{}});assert.equal(plain.profile.frames.length,60);assert.equal(plain.profile.frames[0].mode,null);
+});
+test('a tab that becomes visible again is resumed by one resume() call without losing or repeating frames',async()=>{
+ const add=deferred(),started=deferred();let adds=0;const ks=[];const f=fixture({createSink:async()=>({addFrame:async time=>{adds++;ks.push(time.timestampUs);if(adds===1){started.resolve();await add.promise;}},finish:async()=>({blob:new Blob(['encoded']),bytes:7,extension:'mp4'}),cancel:async()=>{}})});
+ const work=f.exporter.start(f.p,f.resources);await started.promise;f.hide(true);add.resolve();await tick();assert.equal(f.exporter.snapshot().state,'suspended');
+ f.exporter.resume();await tick();assert.equal(f.exporter.snapshot().state,'suspended','still hidden: nothing resumes');
+ f.hide(false);await tick();assert.equal(f.exporter.snapshot().state,'suspended','becoming visible does not resume by itself; the UI calls resume() on visibilitychange');
+ f.exporter.resume();f.exporter.resume();assert.equal((await work).state,'ready');assert.equal(adds,60);assert.deepEqual(ks,Array.from({length:60},(_,k)=>M.timing(f.frozen,k).timestampUs));
+ f.exporter.resume();assert.equal(f.exporter.snapshot().state,'ready');f.exporter.clearResult();
+});
