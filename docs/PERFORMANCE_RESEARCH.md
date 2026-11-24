@@ -485,6 +485,30 @@ Chromium 비교의 AA4/AA16 각각 48개 조합, 총 138,240픽셀에서 기존 
 
 최종 동일 코드 `37372511644`의 두 번째 attempt는 기본 x86 Linux/native macOS의 17개 스위트·281검사·예외 0과 단위 137개·lint·build를 모두 통과했다. 이전에 통과한 작업은 보존하고 미완료 작업만 재실행했다. Chromium·WebKit maximum 각각 12개는 추적을 끈 일반 실행이다. 별도 Chromium 추적 `37375439166`도 12개를 통과했다. 첫 attempt에서 Chromium 수치 비교 로그가 멈춘 실행은 미완료로 남기며, 내부 host/driver 원인을 확정하거나 코드로 고쳤다고 주장하지 않는다. 두 attempt 사이 제품 코드 변경은 없다.
 
+## 2026-11-24: WebGPU Studio export readback and upload are not the bottleneck
+
+Issue #37 asked whether the WebGPU export path (`compute.draw` submits, waits for `mapAsync` of the packed pixels and counters, then uploads each tile with `texSubImage2D`) loses enough time to readback and upload to justify bounded staging, merged uploads or a GPU-side resolve. It does not, so nothing in `src/` changed.
+
+Fixture and environment: Chrome for Testing 151 / ANGLE Metal, Apple M2 Pro, WebGPU, `Studio` project at the Horizon centre, span `1.12e-98` to `7e-100` (linear), 1920x1080 16:9, 30 fps, AA16, neutral look, 4096 iterations. This is a subset: frames 0-5 of the 150-frame shot, 3 fresh browser runs (3 cold frames; 15 warm frames, frames 1-5 of each run). Cold is frame 0 of a fresh page, with the WebGPU pipelines already compiled and the reference orbit and BLA built in that frame. The harness wrapped `queue.submit`, `queue.onSubmittedWorkDone`, `waitForCompletion`, `readback`, `gl.texSubImage2D` and `renderer.fence` in-page and lived outside the repository. Medians per frame:
+
+| Stage (per frame) | Cold | Warm | Share of warm frame |
+| --- | --- | --- | --- |
+| `renderBase` total | 1951 ms | 1895 ms | 100% |
+| Batches, each with one readback round | 72 | 71 | |
+| Extra drain rounds | 0 | 0 | |
+| CPU encode to submit | 5.4 ms | 5.2 ms | 0.3% |
+| Submit to `onSubmittedWorkDone` | 1895 ms | 1874 ms | 98.9% |
+| Wait for `mapAsync` and error scopes | 1894 ms | 1874 ms | 98.9% |
+| Map range, drain check and uploads | 3.1 ms | 2.7 ms | 0.1% |
+| of which `texSubImage2D` (2040 calls) | 2.1 ms | 1.9 ms | 0.1% |
+| Final WebGL fence | 7.7 ms | 6.7 ms | 0.4% |
+
+The same frames without instrumentation took a median 2028 ms cold and 1951 ms warm. These three uninstrumented runs were slower than the instrumented ones, so run-to-run noise on this machine is larger than any instrumentation cost and the table is not corrected for it. Frame pixel hashes after the FX compose were identical across all six runs.
+
+The map wait equals the GPU execution time: `mapAsync` resolves within about 2 ms of `onSubmittedWorkDone`, and the batch is only 20-35k pixels, so the transfer itself is negligible on this unified-memory device. Time outside the GPU wait (encode, map and upload, final fence) is about 15 ms, roughly 0.8% of a frame. The sum of the `draw` calls is within about 11 ms of `renderBase`, so the GPU is not idle between batches either. Overlapping the next batch with the previous readback could therefore recover at most about 1% here, which is far below the 20% threshold, and it would add a second read buffer and a second in-flight drain state to the cancellation and 10 s completion paths. We did not implement it.
+
+What dominates is GPU execution of the sample kernels. The wait does not separate the orbit kernel from the mask and resolve passes, because no timestamp queries were used, but each batch runs one drain round of those passes over about 29k pixels x 16 samples, so the orbit loop is the expected cost. Reaching the issue's 30% active-time target on this fixture therefore needs less GPU work per frame (for example better lane occupancy, BLA coverage or reuse of work between neighbouring frames) without lowering samples, resolution or iterations, not a change to readback or upload scheduling. The result is for this device, browser and fixture only.
+
 ## 라이브러리와 외부 구현의 활용 판단
 
 | 기술 또는 구현 | 참고하거나 적용할 부분 | 이번 변경에서의 상태 |
