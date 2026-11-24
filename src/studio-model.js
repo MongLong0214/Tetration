@@ -5,7 +5,7 @@
  const clone=value=>JSON.parse(JSON.stringify(value));
  const freeze=value=>{if(value&&typeof value==='object'){Object.values(value).forEach(freeze);Object.freeze(value);}return value;};
  const RULES=freeze({
-  duration:{min:2,max:120,default:10,unit:'s'},hold:{min:0,max:10,default:0,unit:'s'},speed:{min:0.5,max:5,default:1,unit:'×'},
+  duration:{min:2,max:120,default:10,unit:'s'},hold:{min:0,max:10,default:0,unit:'s'},speed:{min:1/12,max:5,default:1,unit:'×'},
   rollDeg:{min:-180,max:180,default:0,unit:'°'},
   hueDeg:{min:0,max:360,default:0,unit:'°'},hueRate:{min:-0.25,max:0.25,default:0,unit:'turns/s'},
   saturation:{min:0,max:2,default:1,unit:'×'},exposureEV:{min:-2,max:2,default:0,unit:'EV'},

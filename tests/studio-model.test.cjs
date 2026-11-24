@@ -7,7 +7,7 @@ function memory(){const values=new Map();return {values,getItem:key=>values.get(
 test('new project and quantized duration/speed/fps use one time axis',()=>{
  const p=project();assert.equal(p.look.palette,'ember');assert.deepEqual(p.shot.end,p.shot.start);assert.equal(p.shot.motion,'hold');
  for(const key of ['bloom','pulse','prism','kaleido','wave'])assert.equal(p.look[key].enabled,false);
- assert.equal(p.shot.frameCount,300);assert.equal(M.setSpeed(p,2).shot.frameCount,150);assert.equal(M.setSpeed(p,0.5).shot.frameCount,600);
+ assert.equal(p.shot.frameCount,300);assert.equal(M.setSpeed(p,2).shot.frameCount,150);assert.equal(M.setSpeed(p,0.5).shot.frameCount,600);assert.equal(M.setSpeed(p,1/12).shot.frameCount,3600);
  assert.equal(M.setFps(p,24).shot.frameCount,240);assert.equal(M.setDuration(p,2.01).shot.frameCount,60);
  for(const fps of [24,30]){const q=M.setFps(p,fps),frames=Array.from({length:q.shot.frameCount},(_,k)=>M.timing(q,k));assert.equal(frames.reduce((sum,s)=>sum+s.durationUs,0),10000000);assert.equal(frames.at(-1).timestampUs,Math.round(1e6*(q.shot.frameCount-1)/fps));assert.throws(()=>M.timing(q,q.shot.frameCount));}
  for(const value of [NaN,Infinity,1.9,120.01,'10'])assert.throws(()=>M.setDuration(p,value));assert.throws(()=>M.setFps(p,60));
