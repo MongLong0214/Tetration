@@ -5,7 +5,7 @@
  const clone=value=>JSON.parse(JSON.stringify(value));
  const freeze=value=>{if(value&&typeof value==='object'){Object.values(value).forEach(freeze);Object.freeze(value);}return value;};
  const RULES=freeze({
-  duration:{min:2,max:20,default:10,unit:'s'},speed:{min:0.5,max:5,default:1,unit:'×'},
+  duration:{min:2,max:120,default:10,unit:'s'},hold:{min:0,max:10,default:0,unit:'s'},speed:{min:0.5,max:5,default:1,unit:'×'},
   rollDeg:{min:-180,max:180,default:0,unit:'°'},
   hueDeg:{min:0,max:360,default:0,unit:'°'},hueRate:{min:-0.25,max:0.25,default:0,unit:'turns/s'},
   saturation:{min:0,max:2,default:1,unit:'×'},exposureEV:{min:-2,max:2,default:0,unit:'EV'},
@@ -17,7 +17,9 @@
   'wave.strengthEV':{min:0,max:1,default:0.35,unit:'EV'},'wave.fieldCycles':{min:0.25,max:4,default:1,unit:'cycles'},'wave.speed':{min:-1,max:1,default:0.25,unit:'cycles/s'},amount:{min:0,max:1,default:1,unit:'×'},
   fixedIterations:{min:64,max:16384,default:1024,integer:true,unit:'iterations'}
  });
- const ENUMS=freeze({palette:['aurora','ember','tidal','mono'],motion:['hold','travel'],fps:[24,30],easing:['linear','ease-in','ease-out','ease-in-out'],aspect:['16:9','9:16','1:1'],resolution:[720,1080],samples:[4,16],container:['auto','mp4','webm'],iterations:['auto-shot','fixed']});
+ const ENUMS=freeze({palette:['aurora','ember','tidal','mono'],motion:['hold','travel'],fps:[24,30],easing:['linear','ease-in','ease-out','ease-in-out'],aspect:['16:9','9:16','1:1'],resolution:[720,1080],samples:[4,16],container:['auto','mp4','webm'],bitrate:['standard','high','master'],temporal:['raw','stable'],iterations:['auto-shot','fixed']});
+ // Target video bitrates (bit/s) by resolution; Standard is the pre-v2 encoder default.
+ const BITRATES=freeze({standard:{720:6e6,1080:12e6},high:{720:12e6,1080:24e6},master:{720:20e6,1080:40e6}});
  function fail(code,message){const error=new Error(message);error.code=code;throw error;}
  function shape(value,keys,path){
   if(!value||typeof value!=='object'||Array.isArray(value)||![Object.prototype,null].includes(Object.getPrototypeOf(value)))fail('INVALID_PROJECT',path+' must be an object');
@@ -47,12 +49,15 @@
   return look;
  }
  function validate(value){
+  // v1 projects (import and saved storage) open with their original timing and the v1 output behaviour.
+  const v1=value?.schemaVersion===1;
   shape(value,['kind','schemaVersion','id','name','shot','look','output','numerics'],'project');
-  if(value.kind!=='tetra-motion'||value.schemaVersion!==1)fail('SCHEMA_VERSION','Unsupported Motion project schema');
-  shape(value.shot,['start','end','motion','frameCount','fps','easing'],'shot');
-  const fps=choice(value.shot.fps,'fps'),N=value.shot.frameCount;
-  if(!Number.isInteger(N)||N<RULES.duration.min*fps||N>RULES.duration.max*fps)fail('INVALID_PROJECT','frameCount must describe 2–20 seconds');
-  const shot={start:camera(value.shot.start),end:camera(value.shot.end),motion:choice(value.shot.motion,'motion'),frameCount:N,fps,easing:choice(value.shot.easing,'easing')};
+  if(value.kind!=='tetra-motion'||(!v1&&value.schemaVersion!==2))fail('SCHEMA_VERSION','Unsupported Motion project schema');
+  shape(value.shot,v1?['start','end','motion','frameCount','fps','easing']:['start','end','motion','frameCount','holdFrames','fps','easing'],'shot');
+  const fps=choice(value.shot.fps,'fps'),N=value.shot.frameCount,hold=v1?0:value.shot.holdFrames;
+  if(!Number.isInteger(N)||N<RULES.duration.min*fps||N>RULES.duration.max*fps)fail('INVALID_PROJECT','frameCount must describe 2–120 seconds');
+  if(!Number.isInteger(hold)||hold<0||hold>RULES.hold.max*fps||hold>N-2)fail('INVALID_PROJECT','holdFrames must be 0–10 seconds and leave at least 2 moving frames');
+  const shot={start:camera(value.shot.start),end:camera(value.shot.end),motion:choice(value.shot.motion,'motion'),frameCount:N,holdFrames:hold,fps,easing:choice(value.shot.easing,'easing')};
   shape(value.look,lookKeys,'look');
   const look={palette:choice(value.look.palette,'palette')};
   for(const key of lookKeys)if(RULES[key])look[key]=numeric(value.look[key],key);
@@ -62,16 +67,17 @@
    look[group]={enabled:value.look[group].enabled};for(const key of keys)look[group][key]=numeric(value.look[group][key],group+'.'+key);
   }
   if(look.hueDeg===360)look.hueDeg=0;if(look.pulse.phase===1)look.pulse.phase=0;
-  shape(value.output,['aspect','resolution','samples','container'],'output');
+  shape(value.output,v1?['aspect','resolution','samples','container']:['aspect','resolution','samples','container','bitrate','temporal'],'output');
   const output={};for(const key of ['aspect','resolution','samples','container'])output[key]=choice(value.output[key],key);
+  output.bitrate=v1?'standard':choice(value.output.bitrate,'bitrate');output.temporal=v1?'raw':choice(value.output.temporal,'temporal');
   shape(value.numerics,['iterations','fixedIterations'],'numerics');
-  return {kind:'tetra-motion',schemaVersion:1,id:text(value.id,'id'),name:text(value.name,'name'),shot,look,output,numerics:{iterations:choice(value.numerics.iterations,'iterations'),fixedIterations:numeric(value.numerics.fixedIterations,'fixedIterations')}};
+  return {kind:'tetra-motion',schemaVersion:2,id:text(value.id,'id'),name:text(value.name,'name'),shot,look,output,numerics:{iterations:choice(value.numerics.iterations,'iterations'),fixedIterations:numeric(value.numerics.fixedIterations,'fixedIterations')}};
  }
  function createProject(explore){
   const source=explore.camera||explore,start=camera({x:source.x,y:source.y,span:source.span,rollDeg:0});
-  return validate({kind:'tetra-motion',schemaVersion:1,id:root.crypto?.randomUUID?.()||'shot-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2),name:'Untitled shot',
-   shot:{start,end:{...start},motion:'hold',frameCount:RULES.duration.default*30,fps:30,easing:'ease-in-out'},look:neutralLook(explore.palette||'aurora'),
-   output:{aspect:'9:16',resolution:1080,samples:4,container:'auto'},numerics:{iterations:'auto-shot',fixedIterations:RULES.fixedIterations.default}});
+  return validate({kind:'tetra-motion',schemaVersion:2,id:root.crypto?.randomUUID?.()||'shot-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2),name:'Untitled shot',
+   shot:{start,end:{...start},motion:'hold',frameCount:RULES.duration.default*30,holdFrames:0,fps:30,easing:'ease-in-out'},look:neutralLook(explore.palette||'aurora'),
+   output:{aspect:'9:16',resolution:1080,samples:4,container:'auto',bitrate:'standard',temporal:'raw'},numerics:{iterations:'auto-shot',fixedIterations:RULES.fixedIterations.default}});
  }
  function byteLength(value){return new TextEncoder().encode(value).length;}
  function serialize(value){const result=JSON.stringify(validate(value));if(byteLength(result)>MAX_JSON_BYTES)fail('JSON_TOO_LARGE','Project exceeds 128 KiB');return result;}
@@ -79,10 +85,12 @@
   if(typeof raw!=='string'||byteLength(raw)>MAX_JSON_BYTES)fail('JSON_TOO_LARGE','Project exceeds 128 KiB');
   let value;try{value=JSON.parse(raw);}catch{fail('INVALID_JSON','Invalid project JSON');}return validate(value);
  }
- function setDuration(project,seconds){numeric(seconds,'duration');const result=clone(project);result.shot.frameCount=Math.round(seconds*result.shot.fps);return validate(result);}
+ function setDuration(project,seconds){numeric(seconds,'duration');const result=clone(project);result.shot.frameCount=Math.round(seconds*result.shot.fps);result.shot.holdFrames=Math.min(result.shot.holdFrames,result.shot.frameCount-2);return validate(result);}
+ function setHold(project,seconds){numeric(seconds,'hold');const result=clone(project);result.shot.holdFrames=Math.round(seconds*result.shot.fps);return validate(result);}
  function setSpeed(project,speed){numeric(speed,'speed');return setDuration(project,RULES.duration.default/speed);}
- function setFps(project,fps){choice(fps,'fps');const result=clone(project);result.shot.frameCount=Math.round(result.shot.frameCount/result.shot.fps*fps);result.shot.fps=fps;return validate(result);}
+ function setFps(project,fps){choice(fps,'fps');const result=clone(project),scale=fps/result.shot.fps;result.shot.frameCount=Math.round(result.shot.frameCount/result.shot.fps*fps);result.shot.holdFrames=Math.min(Math.round(result.shot.holdFrames*scale),result.shot.frameCount-2);result.shot.fps=fps;return validate(result);}
  function timing(project,k){const {frameCount:N,fps}=project.shot;if(!Number.isInteger(k)||k<0||k>=N)fail('INVALID_FRAME','Frame is outside the shot');const timestampUs=Math.round(1e6*k/fps);return {k,u:k/(N-1),seconds:k/fps,timestampUs,durationUs:Math.round(1e6*(k+1)/fps)-timestampUs};}
+ function bitrate(output){return BITRATES[output.bitrate][output.resolution];}
  function dimensions(output){const short=output.resolution,long=short===720?1280:1920;return output.aspect==='16:9'?{width:long,height:short}:output.aspect==='9:16'?{width:short,height:long}:{width:short,height:short};}
  function motionLabel(project){const {start,end,motion}=project.shot;if(motion==='hold')return 'Hold';const a=f.parse(start.span),b=f.parse(end.span);return b<a?'Tunnel In':b>a?'Tunnel Out':'Drift';}
  function changeKind(before,after){
@@ -117,16 +125,16 @@
    try{
     if(typeof raw!=='string'||byteLength(raw)>LIMIT*MAX_JSON_BYTES+1024)throw Error();
     const data=JSON.parse(raw);shape(data,['schemaVersion','projects'],'saved projects');
-    if(data.schemaVersion!==1||!Array.isArray(data.projects)||data.projects.length>LIMIT)throw Error();
+    if(![1,2].includes(data.schemaVersion)||!Array.isArray(data.projects)||data.projects.length>LIMIT)throw Error();
     const projects=data.projects.map(validate);if(new Set(projects.map(p=>p.id)).size!==projects.length)throw Error();return projects;
    }catch{fail('STORAGE_CORRUPT','Saved projects are damaged. Existing data was preserved; export JSON to keep your current work.');}
   }
-  function write(projects){try{storage.setItem(KEY,JSON.stringify({schemaVersion:1,projects}));}catch{fail('NOT_SAVED','Not saved. Storage is unavailable or full; export JSON to keep your work.');}}
+  function write(projects){try{storage.setItem(KEY,JSON.stringify({schemaVersion:2,projects}));}catch{fail('NOT_SAVED','Not saved. Storage is unavailable or full; export JSON to keep your work.');}}
   return {list:read,load(id){const project=read().find(p=>p.id===id);if(!project)fail('PROJECT_MISSING','Saved project was not found');return project;},
    save(value){const project=validate(value),projects=read(),index=projects.findIndex(p=>p.id===project.id);if(index<0){if(projects.length>=LIMIT)fail('STORAGE_LIMIT','Up to 10 projects can be saved. Delete a project or export JSON.');projects.push(project);}else projects[index]=project;write(projects);return project;},
    delete(id){const projects=read(),remaining=projects.filter(p=>p.id!==id);if(remaining.length!==projects.length)write(remaining);}
   };
  }
- root.TetraStudioModel={KEY,LIMIT,MAX_JSON_BYTES,UNDO_LIMIT,RULES,ENUMS,neutralLook,createProject,validate,serialize,deserialize,setDuration,setSpeed,setFps,timing,dimensions,motionLabel,changeKind,createSession,createStore};
+ root.TetraStudioModel={KEY,LIMIT,MAX_JSON_BYTES,UNDO_LIMIT,RULES,ENUMS,neutralLook,createProject,validate,serialize,deserialize,setDuration,setHold,setSpeed,setFps,timing,bitrate,dimensions,motionLabel,changeKind,createSession,createStore};
  if(typeof module!=='undefined')module.exports=root.TetraStudioModel;
 })(globalThis);
