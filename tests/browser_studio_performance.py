@@ -13,7 +13,7 @@ WORK = r'''async ({deep,hold}) => {
  const compute=await TetraCompute.create();if(!compute)throw Error('WebGPU comparison unavailable');
  let builds=0;const build=TetraCore.blaTable;TetraCore.blaTable=(...a)=>{builds++;return build(...a);};
  const p=M.createProject(deep?{x:'-0.605137938972379900971817048132147498249950297815856628491748908858224992290680363711703001492344905661729028182206',y:'0.437740442074800562969426586669113155808012201307319340609925561376648113051190710894591896027315034323404945092475',span:'7e-100'}:{x:'-2.5',y:'0',span:'1.8'});
- p.id='performance-shot';p.name='performance-shot';p.output={aspect:'16:9',resolution:720,samples:4,container:'mp4'};
+ p.id='performance-shot';p.name='performance-shot';Object.assign(p.output,{aspect:'16:9',resolution:720,samples:4,container:'mp4'});
  p.shot.fps=24;p.shot.frameCount=48;p.shot.motion=hold?'hold':'travel';p.shot.easing='linear';p.shot.end.span=deep?'3.5e-100':'0.9';
  const times={prepareMs:0,renderMs:0,fxMs:0,encodeMs:0,finalizeMs:0,cleanupMs:0},hashes=[],images={};
  const start=performance.now();let session,fx,sink,result,diagnostics;

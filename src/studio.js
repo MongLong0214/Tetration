@@ -50,12 +50,14 @@
    if(frame){overlay.style.left=(rect.left+frame.x)+'px';overlay.style.top=(rect.top+frame.y)+'px';overlay.style.width=frame.width+'px';overlay.style.height=frame.height+'px';overlay.style.transform=`rotate(${-frame.rollDeg}deg)`;}
    if(endpoint&&(lastFrameAspect!==ratio||lastFrameToken!==token)){try{bridge.applyCamera(draft,ratio,{history:false});lastFrameAspect=ratio;lastFrameToken=token;cameraError=null;}catch(reason){cameraError=reason.message;announce(cameraError);}$('studioApply').disabled=!!cameraError;}
   }
+  // Preview and export apply the same temporal filter; Raw has none.
+  const stable=()=>project().output.temporal==='stable'&&project().shot.motion==='travel';
   function currentShot(){const value=M.validate(project());if(endpoint){value.shot.start=copy(draft);value.shot.end=copy(draft);value.shot.motion='hold';}return value;}
   function previewSize(detailed=false){const output=M.dimensions(project().output),box=stage.getBoundingClientRect(),shot=currentShot().shot;let maxTexture=8192;try{maxTexture=bridge.resources().renderer.maxTexture;}catch{}
    return root.TetraStudioPreview.sizeFor({width:box.width,height:box.height,aspect:project().output.aspect,outputWidth:output.width,outputHeight:output.height,dpr:devicePixelRatio,detailed,motion:!endpoint&&shot.motion==='travel',maxTexture,rolled:shot.start.rollDeg!==0||(shot.motion==='travel'&&shot.end.rollDeg!==0)});
   }
   function requestBudget(detailed){const size=previewSize(detailed);if(!size)return null;return {...size,quality:detailed?'detailed':'quick',samples:detailed?project().output.samples:4};}
-  function frameNote(){if(endpoint){$('studioFrameNote').textContent=`${project().output.aspect} frame · ${Number(draft.span).toPrecision(4)} span`;$('studioDetailRetry').hidden=true;return;}if(!displayedSize){$('studioFrameNote').textContent='Preview · preparing';return;}const refining=requested&&(requested.width!==displayedSize.width||requested.height!==displayedSize.height||requested.samples!==displayedSamples);$('studioFrameNote').textContent=`Preview ${displayedSize.width} × ${displayedSize.height} · ${displayedSamples} samples${!endpoint&&!original&&project().shot.motion==='travel'?' · Smooth motion':''}${refining?' · Refining to '+requested.width+' × '+requested.height:''}${detailError?' · Detailed preview unavailable':''}`;$('studioDetailRetry').hidden=!detailError;}
+  function frameNote(){if(endpoint){$('studioFrameNote').textContent=`${project().output.aspect} frame · ${Number(draft.span).toPrecision(4)} span`;$('studioDetailRetry').hidden=true;return;}if(!displayedSize){$('studioFrameNote').textContent='Preview · preparing';return;}const refining=requested&&(requested.width!==displayedSize.width||requested.height!==displayedSize.height||requested.samples!==displayedSamples);$('studioFrameNote').textContent=`Preview ${displayedSize.width} × ${displayedSize.height} · ${displayedSamples} samples${!endpoint&&!original&&stable()?' · Stable motion':''}${refining?' · Refining to '+requested.width+' × '+requested.height:''}${detailError?' · Detailed preview unavailable':''}`;$('studioDetailRetry').hidden=!detailError;}
   function quick(){clearTimeout(detailTimer);detailTimer=null;detailError=null;requested=requestBudget(false)||requested;if(requested&&previewAllowed())preview.setRequest(requested);frameNote();}
   function scheduleDetailed(){if(detailTimer||!previewAllowed()||preview.state().playing||preview.state().suspended)return;const target=requestBudget(true);if(!target)return;if(detailError||JSON.stringify(target)===JSON.stringify(requested)){scheduleThumbnails();return;}detailTimer=setTimeout(()=>{detailTimer=null;if(!previewAllowed()||preview.state().playing||preview.state().suspended)return;requested=requestBudget(true);if(requested)preview.setRequest(requested);frameNote();},300);}
   $('studioDetailRetry').onclick=()=>{if(!previewAllowed())return;detailError=null;requested=requestBudget(true);if(requested&&!preview.setRequest(requested))preview.refresh({base:true});frameNote();};
@@ -81,7 +83,7 @@
   function makePreview(){
    const p=project();previewTiming={frameCount:p.shot.frameCount,fps:p.shot.fps};preview=root.TetraStudioPreview.create({frameCount:p.shot.frameCount,fps:p.shot.fps,
     renderBase:async(k,{signal,request})=>{checkPreview(signal);const target=request||requestBudget(false);if(!target)throw new DOMException('Preview area is hidden','AbortError');const pipe=await ensurePipeline(signal,{width:target.width,height:target.height});if(signal.aborted)throw new DOMException('Preview canceled','AbortError');checkPreview(signal);const base=await pipe.render.renderBase(k,target.quality==='quick'?'preview':'final',signal);base.pipe=pipe;return base;},
-    compose:(base,{k,signal,generation})=>{checkPreview(signal);composedSamples=base.samples;composedCamera=copy(base.pipe.render.plan.frames[k].camera);return base.pipe.fx.compose(base,{look:project().look,k,fps:project().shot.fps,rollDeg:base.pipe.render.plan.frames[k].camera.rollDeg,original,framing:!!endpoint,motion:project().shot.motion==='travel',sequence:generation,signal});},
+    compose:(base,{k,signal,generation})=>{checkPreview(signal);composedSamples=base.samples;composedCamera=copy(base.pipe.render.plan.frames[k].camera);return base.pipe.fx.compose(base,{look:project().look,k,fps:project().shot.fps,rollDeg:base.pipe.render.plan.frames[k].camera.rollDeg,original,framing:!!endpoint,motion:stable(),sequence:generation,signal});},
     present:(canvas)=>{if(!previewAllowed())return;displayedSamples=composedSamples;displayedCamera=composedCamera;displayedSize={width:canvas.width,height:canvas.height};detailError=null;if(stage.width!==canvas.width||stage.height!==canvas.height){stage.width=canvas.width;stage.height=canvas.height;}if(completedImage.width!==canvas.width||completedImage.height!==canvas.height){completedImage.width=canvas.width;completedImage.height=canvas.height;}completedContext.drawImage(canvas,0,0);context.drawImage(canvas,0,0);frameNote();},
     onState:state=>{if(!entered)return;$('studioScrub').value=state.desiredK;$('studioTime').textContent=`${(state.desiredK/project().shot.fps).toFixed(3)} s / ${(project().shot.frameCount/project().shot.fps).toFixed(3)} s${state.pending?' · Pending':''}`;$('studioPlay').setAttribute('aria-pressed',String(state.playing));$('studioPlay').setAttribute('aria-label',state.playing?'Pause preview':'Play preview');$('studioPlay').textContent=state.playing?'Pause':'Play';if(state.error){if(requested?.quality==='detailed'){detailError=state.error;frameNote();}else announce(state.error);}
      const look=project().look,spatial=look.amount>0&&((look.prism.enabled&&look.prism.amount>0&&look.prism.offsetRatio>0)||(look.kaleido.enabled&&look.kaleido.blend>0));
@@ -137,11 +139,12 @@
    for(const id of ['studioName','studioSave','studioFiles','studioHelp','studioUndo','studioRedo','leaveStudio','studioVideo'])$(id).disabled=locked;
    $('studioExportStart').hidden=locked||state.state==='ready';$('studioExportCancel').hidden=!locked;$('studioExportResume').hidden=state.state!=='suspended';$('studioExportClose').disabled=locked;
    $('studioExportProgress').max=state.total||project().shot.frameCount;$('studioExportProgress').value=state.submitted;
-   const names={idle:'Ready to export',preparing:state.config?'Preparing GPU':'Checking video support',rendering:`Rendering · ${state.submitted} / ${state.total} frames`,suspended:'Suspended · Resume when this tab is visible',finalizing:'Finalizing video',canceling:'Canceling · waiting for safe cleanup',canceled:'Export canceled',failed:'Export failed: '+state.error,ready:'File ready'};
+   const names={idle:'Ready to export',preparing:state.config?'Preparing GPU':'Checking video support',rendering:`Rendering · ${state.submitted} / ${state.total} frames`,suspended:'Suspended while this tab is hidden · continues automatically when visible',finalizing:'Finalizing video',canceling:'Canceling · waiting for safe cleanup',canceled:'Export canceled',failed:'Export failed: '+state.error,ready:'File ready'};
    if(state.state==='rendering')names.rendering+=` · ${(state.activeMs/1000).toFixed(1)} s`+(state.fps>0?` · ${state.fps.toFixed(1)} fps · ~${Math.ceil(state.etaMs/1000)} s left`:'');
    if(['finalizing','ready'].includes(state.state))names[state.state]+=` · ${(state.activeMs/1000).toFixed(1)} s active`;
+   if(state.state==='ready'&&state.result.file)names.ready=`Saved to ${state.result.filename} · ${(state.result.bytes/1048576).toFixed(1)} MiB · ${(state.activeMs/1000).toFixed(1)} s active`;
    $('studioExportState').textContent=names[state.state]+(state.state==='failed'?' · Retry starts from frame 0.':'');$('studioExportStart').textContent=['failed','canceled'].includes(state.state)?'Retry':'Create video';$('studioUseWebM').hidden=locked||!state.alternative;$('studioEditOutput').hidden=locked||state.state!=='failed';$('studioEditRotation').hidden=locked||state.errorCode!=='SOURCE_LIMIT';
-   $('studioReturnEdit').hidden=locked||!['ready','failed','canceled'].includes(state.state);$('studioDownload').hidden=state.state!=='ready';$('studioResultVideo').hidden=state.state!=='ready';
+   $('studioReturnEdit').hidden=locked||!['ready','failed','canceled'].includes(state.state);$('studioDownload').hidden=state.state!=='ready'||!state.url;$('studioResultVideo').hidden=state.state!=='ready'||!state.url;
    if(state.state==='ready'&&state.url){const video=$('studioResultVideo');if(video.getAttribute('src')!==state.url)video.src=state.url;const link=$('studioDownload');link.href=state.url;link.download=state.result.filename;link.textContent=`Download ${state.result.extension.toUpperCase()} · ${(state.result.bytes/1048576).toFixed(1)} MiB`;}
    else{const video=$('studioResultVideo');if(video.hasAttribute('src')){video.pause();video.removeAttribute('src');video.load();}$('studioDownload').removeAttribute('href');}
    if(!locked)sync();
@@ -195,6 +198,13 @@
   }));
   const reverse=document.createElement('button');reverse.textContent='Reverse Path';reverse.onclick=()=>transition(async()=>{if(await settleDraft())edit(p=>C.reverseEndpoints(p));});motion.append(reverse);
   numeric(motion,'Duration','duration',{rule:'duration',step:1/30,read:()=>project().shot.frameCount/project().shot.fps,write:(p,v)=>M.setDuration(p,v)});
+  numeric(motion,'Hold at end','hold',{rule:'hold',step:1/30,read:()=>project().shot.holdFrames/project().shot.fps,write:(p,v)=>M.setHold(p,v),description:'Stays on the End camera after a Tunnel path. Counts toward Duration.'});
+  const zoomNote=document.createElement('p'),recommend=document.createElement('button');zoomNote.id='studioZoomRate';zoomNote.className='studio-effect-note';recommend.textContent='Use recommended length';
+  recommend.onclick=()=>transition(async()=>{if(await settleDraft()){const seconds=C.zoomRate(project()).recommendedSeconds;edit(p=>M.setDuration(p,Math.min(M.RULES.duration.max,Math.max(M.RULES.duration.min,seconds))));}});motion.append(zoomNote,recommend);
+  records.push(()=>{
+   if(!session)return;const r=C.zoomRate(project());recommend.hidden=!r.zooming;recommend.disabled=exporter.snapshot().active;
+   zoomNote.textContent=r.zooming?`Zoom ${r.total<1e4?r.total.toFixed(2):r.total.toExponential(2)}× (${r.decades.toFixed(2)} decades) · peak ${r.peakRatio.toFixed(3)}× per frame · ${r.peakDecadesPerSecond.toFixed(2)} decades/s · recommended ${r.recommendedSeconds.toFixed(1)} s for at most ${r.guideRatio}× per frame${r.recommendedSeconds>M.RULES.duration.max?' (above the '+M.RULES.duration.max+' s maximum)':''}`:'No zoom on this path.';
+  });
   const motionDetails=details(motion,'Speed, easing and rotation');
   numeric(motionDetails,'Speed','speed',{rule:'speed',step:.01,read:()=>10/(project().shot.frameCount/project().shot.fps),write:(p,v)=>M.setSpeed(p,v),description:'1× = 10 seconds. Duration uses whole frames.'});
   select(motionDetails,'Easing',M.ENUMS.easing,()=>project().shot.easing,value=>edit(p=>{p.shot.easing=value;}));
@@ -214,8 +224,10 @@
   const rhythmNote=document.createElement('p');rhythmNote.textContent='Pulse and Glow Wave also work with a still camera. Press Play to see time effects.';rhythm.append(rhythmNote);
   const output=section('studioOutputControls','Video output');
   const aspectSelect=$('studioAspect');aspectSelect.onchange=()=>edit(p=>{p.output.aspect=aspectSelect.value;});records.push(()=>{if(session)aspectSelect.value=project().output.aspect;});
-  for(const [label,path,values]of [['Resolution','resolution',M.ENUMS.resolution],['Sampling','samples',[[4,'Standard · 4 samples'],[16,'Fine · 16 samples']]],['Format','container',[['auto','MP4 preferred — checked when creating'],['mp4','MP4 / AVC'],['webm','WebM / VP9']]]])select(output,label,values,()=>project().output[path],value=>edit(p=>{p.output[path]=['resolution','samples'].includes(path)?Number(value):value;}));
+  for(const [label,path,values]of [['Resolution','resolution',M.ENUMS.resolution],['Sampling','samples',[[4,'Standard · 4 samples'],[16,'Fine · 16 samples']]],['Format','container',[['auto','MP4 preferred — checked when creating'],['mp4','MP4 / AVC'],['webm','WebM / VP9']]],['Motion stability','temporal',[['raw','Raw'],['stable','Stable · blends neighbouring frames']]]])select(output,label,values,()=>project().output[path],value=>edit(p=>{p.output[path]=['resolution','samples'].includes(path)?Number(value):value;}));
   select(output,'FPS',M.ENUMS.fps,()=>project().shot.fps,value=>edit(p=>M.setFps(p,Number(value))));
+  const bitrate=select(output,'Bitrate',[['standard','Standard'],['high','High'],['master','Master']],()=>project().output.bitrate,value=>edit(p=>{p.output.bitrate=value;}));
+  records.push(()=>{if(session)for(const option of bitrate.options)option.textContent=option.value[0].toUpperCase()+option.value.slice(1)+' · '+M.bitrate({...project().output,bitrate:option.value})/1e6+' Mbps';});
   const advanced=details(output,'Advanced');select(advanced,'Iterations',[['auto-shot','Auto for shot'],['fixed','Fixed cap']],()=>project().numerics.iterations,value=>edit(p=>{p.numerics.iterations=value;}));numeric(advanced,'Fixed cap','numerics.fixedIterations',{rule:'fixedIterations',step:1});
   function sync(){
    if(!session)return;records.forEach(fn=>fn());if(document.activeElement!==$('studioName'))$('studioName').value=project().name;
@@ -287,9 +299,23 @@
   $('studioSettingsBtn').onclick=()=>{settingsOpen=!settingsOpen;settingsLayout();if(settingsOpen)$('studio'+activeTab+'Tab').focus();};$('studioSettingsClose').onclick=()=>{settingsOpen=false;settingsLayout();$('studioSettingsBtn').focus();};wide.addEventListener('change',settingsLayout);
   new ResizeObserver(()=>{updateFrame();fitCanvas();clearTimeout(resizeTimer);resizeTimer=setTimeout(()=>{if(!entered||exporter.snapshot().active||document.hidden)return;if(preview.state().playing)quick();else scheduleDetailed();},150);}).observe($('studioCanvasArea'));
   new ResizeObserver(()=>{if(entered)updateFrame();}).observe($('viewport'));
-  function exportSummary(){if(!session)return;const p=project(),size=M.dimensions(p.output);$('studioExportSummary').textContent=`${size.width} × ${size.height} · ${p.shot.fps} fps · ${(p.shot.frameCount/p.shot.fps).toFixed(3)} s · ${p.shot.frameCount} frames · silent video · ${p.output.container==='auto'?'MP4 preferred — checked when creating':p.output.container==='webm'?'WebM / VP9 requested':'MP4 / AVC requested'}`;$('studioExportProgress').max=p.shot.frameCount;}
+  function exportSummary(){if(!session)return;const p=project(),size=M.dimensions(p.output),estimate=root.TetraStudioExport.estimateBytes(p);$('studioExportSummary').textContent=`${size.width} × ${size.height} · ${p.shot.fps} fps · ${(p.shot.frameCount/p.shot.fps).toFixed(3)} s · ${p.shot.frameCount} frames · silent video · ${p.output.container==='auto'?'MP4 preferred — checked when creating':p.output.container==='webm'?'WebM / VP9 requested':'MP4 / AVC requested'} · ${M.bitrate(p.output)/1e6} Mbps · about ${Math.ceil(estimate/1048576)} MiB${estimate>root.TetraStudioEncoder.MAX_BYTES?(typeof root.showSaveFilePicker==='function'?' · you will choose where to save the file':' · above this browser\'s 64 MiB limit: shorten, lower the bitrate or use 720p'):''}`;$('studioExportProgress').max=p.shot.frameCount;}
   $('studioVideo').onclick=()=>transition(async()=>{if(!await settleDraft())return;await suspendPreview();await bridge.acquire();endpoint=null;draft=null;cameraError=null;setup=null;sync();exportSummary();exportState(exporter.snapshot());const dialog=$('studioExportDialog');if(!dialog.open)dialog.showModal();});
-  $('studioExportStart').onclick=async()=>{await suspendPreview();await bridge.acquire();if(!commitNumbers())return;try{await exporter.start(project(),{getResources:bridge.resources});}catch(reason){announce(reason.message);}};
+  // Large exports stream to a file the user picks. The picker needs the click's user activation, so it precedes every await that waits on the GPU or preview.
+  $('studioExportStart').onclick=async()=>{
+   if(!commitNumbers())return;let handle=null,stream=null,empty=false;const p=project(),extension=p.output.container==='webm'?'webm':'mp4';
+   try{
+    if(root.TetraStudioExport.estimateBytes(p)>root.TetraStudioEncoder.MAX_BYTES&&typeof root.showSaveFilePicker==='function'){
+     try{handle=await root.showSaveFilePicker({suggestedName:root.TetraStudioExport.filename(p.name,extension),types:[{description:extension.toUpperCase()+' video',accept:{['video/'+extension]:['.'+extension]}}]});}
+     catch(reason){announce(reason.name==='AbortError'?'No file location chosen. Create video to try again.':reason.message);return;}
+     empty=(await handle.getFile()).size===0;stream=await handle.createWritable();
+    }
+    await suspendPreview();await bridge.acquire();
+    const done=await exporter.start(project(),{getResources:bridge.resources,...(stream?{fileStream:stream,fileName:handle.name}:{})});
+    // A new picked file exists as an empty entry until the export succeeds; never remove one that held data.
+    if(handle&&empty&&done.state!=='ready')await handle.remove?.().catch(()=>{});
+   }catch(reason){announce(reason.message);await Promise.resolve(stream?.abort()).catch(()=>{});}
+  };
   $('studioExportCancel').onclick=()=>exporter.cancel();$('studioExportResume').onclick=()=>exporter.resume();
   $('studioUseWebM').onclick=()=>{edit(p=>{p.output.container='webm';});exporter.clearResult();exportSummary();announce('WebM selected. Create video starts again from frame 0.');};
   $('studioEditOutput').onclick=()=>{document.querySelector('#studioOutputControls select').focus();};$('studioEditRotation').onclick=()=>transition(async()=>{closeExport();await selectEndpoint(project().shot.motion==='hold'?'start':'end');chooseTab('Motion');settingsOpen=true;settingsLayout();motionDetails.open=true;$('studio-rollDeg-number').focus();});
@@ -304,7 +330,7 @@
    else if(e.code==='Space'&&!e.ctrlKey&&!e.metaKey&&!e.altKey&&!e.target.closest('button,a,summary')){e.preventDefault();$('studioPlay').click();}
    else if(e.key==='Escape'){e.preventDefault();if(draftDirty()){draft=copy(project().shot[endpoint]);bridge.applyCamera?.(draft,aspect());sync();}else pause();}
   });
-  document.addEventListener('visibilitychange',()=>{if(!entered)return;if(document.hidden){suspendPreview();exporter.hidden();}else{const state=exporter.snapshot();if(state.state==='suspended')exportState(state);else if(!state.active)transition(resumePreview);}});
+  document.addEventListener('visibilitychange',()=>{if(!entered)return;if(document.hidden){suspendPreview();exporter.hidden();}else{const state=exporter.snapshot();if(state.state==='suspended'){exporter.resume();exportState(state);}else if(!state.active)transition(resumePreview);}});
   matchMedia('(prefers-reduced-motion:reduce)').addEventListener('change',e=>{if(e.matches&&entered)preview.pause();});
   window.addEventListener('pagehide',()=>{if(entered){thumbAbort?.abort();preview.suspend();exporter.cancel();}});
   const api={
