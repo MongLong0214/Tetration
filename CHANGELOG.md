@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Motion Studio shows the zoom speed of a Tunnel path (total zoom, peak ratio per frame with easing, decades per second) and the length that keeps adjacent frames within 1.15×. **Use recommended length** applies it. Shots can now last 2–120 s, with an optional **Hold at end** (0–10 s) that stays exactly on the End camera.
+- Output adds Bitrate (Standard / High / Master: 12 / 24 / 40 Mbps at 1080, 6 / 12 / 20 Mbps at 720) and Motion stability (Raw keeps the previous output; Stable reprojects the previous frame). Preview and export now apply the same setting, so the preview no longer smooths motion unless Stable is selected.
+- Exports estimated above the 64 MiB in-memory limit stream to a file chosen with the save picker; other browsers get the size and the options (shorter, lower bitrate, 720p) before rendering starts. Cancellation and failures leave no partial file.
+- Motion project schema is now 2 (new Hold at end, Bitrate and Motion stability fields). Version 1 JSON and saved projects open unchanged with Standard bitrate and Raw output; new saves and exports use version 2, which earlier versions cannot read.
+- Export records the numerical path (direct/perturb, reference, backend, render time) of every frame, resumes automatically when the tab becomes visible again, and shares one GPU fence between up to four WebGL sample passes of a tile. Pixels are identical to the single-fence order.
+
 ## 1.2.1 — 2026-10-13
 
 - Capture and camera transitions now freeze and read the authoritative shared View, including inertial movement and interrupted glides. Capture no longer saves an earlier camera or keeps drifting after the click.
