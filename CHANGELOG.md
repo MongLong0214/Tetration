@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Opening without a URL hash shows the view between the basins (x −1.9, y 0, span 3, 2.33×) instead of the Overview, so the large petals fill the screen with their surrounding structure in view. Home and the Overview starting point are unchanged (x −0.5, span 8); the quality default is unchanged.
+
 ## 1.2.1 — 2026-10-13
 
 - Capture and camera transitions now freeze and read the authoritative shared View, including inertial movement and interrupted glides. Capture no longer saves an earlier camera or keeps drifting after the click.

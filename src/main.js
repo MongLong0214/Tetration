@@ -14,6 +14,8 @@
     {name: 'Abyss', sub: '10²⁵ · PERTURBATION', x: '-0.605137938972379900971816986088586258864125', y: '0.437740442074800562969426507709712806289976004723289995229', span: '7e-25'},
     {name: 'Horizon', sub: '10¹⁰⁰ · DEEP FEATHER', x: '-0.605137938972379900971817048132147498249950297815856628491748908858224992290680363711703001492344905661729028182206', y: '0.437740442074800562969426586669113155808012201307319340609925561376648113051190710894591896027315034323404945092475', span: '7e-100'},
   ];
+  // Opens between the basins: the large petals fill the screen with the surrounding structure in view.
+  const opening = {x: '-1.9', y: '0', span: '3'};
   const FIXED_ITERATIONS = [64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384];
   const AUTO_STEPS = TetraRender.AUTO_STEPS;
   const DIRECT_LIMIT = 2 ** -16, FP64_LIMIT = 1e-13, SETTLE_MS = 110, BATCH_MS = 28, FRAME_MS = 12;
@@ -21,8 +23,8 @@
   const reducedMotion = matchMedia('(prefers-reduced-motion:reduce)');
   const coarsePointer = matchMedia('(pointer:coarse)').matches;
 
-  let view = parseView(presets[0]), visual = clone(view);
-  let palette = 0, iterationSetting = 'auto', engine = 'auto', quality = coarsePointer ? 4 : 16, grid = false, locationIndex = 0;
+  let view = parseView(opening), visual = clone(view);
+  let palette = 0, iterationSetting = 'auto', engine = 'auto', quality = coarsePointer ? 4 : 16, grid = false, locationIndex = -1;
   let colorPhase = 0, flow = false, flowStarted = 0, flowFrame = 0, flowPaint = 0;
   let history = [], future = [], savedViews = [], coordinateDraft = false, toastTimer = 0;
   let dims = {w: 1, h: 1, dpr: 1};

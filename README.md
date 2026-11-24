@@ -25,7 +25,7 @@ The map fills the workspace. Drag, scroll or pinch anywhere: the image follows i
 | Saved views / share / save image | B / S / E |
 | Grid / guide | G / ? |
 
-The app opens on the overview of the complex plane (centre −0.5, width 8). Seven starting points range from it through **Bloom** (internal petals, span 0.00025) to **Plume** (10¹¹), **Abyss** (10²⁵) and **Horizon** (10¹⁰⁰). Palettes: **Aurora**, **Ember**, **Tidal** and **Mono**. Escape bands keep cycling through the palette at depth, where every pixel needs thousands of steps. Optional **Color flow** rotates hues without recomputing; it starts off, pauses in a hidden tab and stops when reduced motion is requested.
+The app opens between the basins (centre −1.9, width 3), where the large petals fill the screen with their surrounding structure; Home returns to the overview of the complex plane (centre −0.5, width 8). Seven starting points range from the overview through **Bloom** (internal petals, span 0.00025) to **Plume** (10¹¹), **Abyss** (10²⁵) and **Horizon** (10¹⁰⁰). Palettes: **Aurora**, **Ember**, **Tidal** and **Mono**. Escape bands keep cycling through the palette at depth, where every pixel needs thousands of steps. Optional **Color flow** rotates hues without recomputing; it starts off, pauses in a hidden tab and stops when reduced motion is requested.
 
 **Share** copies the exact view link (or opens the native share sheet on touch devices). **Save image** downloads a PNG at the rendered resolution; on touch devices that support file sharing it opens the share sheet with the image. Up to 24 named views can be saved on the device. TETRA installs as an app and reopens offline.
 
