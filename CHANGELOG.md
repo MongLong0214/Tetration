@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.3.0 — 2026-11-24
 
 - Opening without a URL hash shows the view between the basins (x −1.9, y 0, span 3, 2.33×) instead of the Overview, so the large petals fill the screen with their surrounding structure in view. Home and the Overview starting point are unchanged (x −0.5, span 8); the quality default is unchanged.
 - Motion Studio shows the zoom speed of a Tunnel path (total zoom, peak ratio per frame with easing, decades per second) and the length that keeps adjacent frames within 1.15×. **Use recommended length** applies it. Shots can now last 2–120 s, with an optional **Hold at end** (0–10 s) that stays exactly on the End camera.
