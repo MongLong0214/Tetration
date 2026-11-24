@@ -59,3 +59,12 @@ test('offline rendering preserves higher precision metadata on a shared referenc
  const session=await R.prepare(p,{renderer:gpu,size:{width:16,height:16},reference:options=>{shared={digits:140,iterations:options.iterations};return shared;}});
  const frame=await session.renderBase(0);frame.release();assert.equal(shared.digits,140);await session.dispose();
 });
+
+test('export alone asks the WebGL AA tile path to share fences; the default stays one fence per sample',async()=>{
+ const calls=[];const gpu=renderer();gpu.drawAATile=async(frame,tile,scene,cancelled,threshold,samples,batch)=>{calls.push({samples,batch,threshold});return true;};
+ const p=project();p.output.samples=16;p.numerics.iterations='fixed';p.numerics.fixedIterations=4096;p.shot.motion='travel';p.shot.end.span='4';
+ const session=await R.prepare(p,{renderer:gpu,size:{width:64,height:64},yieldTask:async()=>{}});
+ (await session.renderBase(0)).release();assert.equal(calls.length,4);assert.ok(calls.every(call=>call.samples===16&&call.batch===1&&call.threshold===0));
+ calls.length=0;(await session.renderBase(1,'final',undefined,{fenceBatch:4})).release();assert.equal(calls.length,4);assert.ok(calls.every(call=>call.samples===16&&call.batch===4));
+ await session.dispose();
+});

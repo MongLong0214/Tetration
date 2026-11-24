@@ -45,7 +45,7 @@
   const {width,height,fps,container='mp4',resolution=1080,fullCodecString,frameCount}=input;
   if(!Number.isInteger(width)||!Number.isInteger(height)||width<=0||height<=0||width>8192||height>8192||![24,30].includes(fps)||!['auto','mp4','webm'].includes(container))throw error('INVALID_CONFIG','Invalid video dimensions, frame rate or container');
   const bitrate=input.bitrate??(resolution===720?6000000:12000000);
-  if(!Number.isSafeInteger(bitrate)||bitrate<=0||(frameCount!==undefined&&(!Number.isInteger(frameCount)||frameCount<1||frameCount>600)))throw error('INVALID_CONFIG','Invalid bitrate or frame count');
+  if(!Number.isSafeInteger(bitrate)||bitrate<=0||(frameCount!==undefined&&(!Number.isInteger(frameCount)||frameCount<1||frameCount>3600)))throw error('INVALID_CONFIG','Invalid bitrate or frame count');
   if(fullCodecString!==undefined&&(typeof fullCodecString!=='string'||!fullCodecString))throw error('INVALID_CONFIG','Invalid codec profile');
   const codec=container==='webm'?'vp9':'avc';
   if(input.codec!==undefined&&input.codec!==codec)throw error('INVALID_CONFIG','Codec does not match the container');
@@ -57,16 +57,17 @@
   // Remove both the capability-query key and its confirmed-profile alias.
   for(const [key,value]of cache)if(['width','height','fps','codec','bitrate'].every(field=>value.config[field]===target[field]))cache.delete(key);
  }
- async function createSink(canvas,input,{signal,maxBytes=MAX_BYTES,deadlineMs=DEADLINE_MS,media=root.TetraMedia,onEncoderConfig}={}){
+ // fileStream (a FileSystemWritableFileStream) replaces the 64 MiB in-memory collector: finish() closes it, any failure aborts it so no partial file is committed.
+ async function createSink(canvas,input,{signal,maxBytes=MAX_BYTES,deadlineMs=DEADLINE_MS,media=root.TetraMedia,onEncoderConfig,fileStream}={}){
   checkSignal(signal);const config=normalizeConfig(input);
   if(config.container==='auto')throw error('INVALID_CONFIG','Probe and confirm the actual container before exporting');
   if(!media)throw error('UNSUPPORTED_API','Video encoding is unavailable in this browser');
   if(canvas.width!==config.width||canvas.height!==config.height)throw error('CANVAS_SIZE_CHANGED','Output canvas dimensions do not match the video configuration');
   const collector=createCollector(maxBytes),internal=new AbortController();
-  let output,source,terminal=null,phase='starting',pending=false,submittedFrames=0,endUs=0,cleanupPromise=null,encoderConfig=null;
+  let output,source,terminal=null,phase='starting',pending=false,submittedFrames=0,endUs=0,cleanupPromise=null,encoderConfig=null,fileBytes=0;
   const detach=()=>signal?.removeEventListener('abort',onAbort);
   function cleanup(){
-   if(!cleanupPromise)cleanupPromise=waitFor(()=>output?.cancel(),{deadlineMs}).catch(()=>{}).finally(()=>collector.clear());
+   if(!cleanupPromise)cleanupPromise=waitFor(()=>output?.cancel(),{deadlineMs}).catch(()=>{}).then(()=>Promise.resolve(fileStream?.abort()).catch(()=>{})).finally(()=>collector.clear());
    return cleanupPromise;
   }
   function stop(reason){
@@ -79,7 +80,7 @@
   function assertSize(){if(canvas.width!==config.width||canvas.height!==config.height)throw error('CANVAS_SIZE_CHANGED','Output canvas size changed during export');}
   try{
    const format=config.container==='mp4'?new media.Mp4OutputFormat({fastStart:false}):new media.WebMOutputFormat();
-   const writable=new WritableStream({write({position,data}){collector.write(position,data);}});
+   const writable=new WritableStream({write({position,data}){if(fileStream){fileBytes=Math.max(fileBytes,position+data.byteLength);return fileStream.write({type:'write',position,data});}collector.write(position,data);}});
    output=new media.Output({format,target:new media.StreamTarget(writable,{chunked:true,chunkSize:PAGE_BYTES})});
    source=new media.CanvasSource(canvas,{codec:config.codec,quality:new media.Quality({bitrate:config.bitrate}),alpha:'discard',sizeChangeBehavior:'deny',hardwareAcceleration:'no-preference',keyFrameInterval:2,
     ...(config.fullCodecString?{fullCodecString:config.fullCodecString}:{}),onEncoderConfig(value){encoderConfig={...value};onEncoderConfig?.(encoderConfig);}});
@@ -104,9 +105,10 @@
      assertActive();if(pending)throw error('CONCURRENT_ADD','Wait for the last video frame before finalizing');assertSize();
      if(!submittedFrames||(config.frameCount!==undefined&&submittedFrames!==config.frameCount))throw error('INCOMPLETE_VIDEO','The video is missing input frames');
      phase='finalizing';await waitFor(()=>output.finalize(),{signal:internal.signal,deadlineMs});if(terminal)throw terminal;
-     const mimeType=config.container==='mp4'?'video/mp4':'video/webm',extension=config.container==='mp4'?'mp4':'webm',blob=collector.blob(mimeType);
-     if(!blob.size)throw error('EMPTY_VIDEO','The encoder produced an empty video');
-     phase='ready';detach();collector.clear();return {blob,mimeType,extension,bytes:blob.size,submittedFrames,durationUs:endUs,config,encoderConfig};
+     const mimeType=config.container==='mp4'?'video/mp4':'video/webm',extension=config.container==='mp4'?'mp4':'webm',blob=fileStream?null:collector.blob(mimeType),bytes=blob?blob.size:fileBytes;
+     if(!bytes)throw error('EMPTY_VIDEO','The encoder produced an empty video');
+     if(fileStream){await waitFor(()=>fileStream.close(),{signal:internal.signal,deadlineMs});if(terminal)throw terminal;}
+     phase='ready';detach();collector.clear();return {...(blob?{blob}:{file:true}),mimeType,extension,bytes,submittedFrames,durationUs:endUs,config,encoderConfig};
     }catch(reason){await stop(reason);throw terminal||reason;}
    },
    cancel(reason){return stop(error('CANCELED',String(reason||'Video export canceled')));}

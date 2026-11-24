@@ -69,3 +69,37 @@ test('camera reprojection preserves world points including rotated deep decimal 
  }
  assert.deepEqual(C.screenMatrix(from,from,W,H),[1,0,-0,1,0,0]);
 });
+
+test('hold tail stays exactly on End while travel interpolates over the moving frames',()=>{
+ const base=shot();base.shot.motion='travel';base.shot.end={x:'1.5',y:'1',span:'2',rollDeg:90};
+ for(const easing of M.ENUMS.easing){
+  const plain={...base,shot:{...base.shot,easing,frameCount:61}},held={...base,shot:{...base.shot,easing,frameCount:91,holdFrames:30}};
+  const evaluate=C.createEvaluator(held),reference=C.createEvaluator(plain);
+  for(let k=0;k<=60;k++)assert.deepEqual(evaluate(k).camera,reference(k).camera,easing+' '+k);
+  for(let k=60;k<91;k++)assert.deepEqual(evaluate(k).camera,held.shot.end,easing+' '+k);
+  assert.equal(evaluate(90).seconds,3);assert.equal(evaluate(90).timestampUs,3000000);
+ }
+ const still=shot();still.shot.holdFrames=60;assert.deepEqual(C.evaluateFrame(still,299).camera,still.shot.start);
+});
+test('zoom rate reports total zoom, eased peaks and the 1.15x per-frame length guide',()=>{
+ const horizon=(fps,seconds,easing='linear')=>{const p=M.setDuration(M.setFps(shot(),fps),seconds);p.shot.motion='travel';p.shot.end.span='7e-100';p.shot.easing=easing;return p;};
+ const near=(actual,expected,tolerance)=>assert.ok(Math.abs(actual-expected)<=tolerance,actual+' vs '+expected);
+ const a=C.zoomRate(horizon(24,20));near(a.decades,100.058,0.001);assert.ok(a.total>1e100&&a.total<1.2e100);near(a.peakRatio,1.616,0.002);near(a.peakDecadesPerSecond,5.01,0.01);
+ near(C.zoomRate(horizon(30,20)).peakRatio,1.468,0.002);near(C.zoomRate(horizon(30,60)).peakRatio,1.137,0.002);
+ const guide=C.zoomRate(horizon(30,20));assert.equal(guide.guideRatio,1.15);near(guide.recommendedSeconds,55,0.1);assert.equal(guide.recommendedFrames,1650);
+ const close=horizon(30,5);close.shot.start.span='1.12e-98';const c=C.zoomRate(close);near(c.total,16,1e-9);near(c.decades,Math.log10(16),1e-9);near(c.peakRatio,1.0188,0.0002);
+ // The reported peak is the real largest adjacent-frame ratio of the evaluator, easing included.
+ for(const easing of M.ENUMS.easing){
+  const p=close;p.shot.easing=easing;const evaluate=C.createEvaluator(p),ln=value=>Number(value)/Number(F.Q);let measured=0;for(let k=1;k<p.shot.frameCount;k++)measured=Math.max(measured,Math.abs(ln(F.ln(F.parse(evaluate(k).camera.span))-F.ln(F.parse(evaluate(k-1).camera.span)))));
+  near(Math.exp(measured),C.zoomRate(p).peakRatio,1e-9);
+ }
+ close.shot.easing='linear';const linear=C.zoomRate(close).peakRatio;for(const [easing,slope] of [['ease-in',2],['ease-out',2],['ease-in-out',1.5]]){close.shot.easing=easing;const r=C.zoomRate(close);assert.ok(r.peakRatio>linear);near(Math.log(r.peakRatio)/Math.log(linear),slope,0.03);}
+ // Following the recommendation reaches the guide; one frame fewer does not (linear).
+ for(const easing of M.ENUMS.easing){
+  const p=horizon(30,20,easing),r=C.zoomRate(p),frames=r.recommendedFrames,fit={...p,shot:{...p.shot,frameCount:frames}},short={...p,shot:{...p.shot,frameCount:frames-1}};
+  assert.ok(C.zoomRate(fit).peakRatio<=1.15+1e-12,easing);if(easing==='linear')assert.ok(C.zoomRate(short).peakRatio>1.15);
+ }
+ const held=horizon(30,60);held.shot.holdFrames=300;near(C.zoomRate(held).recommendedSeconds,65,0.1);assert.ok(C.zoomRate(held).peakRatio>C.zoomRate(horizon(30,60)).peakRatio);
+ for(const flat of [shot(),Object.assign(horizon(30,20),{shot:{...horizon(30,20).shot,motion:'hold'}}),Object.assign(horizon(30,20),{shot:{...horizon(30,20).shot,end:{...horizon(30,20).shot.start,x:'1'}}})]){const r=C.zoomRate(flat);assert.equal(r.zooming,false);assert.equal(r.peakRatio,1);assert.equal(r.recommendedSeconds,null);}
+ const out=horizon(30,60);[out.shot.start,out.shot.end]=[out.shot.end,out.shot.start];near(C.zoomRate(out).peakRatio,1.137,0.002);
+});

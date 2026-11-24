@@ -83,11 +83,9 @@ def run():
             count = page.evaluate('() => tetraStudioDiagnostics.export.submitted')
             page.set_viewport_size({'width': 780, 'height': 1024})
             page.evaluate('() => {window.__studioHidden=false;document.dispatchEvent(new Event("visibilitychange"));}')
-            page.wait_for_timeout(100)
-            assert page.evaluate('() => tetraStudioDiagnostics.export.submitted') == count
-            assert page.evaluate('() => tetraStudioDiagnostics.project') == before
-            page.click('#studioExportResume')
+            # Becoming visible resumes the suspended export without a click.
             state = terminal(page, 'ready')
+            assert page.evaluate('() => tetraStudioDiagnostics.project') == before
             assert state['config']['width'] == 1280 and state['config']['height'] == 720
             assert state['submitted'] == 60 and not page.evaluate('() => tetraStudioDiagnostics.preview.playing')
             page.evaluate('() => {window.__studioHidden=true;document.dispatchEvent(new Event("visibilitychange"));window.__studioHidden=false;document.dispatchEvent(new Event("visibilitychange"));}')
@@ -100,7 +98,7 @@ def run():
             download.value.save_as(path)
             stream = json.loads(subprocess.check_output(['ffprobe', '-v', 'error', '-count_frames', '-show_streams', '-of', 'json', str(path)], text=True))['streams'][0]
             assert int(stream['nb_read_frames']) == 60 and (stream['width'], stream['height']) == (1280, 720), stream
-            suite.record('Hidden completes current frame then stops; explicit visible Resume and resize preserve output', {'suspendedAfter': count, 'decodedFrames': stream['nb_read_frames']})
+            suite.record('Hidden completes current frame then stops; becoming visible resumes automatically and resize preserves output', {'suspendedAfter': count, 'decodedFrames': stream['nb_read_frames']})
             page.click('#studioReturnEdit')
             export(page)
             page.wait_for_function('() => tetraStudioDiagnostics.export.state==="rendering"', timeout=120000)

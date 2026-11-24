@@ -104,3 +104,23 @@ test('offline BLA reuses only the canonical bound while View keeps opportunistic
  renderer.useBla({},rules,3,'deterministic');assert.equal(calls.length,4);
  renderer.useBla(ref,{},3,'deterministic');assert.equal(calls.length,5);
 });
+
+test('batched AA tile passes keep the draw order and ping-pong while waiting on fewer fences',async()=>{
+ const run=async(batch,{cancelAfter=Infinity}={})=>{
+  const log=[],target=name=>({buffer:name,texture:'texture-'+name}),scratch=[target('a'),target('b')];let bound=null,partial=null,fences=0;
+  const gl=new Proxy({},{get:(_,name)=>name==='drawArrays'?()=>log.push(['draw',bound,partial]):name==='bindFramebuffer'?(_t,buffer)=>{bound=buffer;}:name==='uniform1i'?(_location,value)=>{partial=value;}:()=>{}});
+  const self={floatColor:true,gl,empty:'empty',ultraFrames:()=>scratch,refreshFrame(){},program:()=>({program:'copy',uniforms:{}}),
+   prepare:()=>({Offset:0,PartialBase:{}}),fence:async()=>{fences++;log.push(['fence']);}};
+  const frame={width:64,height:64,buffer:'frame'},drawn=await globalThis.TetraGPU.prototype.drawAATile.call(self,frame,{x:0,y:0,width:32,height:32},{},()=>fences>=cancelAfter,0,16,batch);
+  return {log,fences,drawn};
+ };
+ const single=await run(1),grouped=await run(4),draws=log=>log.filter(entry=>entry[0]==='draw');
+ assert.equal(single.fences,17);assert.equal(grouped.fences,5);assert.equal(single.drawn,true);assert.equal(grouped.drawn,true);
+ assert.equal(draws(single.log).length,17);assert.deepEqual(draws(grouped.log),draws(single.log));
+ assert.deepEqual(draws(single.log).slice(0,4).map(entry=>entry[1]),['a','b','a','b'],'FP32 ping-pong is unchanged');
+ assert.deepEqual(grouped.log.filter(entry=>entry[0]==='fence').length,5);
+ assert.deepEqual(grouped.log.slice(0,5).map(entry=>entry[0]),['draw','draw','draw','draw','fence'],'passes are queued in order before the shared wait');
+ for(const odd of [3,5,16,17,0])assert.deepEqual(draws((await run(odd)).log),draws(single.log));assert.equal((await run(3)).fences,6+1);assert.equal((await run(16)).fences,2);
+ const canceled=await run(4,{cancelAfter:1});assert.equal(canceled.drawn,false);assert.equal(draws(canceled.log).length,4,'cancellation is checked after each fence, before the next batch');
+ assert.equal((await run(1,{cancelAfter:1})).drawn,false);
+});

@@ -10,9 +10,12 @@
    choose **Rhythm** for Pulse or Glow Wave. Each effect has its own visible switch.
    Off preserves its settings. Press **Play** to see motion and time effects;
    **Pause** stays accessible when mobile Settings are open.
-4. Open **Export video**. Choose Aspect, Resolution, FPS, Sampling and Format in
-   that window, then **Create video**. Once ready, **Download MP4 / WebM** saves
-   the file. These are silent videos, computed locally in your browser.
+4. Open **Export video**. Choose Aspect, Resolution, FPS, Sampling, Format,
+   Bitrate and Motion stability in that window, then **Create video**. Once ready,
+   **Download MP4 / WebM** saves the file. These are silent videos, computed
+   locally in your browser. A video estimated above 64 MiB asks where to save it
+   first and is written straight to that file (Chromium browsers); other browsers
+   explain the limit before any rendering starts.
 
 **Save project** saves editable settings on this device, not a video. **Projects**
 loads saved shots, imports/exports project JSON and offers **New from Explore**.
@@ -28,6 +31,16 @@ intentional still camera; **Animate A → B** explicitly enables travel. Switchi
 views asks Apply / Discard / Cancel for changed framing. Reverse and Undo update
 an untouched draft. Duration uses whole frames; changing FPS preserves its time.
 The Motion Details contain Speed, Easing and Endpoint rotation.
+
+**Zoom speed.** With Linear easing a Tunnel path changes the zoom by a constant
+ratio per frame, so a long path is fast even at 20 seconds: Overview to Horizon (about 100 decades) at
+30 fps and 20 s changes by about 1.47× between frames. Under Duration the Motion
+tab shows the total zoom, the peak ratio per frame (easing included: ease-in/out
+peak at twice the average, ease-in-out at 1.5×), the peak in decades per second and
+the length that keeps the peak at or below 1.15× per frame (about 55 s for that
+path at 30 fps with Linear, about 82 s with the default ease-in-out). **Use recommended length** applies it, limited to 120 s.
+**Hold at end** (0–10 s) keeps the End camera after the travel and counts toward
+Duration; the travel uses the remaining frames.
 
 While framing, active spatial effects are temporarily hidden; **View effects**
 returns to Preview after resolving the draft. **Original** is preview comparison
@@ -45,13 +58,19 @@ output and GPU source budget. Its label distinguishes completed pixels from a
 pending target. Final video always uses the selected output size and 4/16 samples.
 A failed refinement keeps the last complete image and offers an explicit retry.
 
-Moving preview reprojects the preceding camera frame before the time
-effects, limit its colours to the current local neighbourhood, and combine it
-with the new full-sample frame. This reduces sparkling in subpixel fractal detail.
-Seeking, changing views and large camera jumps reset the history; a still camera
-and Original retain their exact ordinary pixels. History uses two bounded GPU
-images and never changes orbit rules or iteration limits. Final video retains
-its existing independent full-frame rendering and selected 4/16 sampling.
+With **Motion stability: Stable**, preview and exported video reproject the
+preceding camera frame before the time effects, limit its colours to the current
+local neighbourhood, and combine it with the new full-sample frame. This can
+reduce sparkling in subpixel fractal detail but blends neighbouring frames, so
+compare it with Raw on your shot. It applies only to Tunnel paths, and only while
+adjacent frames differ by 0.8–1.25× in scale, which a long path at a short Duration
+exceeds; the zoom-rate line shows the ratio. **Raw** (the default and the only
+behaviour of earlier versions) renders each frame independently in both preview and
+video, so the test render and the final output use the same filter. Seeking,
+changing views and large camera jumps reset the history; a still camera and
+Original retain their exact ordinary pixels. History uses two bounded GPU images
+and never changes orbit rules or iteration limits. Final video always uses the
+selected 4/16 sampling.
 
 Output requires WebGL2 and a supported WebCodecs encoder. Non-neutral effects
 need half-float GPU targets. MP4 is preferred; a confirmed WebM alternative must
@@ -69,7 +88,10 @@ Drift uses equal spans. Reversing the path exchanges both complete endpoints.
 Motion follows the zoom-aware path in `studio-camera.js`, with exact endpoints
 and frame-index easing. Roll follows the direct angle difference. Duration is
 quantized to N frames; Speed is 10 seconds divided by duration. Changing FPS
-preserves duration. Frame k uses `k/(N−1)` for camera and `k/fps` for effects.
+preserves duration and Hold at end. With H hold frames the camera uses
+`k/(N−H−1)` for the first N−H frames, then stays exactly on B; effects use `k/fps`.
+Hold at end changes the camera path, so projects with a hold are not frame-identical
+to the same shot without one.
 
 Look offers Neutral, Neon Pulse, Deep Ambient and Prism Wave, with editable hue,
 saturation, exposure, Bloom, Prism, Kaleidoscope and FX Amount. Rhythm controls
@@ -86,7 +108,9 @@ Amount preserve framed RGB8 pixels exactly. Sampling extends images by reflectio
 spatial FX do not request extra fractal area. Only roll determines overscan.
 
 Outputs are silent SDR, 720/1080 short-side pixels, 16:9/9:16/1:1, 24/30 fps and
-2–20 seconds. MP4/AVC is preferred; select the confirmed WebM/VP9 alternative if
+2–120 seconds. Bitrate targets 12 / 24 / 40 Mbps (Standard / High / Master) at 1080
+and 6 / 12 / 20 Mbps at 720; Standard is the earlier default. A new bitrate goes
+through the same real-encode capability probe as any other output. MP4/AVC is preferred; select the confirmed WebM/VP9 alternative if
 MP4 is unavailable. Unsupported configurations never reduce quality silently.
 WebGL2 is required for movie rendering; supported WebGPU accelerates orbit work.
 Non-neutral FX need half-float render targets. Deep/high-cap work can be slow.
@@ -95,14 +119,23 @@ some rolled 1080 shots therefore exceed the source limit and need an explicit ed
 
 One awaited CanvasSource add consumes each stable composed canvas at integer
 microsecond timestamps. Hidden export completes current work, then suspends before
-the next frame; visible Resume continues from the next k. Finalization can finish
+the next frame; when the tab is visible again it resumes automatically from the
+next k (**Resume export** remains as a fallback). Hidden time is reported apart
+from active time. Finalization can finish
 while hidden. Cancel/device/encoder errors never publish a partial file; retry
 starts at frame 0. File ready appears only after finalization and resource cleanup. Download does not
 claim that a browser save dialog completed. Closing the result, exporting again
 or leaving Studio releases its Blob URL.
 
-The position-aware output collector caps the logical file at 64 MiB. This does
-not cap total browser RAM, driver allocations or encoder surfaces. The app retains
+The position-aware output collector caps the in-memory file at 64 MiB. Before
+rendering, the export compares an estimate (bitrate × duration plus 5 % and
+64 KiB) with that cap. Above it, a browser with `showSaveFilePicker` streams the
+finished encoder output into the chosen file, which is closed only after
+finalization; cancel or failure aborts the write so the original file is kept, and
+a new empty file created by the picker is removed. Without that API the export
+fails up front (`OUTPUT_TOO_LARGE_ESTIMATE`) and lists shorter duration, lower
+bitrate or 720p. A saved file is reported as "Saved to …", not as a download. The cap
+does not limit total browser RAM, driver allocations or encoder surfaces. The app retains
 one source frame, fixed FX scratch, two tiny endpoint thumbnail images and one
 video result; it does not keep a raw-video frame array. The media operations have
 60-second deadlines; deliberate hidden suspension has none.

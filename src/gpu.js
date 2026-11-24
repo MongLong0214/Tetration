@@ -841,9 +841,10 @@ ${orbitLoop}` + perturbTail;
       this.ultraScratch = frames; return frames;
     }
     // Multiple long AA orbits in one invocation can starve the compositor.
-    // Preserve the sum in FP32, fence every new sample, and
-    // round to RGBA8 only once, exactly as the ordinary Ultra pass does.
-    async drawAATile(frame, tile, scene, cancelled = () => false, threshold = 0.035, samples = 16) {
+    // Preserve the sum in FP32, fence every new sample (or every `batch`
+    // consecutive samples, for offline export), and round to RGBA8 only once,
+    // exactly as the ordinary Ultra pass does.
+    async drawAATile(frame, tile, scene, cancelled = () => false, threshold = 0.035, samples = 16, batch = 1) {
       if (!this.floatColor) throw Error('GPU float image unavailable');
       if (frame.seed && threshold > 0) {
         if (frame.aaMaskThreshold !== threshold) {
@@ -869,6 +870,8 @@ ${orbitLoop}` + perturbTail;
         gl.bindFramebuffer(gl.FRAMEBUFFER, target.buffer); gl.viewport(0, 0, tile.width, tile.height);
         gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D, source?.texture || this.empty); gl.activeTexture(gl.TEXTURE0);
         gl.uniform1i(u.PartialBase, pass); gl.drawArrays(gl.TRIANGLES, 0, 3);
+        // Passes still run in order on the same ping-pong pair; only the wait is shared.
+        if ((pass + 1) % batch && pass + 1 < samples) continue;
         await this.fence();
         if (cancelled()) return false;
       }
