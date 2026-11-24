@@ -61,3 +61,30 @@ test('probe pins the actual codec, caches exact configurations and invalidates a
   const unsupported=await E.probe(input,undefined,{media,createCanvas});assert.equal(unsupported.supported,false);assert.deepEqual(codecs,['avc']);assert.match(unsupported.alternative,/WebM/);
  }finally{if(original===undefined)delete globalThis.VideoEncoder;else globalThis.VideoEncoder=original;}
 });
+
+test('frame count reaches 120 s at 30 fps and the bitrate option is passed through every stage',async()=>{
+ assert.equal(E.normalizeConfig({...config,frameCount:3600}).frameCount,3600);assert.throws(()=>E.normalizeConfig({...config,frameCount:3601}),{code:'INVALID_CONFIG'});assert.equal(E.normalizeConfig({...config,bitrate:40000000}).bitrate,40000000);
+ const original=globalThis.VideoEncoder;globalThis.VideoEncoder=class{};
+ try{
+  const {media,calls}=fake(),queried=[];media.Quality=class{constructor(options){this.bitrate=options.bitrate;}};media.canEncodeVideo=async(codec,options)=>{queried.push(options.quality.bitrate);return true;};
+  const createCanvas=()=>({...canvas(),getContext:()=>({fillRect(){}})}),input={...config,width:324,frameCount:3600};
+  const standard=await E.probe({...input,bitrate:12000000},undefined,{media,createCanvas}),high=await E.probe({...input,bitrate:24000000},undefined,{media,createCanvas});
+  assert.equal(standard.config.bitrate,12000000);assert.equal(high.config.bitrate,24000000);assert.equal(high.config.frameCount,3600);assert.deepEqual(queried,[12000000,24000000]);assert.equal(calls.options.quality.bitrate,24000000);
+  await E.probe({...input,bitrate:24000000},undefined,{media,createCanvas});assert.equal(queried.length,2,'the same bitrate is served from the probe cache');
+ }finally{if(original===undefined)delete globalThis.VideoEncoder;else globalThis.VideoEncoder=original;}
+});
+function fileTarget({write,close,abort}={}){const calls={writes:[],closes:0,aborts:0};return {calls,write(chunk){calls.writes.push(chunk);return write?.(chunk)||Promise.resolve();},close(){calls.closes++;return close?.()||Promise.resolve();},abort(){calls.aborts++;return abort?.()||Promise.resolve();}};}
+test('a file stream receives positioned writes, closes on finish and returns no in-memory blob',async()=>{
+ const target=fileTarget(),{media}=fake({write:{position:6,data:new Uint8Array([9,8,7])}}),sink=await E.createSink(canvas(),config,{media,fileStream:target,maxBytes:4});
+ await sink.addFrame(grid(0));await sink.addFrame(grid(1));const result=await sink.finish();
+ assert.equal(target.calls.writes.length,1);assert.equal(target.calls.writes[0].type,'write');assert.equal(target.calls.writes[0].position,6);assert.deepEqual([...target.calls.writes[0].data],[9,8,7]);
+ assert.equal(result.file,true);assert.equal(result.blob,undefined);assert.equal(result.bytes,9,'bytes are the file high-water mark, beyond the 4 byte in-memory cap');assert.equal(result.submittedFrames,2);assert.equal(result.extension,'mp4');
+ assert.equal(target.calls.closes,1);assert.equal(target.calls.aborts,0);assert.equal(sink.state,'ready');await sink.cancel();assert.equal(target.calls.aborts,0,'a finished file is never aborted');
+});
+test('a file stream is aborted, never closed, on encoder failure, cancel or close failure',async()=>{
+ {const target=fileTarget(),{media}=fake({add:()=>Promise.reject(Error('codec failed'))}),sink=await E.createSink(canvas(),config,{media,fileStream:target});await assert.rejects(sink.addFrame(grid(0)),/codec failed/);assert.equal(target.calls.aborts,1);assert.equal(target.calls.closes,0);assert.equal(sink.state,'failed');}
+ {const target=fileTarget(),{media}=fake(),sink=await E.createSink(canvas(),config,{media,fileStream:target});await sink.addFrame(grid(0));await sink.cancel();assert.equal(target.calls.aborts,1);assert.equal(target.calls.closes,0);assert.equal(sink.state,'canceled');await sink.cancel();assert.equal(target.calls.aborts,1);}
+ {const controller=new AbortController(),target=fileTarget(),{media}=fake(),sink=await E.createSink(canvas(),config,{media,fileStream:target,signal:controller.signal});controller.abort();await sink.cancel();assert.equal(target.calls.aborts,1);}
+ {const target=fileTarget({close:()=>Promise.reject(Error('disk full')),abort:()=>Promise.reject(Error('already closed'))}),{media}=fake(),sink=await E.createSink(canvas(),config,{media,fileStream:target});await sink.addFrame(grid(0));await sink.addFrame(grid(1));await assert.rejects(sink.finish(),/disk full/);assert.equal(target.calls.aborts,1);assert.equal(sink.state,'failed');}
+ {const target=fileTarget({write:()=>Promise.reject(Error('write failed'))}),{media}=fake(),sink=await E.createSink(canvas(),config,{media,fileStream:target});await sink.addFrame(grid(0));await sink.addFrame(grid(1));await assert.rejects(sink.finish());assert.equal(target.calls.closes,0);assert.equal(target.calls.aborts,1);}
+});

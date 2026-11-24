@@ -3,7 +3,11 @@
  'use strict';
  const M=root.TetraStudioModel;
  function filename(name,extension){return (name.replace(/[<>:"/\\|?*\x00-\x1f]/g,'-').replace(/[. ]+$/g,'').trim().slice(0,80)||'tetra-motion')+'.'+extension;}
- function create({drainPreview=async()=>{},setOwner=()=>{},notify=()=>{},isHidden=()=>document.hidden,now=()=>performance.now(),prepare=root.TetraStudioRender.prepare,createCompositor=root.TetraStudioFX.createCompositor,probe=root.TetraStudioEncoder.probe,createSink=root.TetraStudioEncoder.createSink}={}){
+ // Encoder rate control may overshoot its target slightly; the estimate gates the 64 MiB in-memory path before any frame renders.
+ function estimateBytes(project){return Math.ceil(M.bitrate(project.output)*project.shot.frameCount/project.shot.fps/8*1.05)+65536;}
+ // A few consecutive GPU sample passes share one fence in export; pixels are unchanged because pass order is.
+ const FENCE_BATCH=4;
+ function create({drainPreview=async()=>{},setOwner=()=>{},notify=()=>{},isHidden=()=>document.hidden,now=()=>performance.now(),prepare=root.TetraStudioRender.prepare,createCompositor=root.TetraStudioFX.createCompositor,probe=root.TetraStudioEncoder.probe,createSink=root.TetraStudioEncoder.createSink,maxBytes=root.TetraStudioEncoder?.MAX_BYTES}={}){
   let state='idle',active=false,controller=null,submitted=0,total=0,result=null,url=null,error=null,errorCode=null,alternative=null,config=null,profile=null,paused=false,resumeWaiter=null,job=0,promise=Promise.resolve(),forcedFailure=null;
   const emptyTimings=()=>({prepareMs:0,renderMs:0,fxMs:0,encodeMs:0,finalizeMs:0,cleanupMs:0});
   let timings=emptyTimings(),started=null,ended=null,suspendedAt=null,suspendedMs=0,pendingStage=null,completedFrames=0;
@@ -35,22 +39,30 @@
     promise=(async()=>{
      let session=null,fx=null,sink=null,completed=null;
      try{
+      const estimate=estimateBytes(project);
+      if(estimate>maxBytes&&!options.fileStream){
+       const failure=Error(`This video is estimated at ${Math.ceil(estimate/1048576)} MiB, above the ${maxBytes/1048576} MiB in-memory limit, and this browser cannot save directly to a file. Shorten the duration, choose a lower bitrate or use 720p.`);failure.code='OUTPUT_TOO_LARGE_ESTIMATE';throw failure;
+      }
       pendingStage={name:'prepareMs',at:now()};await drainPreview();check(signal);
-      const size=M.dimensions(project.output),support=await probe({...size,resolution:project.output.resolution,fps:project.shot.fps,container:project.output.container,frameCount:total},signal);check(signal);
+      const size=M.dimensions(project.output),support=await probe({...size,resolution:project.output.resolution,fps:project.shot.fps,container:project.output.container,frameCount:total,bitrate:M.bitrate(project.output)},signal);check(signal);
       if(!support.supported){
-       if(project.output.container==='mp4'){const other=await probe({...size,resolution:project.output.resolution,fps:project.shot.fps,container:'webm',frameCount:total},signal);check(signal);if(other.supported)alternative=other.config;}
+       if(project.output.container==='mp4'){const other=await probe({...size,resolution:project.output.resolution,fps:project.shot.fps,container:'webm',frameCount:total,bitrate:M.bitrate(project.output)},signal);check(signal);if(other.supported)alternative=other.config;}
        const failure=Error(support.reason||'The selected video format is unavailable.');failure.code=support.code||'UNSUPPORTED_CONFIG';throw failure;
       }
       if(project.output.container==='auto'&&support.config.container==='webm'){alternative=support.config;const failure=Error('MP4 is unavailable. Use the confirmed WebM alternative or return to editing.');failure.code='MP4_UNAVAILABLE';throw failure;}
       config=support.config;emit();setOwner('export');const resources=options.getResources?options.getResources():options;
       session=await prepare(project,{...resources,signal});check(signal);
       fx=createCompositor(resources.renderer,size);
-      profile={backend:session.backend,source:session.plan.extent,output:size,samples:project.output.samples,iterations:session.plan.iterations};emit();
-      sink=await createSink(fx.canvas,config,{signal});check(signal);timings.prepareMs+=Math.max(0,now()-pendingStage.at);pendingStage=null;transition('rendering');
+      profile={backend:session.backend,source:session.plan.extent,output:size,samples:project.output.samples,iterations:session.plan.iterations,frames:[]};emit();
+      sink=await createSink(fx.canvas,config,{signal,...(options.fileStream?{fileStream:options.fileStream}:{})});check(signal);timings.prepareMs+=Math.max(0,now()-pendingStage.at);pendingStage=null;transition('rendering');
+      const stable=project.output.temporal==='stable'&&project.shot.motion==='travel';
       for(let k=0;k<total;k++){
-       await boundary(signal);const frame=await timed('renderMs',()=>session.renderBase(k,'final',signal));completedFrames++;
+       await boundary(signal);let renderMs=0;
+       const frame=await timed('renderMs',async()=>{const began=now();try{return await session.renderBase(k,'final',signal,{fenceBatch:FENCE_BATCH});}finally{renderMs=now()-began;}});completedFrames++;
+       // Per-frame numerical record to correlate visible jumps with direct/perturb switches, reference changes and the GPU backend.
+       const numerical=session.numerical?.states[k];profile.frames.push({k,mode:numerical?.mode??null,descriptor:numerical?.descriptor??null,backend:session.backend,renderMs});
        try{
-        await timed('fxMs',()=>fx.compose(frame,{look:project.look,k,fps:project.shot.fps,rollDeg:session.plan.frames[k].camera.rollDeg,signal}));check(signal);
+        await timed('fxMs',()=>fx.compose(frame,{look:project.look,k,fps:project.shot.fps,rollDeg:session.plan.frames[k].camera.rollDeg,...(stable?{motion:true,sequence:1}:{}),signal}));check(signal);
         await timed('encodeMs',()=>sink.addFrame(M.timing(project,k)));check(signal);submitted=k+1;emit();
        }finally{frame.release();}
       }
@@ -61,13 +73,13 @@
       if(pendingStage){timings[pendingStage.name]+=Math.max(0,now()-pendingStage.at);pendingStage=null;}
       const cleanupStarted=now();pendingStage={name:'cleanupMs',at:cleanupStarted};
       const cleanupErrors=[];
-      for(const cleanup of [()=>!completed&&sink?.cancel(),()=>fx?.dispose(),()=>session?.dispose()]){try{await cleanup();}catch(reason){cleanupErrors.push(reason.message||String(reason));}}
+      for(const cleanup of [()=>!completed&&sink?.cancel(),()=>!sink&&options.fileStream&&Promise.resolve(options.fileStream.abort()).catch(()=>{}),()=>fx?.dispose(),()=>session?.dispose()]){try{await cleanup();}catch(reason){cleanupErrors.push(reason.message||String(reason));}}
       try{if(profile)profile.resourcesAfterCleanup={render:session?.diagnostics?.(),fx:fx?.diagnostics?.()};}catch(reason){cleanupErrors.push(reason.message);}
       try{setOwner('studio');}catch(reason){cleanupErrors.push(reason.message);}
       active=false;controller=null;resumeWaiter=null;
       if(cleanupErrors.length){error=(error?error+' · ':'')+'Resource cleanup failed: '+cleanupErrors.join('; ');errorCode=errorCode||'CLEANUP_FAILED';completed=null;}
       if(signal.aborted||id!==job){completed=null;error=error||forcedFailure;}
-      if(completed&&!error){try{result={...completed,filename:filename(project.name,completed.extension),project};url=URL.createObjectURL(result.blob);}catch(reason){result=null;error=reason.message;}}
+      if(completed&&!error){try{result={...completed,filename:options.fileName||filename(project.name,completed.extension),project};if(completed.blob)url=URL.createObjectURL(result.blob);}catch(reason){result=null;error=reason.message;}}
       timings.cleanupMs+=Math.max(0,now()-cleanupStarted);pendingStage=null;ended=now();transition(result?'ready':error?'failed':'canceled');
      }
      return snapshot();
@@ -81,5 +93,5 @@
    async dispose(){await api.cancel();clearResult();}
   };return api;
  }
- root.TetraStudioExport={create,filename};if(typeof module!=='undefined')module.exports=root.TetraStudioExport;
+ root.TetraStudioExport={create,filename,estimateBytes};if(typeof module!=='undefined')module.exports=root.TetraStudioExport;
 })(globalThis);
