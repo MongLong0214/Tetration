@@ -32,13 +32,13 @@ views asks Apply / Discard / Cancel for changed framing. Reverse and Undo update
 an untouched draft. Duration uses whole frames; changing FPS preserves its time.
 The Motion Details contain Speed, Easing and Endpoint rotation.
 
-**Zoom speed.** A Tunnel path changes the zoom by a constant ratio per frame, so a
-long path is fast even at 20 seconds: Overview to Horizon (about 100 decades) at
+**Zoom speed.** With Linear easing a Tunnel path changes the zoom by a constant
+ratio per frame, so a long path is fast even at 20 seconds: Overview to Horizon (about 100 decades) at
 30 fps and 20 s changes by about 1.47× between frames. Under Duration the Motion
 tab shows the total zoom, the peak ratio per frame (easing included: ease-in/out
 peak at twice the average, ease-in-out at 1.5×), the peak in decades per second and
 the length that keeps the peak at or below 1.15× per frame (about 55 s for that
-path at 30 fps). **Use recommended length** applies it, limited to 120 s.
+path at 30 fps with Linear, about 82 s with the default ease-in-out). **Use recommended length** applies it, limited to 120 s.
 **Hold at end** (0–10 s) keeps the End camera after the travel and counts toward
 Duration; the travel uses the remaining frames.
 
