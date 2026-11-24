@@ -485,6 +485,30 @@ Chromium 비교의 AA4/AA16 각각 48개 조합, 총 138,240픽셀에서 기존 
 
 최종 동일 코드 `37372511644`의 두 번째 attempt는 기본 x86 Linux/native macOS의 17개 스위트·281검사·예외 0과 단위 137개·lint·build를 모두 통과했다. 이전에 통과한 작업은 보존하고 미완료 작업만 재실행했다. Chromium·WebKit maximum 각각 12개는 추적을 끈 일반 실행이다. 별도 Chromium 추적 `37375439166`도 12개를 통과했다. 첫 attempt에서 Chromium 수치 비교 로그가 멈춘 실행은 미완료로 남기며, 내부 host/driver 원인을 확정하거나 코드로 고쳤다고 주장하지 않는다. 두 attempt 사이 제품 코드 변경은 없다.
 
+## Studio 내보내기의 WebGPU readback과 업로드는 병목이 아니다
+
+2026-11-24 이슈 #37은 WebGPU 내보내기 경로(`compute.draw`가 제출하고, packed 픽셀과 카운터의 `mapAsync`를 기다린 뒤, 각 타일을 `texSubImage2D`로 업로드한다)가 readback과 업로드에서 bounded staging, 업로드 병합 또는 GPU 측 resolve를 정당화할 만큼 시간을 잃는지 물었다. 그렇지 않으므로 `src/`는 바꾸지 않았다.
+
+장면과 환경: Chrome for Testing 151 / ANGLE Metal, Apple M2 Pro, WebGPU, Horizon 중심의 `Studio` 프로젝트, span `1.12e-98`→`7e-100`(linear), 1920×1080 16:9, 30 fps, AA16, neutral look, 4096회. 150프레임 샷 중 프레임 0–5만 잰 부분 집합이며, 새 브라우저로 3회 실행했다(콜드 3프레임, 각 실행의 프레임 1–5인 웜 15프레임). 콜드는 새 페이지의 프레임 0이다. WebGPU 파이프라인은 이미 컴파일된 상태이고 reference orbit과 BLA는 그 프레임 안에서 만든다. 측정 harness는 `queue.submit`, `queue.onSubmittedWorkDone`, `waitForCompletion`, `readback`, `gl.texSubImage2D`, `renderer.fence`를 페이지 안에서 감쌌고 저장소 밖에 두었다. 프레임당 중앙값:
+
+| 단계(프레임당) | 콜드 | 웜 | 웜 프레임 비율 |
+| --- | --- | --- | --- |
+| `renderBase` 전체 | 1951 ms | 1895 ms | 100% |
+| 배치(각각 readback 1회) | 72 | 71 | |
+| 추가 drain 회차 | 0 | 0 | |
+| CPU 인코딩→제출 | 5.4 ms | 5.2 ms | 0.3% |
+| 제출→`onSubmittedWorkDone` | 1895 ms | 1874 ms | 98.9% |
+| `mapAsync`·error scope 대기 | 1894 ms | 1874 ms | 98.9% |
+| map range·drain 확인·업로드 | 3.1 ms | 2.7 ms | 0.1% |
+| 그중 `texSubImage2D`(2040회) | 2.1 ms | 1.9 ms | 0.1% |
+| 마지막 WebGL fence | 7.7 ms | 6.7 ms | 0.4% |
+
+계측하지 않은 같은 프레임의 중앙값은 콜드 2028 ms, 웜 1951 ms였다. 계측하지 않은 세 실행이 계측한 실행보다 느렸으므로 이 기기의 실행 간 잡음이 계측 비용보다 크며, 표는 이를 보정하지 않았다. FX 합성 후 프레임 픽셀 해시는 여섯 실행 모두 같았다.
+
+map 대기는 GPU 실행 시간과 같다. `mapAsync`는 `onSubmittedWorkDone` 뒤 약 2 ms 안에 끝나고 배치는 2만–3.5만 픽셀뿐이라, 이 통합 메모리 기기에서 전송 자체는 무시할 만하다. GPU 대기 밖의 시간(인코딩, map·업로드, 마지막 fence)은 약 15 ms로 프레임의 약 0.8%다. `draw` 호출 합은 `renderBase`와 약 11 ms 이내라 배치 사이에 GPU가 쉬지도 않는다. 다음 배치를 이전 readback과 겹쳐도 여기서는 최대 약 1%만 줄일 수 있어 20% 기준에 크게 못 미친다. 또한 두 번째 read buffer와 두 번째 진행 중 drain 상태를 취소·10초 완료 경로에 더해야 하므로 구현하지 않았다.
+
+지배적인 비용은 샘플 커널의 GPU 실행이다. timestamp query를 쓰지 않아 대기 시간에서 orbit 커널과 mask·resolve 패스를 분리하지는 못했다. 다만 각 배치는 약 2.9만 픽셀×16샘플에 대해 그 패스들의 drain 1회를 실행하므로 orbit 루프가 예상 비용이다. 따라서 이 장면에서 이슈의 30% active-time 목표에 닿으려면 readback·업로드 일정이 아니라, 샘플·해상도·반복 수를 낮추지 않고 프레임당 GPU 작업을 줄여야 한다(예: lane 점유율, BLA 범위, 인접 프레임 간 작업 재사용). 이 결과는 이 기기·브라우저·장면에만 해당한다.
+
 ## 라이브러리와 외부 구현의 활용 판단
 
 | 기술 또는 구현 | 참고하거나 적용할 부분 | 이번 변경에서의 상태 |
