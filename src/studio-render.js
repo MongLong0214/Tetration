@@ -66,7 +66,7 @@
   return {
    plan,numerical,backend,
    diagnostics(){return {...stats,blaBuilds:(renderer.blaBuilds||0)-initialBuilds,source:{...extent},output:{...plan.size},cachedFrames:cache?1:0,cachedSamples:cache?.samples??null,cachedBytes:cache?extent.width*extent.height*4:0,references:refs.size,active};},
-   async renderBase(k,profile='final',renderSignal){
+   async renderBase(k,profile='final',renderSignal,{fenceBatch=1}={}){
     if(active)throw Error('Only one source frame may render at a time');if(!['preview','final'].includes(profile))throw Error('Invalid frame profile');activeCheck(renderSignal);M.timing(plan.project,k);
     const selected=profile==='final'?samples:4,state=numerical.states[k],palette=M.ENUMS.palette.indexOf(plan.project.look.palette);
     const key=JSON.stringify([state.camera,extent,palette,plan.iterations,selected,state.descriptor,backend]);
@@ -91,7 +91,7 @@
       stats.submits++;const batchStarted=performance.now();
       writesPending=true;
       if(backend==='webgpu'){const completed=await compute.draw(renderer,frame,scene,selected,0,batch,kernel,levels,null,()=>disposed||signal?.aborted||renderSignal?.aborted);if(completed===false){activeCheck(renderSignal);throw Error('GPU sampling did not complete');}}
-      else if(partial){for(const tile of batch){const completed=await renderer.drawAATile(frame,tile,scene,()=>disposed||signal?.aborted||renderSignal?.aborted,0,selected);if(!completed){activeCheck(renderSignal);throw Error('GPU sampling did not complete');}}writesPending=false;}
+      else if(partial){for(const tile of batch){const completed=await renderer.drawAATile(frame,tile,scene,()=>disposed||signal?.aborted||renderSignal?.aborted,0,selected,fenceBatch);if(!completed){activeCheck(renderSignal);throw Error('GPU sampling did not complete');}}writesPending=false;}
       else{renderer.prepare(frame,scene,selected,0);for(const tile of batch)renderer.drawTile(frame,tile);await renderer.fence();writesPending=false;}
       activeCheck(renderSignal);
       const next=R.adaptBatch(policy,pixels,performance.now()-batchStarted);rates.set(rateKey,next.rate);budget=next.budget;
