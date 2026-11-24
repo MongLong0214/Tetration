@@ -10,13 +10,14 @@
   return F.mul(F.mul(u,u),3n*F.Q-2n*u);
  }
  function createEvaluator(input){
-  const project=M.validate(input),{start:A,end:B,motion,easing,frameCount:N}=project.shot;
+  const project=M.validate(input),{start:A,end:B,motion,easing,frameCount,holdFrames}=project.shot,N=frameCount-holdFrames;
   const start={x:F.parse(A.x),y:F.parse(A.y),span:F.parse(A.span)},end={x:F.parse(B.x),y:F.parse(B.y),span:F.parse(B.span)};
   const lnA=motion==='travel'?F.ln(start.span):0n,lnB=motion==='travel'?F.ln(end.span):0n;
   const equal=F.abs(lnB-lnA)<F.parse('0.000001')||start.span===end.span;
   return k=>{
    const time=M.timing(project,k);let camera;
-   if(motion==='hold'||k===0)camera={...A};else if(k===N-1)camera={...B};else{
+   // Interpolation spans only the moving frames; the hold tail stays exactly on B.
+   if(motion==='hold'||k===0)camera={...A};else if(k>=N-1)camera={...B};else{
     const progress=BigInt(k)*F.Q/BigInt(N-1),e=ease(progress,easing);
     const span=start.span===end.span?start.span:F.exp(F.mul(F.Q-e,lnA)+F.mul(e,lnB));
     const w=equal?e:F.div(span-start.span,end.span-start.span);
@@ -28,6 +29,21 @@
  function evaluateFrame(project,k){return createEvaluator(project)(k);}
  function reverseEndpoints(project){const next=M.validate(project);[next.shot.start,next.shot.end]=[next.shot.end,next.shot.start];return next;}
  function matchEndSpan(project){const next=M.validate(project);next.shot.end.span=next.shot.start.span;return next;}
+ // Peak slope of ease() over the actual frame grid, in units of the average per-frame step.
+ const SLOPE={linear:1,'ease-in':2,'ease-out':2,'ease-in-out':1.5},GUIDE_RATIO=1.15;let slopeCache=null;
+ function peakSlope(easing,moving){
+  if(slopeCache?.easing===easing&&slopeCache.moving===moving)return slopeCache.value;
+  let peak=0,previous=0;for(let k=1;k<moving;k++){const e=F.number(ease(BigInt(k)*F.Q/BigInt(moving-1),easing));peak=Math.max(peak,e-previous);previous=e;}
+  slopeCache={easing,moving,value:peak*(moving-1)};return slopeCache.value;
+ }
+ // Zoom speed of the frames the evaluator renders: adjacent-frame ratio = exp(ln-span change per frame).
+ function zoomRate(input){
+  const project=M.validate(input),{start,end,motion,easing,frameCount,holdFrames,fps}=project.shot,moving=frameCount-holdFrames;
+  const L=motion==='travel'&&start.span!==end.span?Math.abs(F.number(F.ln(F.parse(end.span))-F.ln(F.parse(start.span)))):0;
+  if(!L)return {zooming:false,decades:0,total:1,peakRatio:1,peakDecadesPerSecond:0,guideRatio:GUIDE_RATIO,recommendedFrames:null,recommendedSeconds:null};
+  const peakRatio=Math.exp(L*peakSlope(easing,moving)/(moving-1)),recommendedFrames=Math.ceil(L*SLOPE[easing]/Math.log(GUIDE_RATIO))+1+holdFrames;
+  return {zooming:true,decades:L/Math.LN10,total:Math.exp(L),peakRatio,peakDecadesPerSecond:Math.log10(peakRatio)*fps,guideRatio:GUIDE_RATIO,recommendedFrames,recommendedSeconds:recommendedFrames/fps};
+ }
  function sourceExtent(width,height,rolls){
   if(!Number.isInteger(width)||!Number.isInteger(height)||width<1||height<1||!Array.isArray(rolls)||!rolls.length||rolls.some(r=>!Number.isFinite(r)||r<-180||r>180))throw Error('Invalid camera source extent');
   if(rolls.every(r=>r===0))return {width,height,identity:true};
@@ -61,6 +77,6 @@
   const iterations=project.numerics.iterations==='fixed'?project.numerics.fixedIterations:Math.max(...frames.map(frame=>autoIterations(frame.camera)));
   return {project,frames,size:{...size},extent,iterations};
  }
- root.TetraStudioCamera={createEvaluator,evaluateFrame,reverseEndpoints,matchEndSpan,sourceExtent,sourceCamera,screenToWorld,screenMatrix,autoIterations,plan};
+ root.TetraStudioCamera={createEvaluator,evaluateFrame,reverseEndpoints,matchEndSpan,zoomRate,sourceExtent,sourceCamera,screenToWorld,screenMatrix,autoIterations,plan};
  if(typeof module!=='undefined')module.exports=root.TetraStudioCamera;
 })(globalThis);
