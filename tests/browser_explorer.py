@@ -36,9 +36,9 @@ def body():
         initial = open_app(page)
         assert initial['version'] == json.loads((ROOT / 'package.json').read_text())['version']
         suite.report['graphics'] = graphics(page)
-        assert initial['view'] == {'x': '-0.5', 'y': '0', 'span': '8'}, initial['view']
+        assert initial['view'] == {'x': '-1.9', 'y': '0', 'span': '3'}, initial['view']
         assert initial['lastCompleted']['samples'] == 16 and initial['lastCompleted']['width'] == 1440, initial['lastCompleted']
-        suite.record('Default view is the Overview and computes native Ultra detail', initial['view'])
+        suite.record('Default view opens between the basins and computes native Ultra detail', initial['view'])
         open_app(page, 'v=1&x=-2.5&y=0&s=1.8&q=1')
         assert page.locator('html').get_attribute('lang') == 'en' and not re.search('[가-힣]', page.locator('body').inner_text())
         view = page.locator('#viewport').bounding_box()
