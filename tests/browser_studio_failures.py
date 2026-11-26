@@ -1,4 +1,5 @@
 """Actual Studio capability, hidden/export, resize and GPU recovery flows."""
+import base64
 import json
 import subprocess
 from playwright.sync_api import sync_playwright
@@ -66,12 +67,130 @@ def withheld_completion(browser, suite):
         page.close()
 
 
+SAVE_INIT = """window.__saveFault=null;window.__pickFault=null;window.__pickTarget='content.mp4';window.__picks=0;
+ // Real OPFS handles stand in for the files a user would pick; a fault is a write or close the browser rejects.
+ window.showSaveFilePicker=async options=>{__picks++;window.__pickOptions=options;if(__pickFault==='abort')throw new DOMException('The user aborted a request.','AbortError');
+  const handle=await (await (await navigator.storage.getDirectory()).getDirectoryHandle('picked')).getFileHandle(__pickTarget);if(!__pickFault)return handle;
+  return {name:handle.name,async createWritable(){const real=await handle.createWritable();return new WritableStream({
+   async write(chunk){if(__pickFault==='copy'){await real.abort();throw Error('injected write fault');}await real.write(chunk);},
+   async close(){if(__pickFault==='close'){await real.abort();throw Error('injected close fault');}await real.close();},abort:reason=>real.abort(reason)});}};};
+ const estimate=StorageManager.prototype.estimate;StorageManager.prototype.estimate=function(){return __saveFault==='quota'?Promise.resolve({quota:1024,usage:0}):estimate.call(this);};
+ let exported;Object.defineProperty(globalThis,'TetraStudioExport',{configurable:true,get:()=>exported,set:value=>{
+  const create=value.create;value.create=options=>create({...options,maxBytes:1,
+   async prepare(...args){if(__saveFault==='prepare')throw Error('injected prepare fault');return TetraStudioRender.prepare(...args);},
+   async probe(...args){if(__saveFault==='probe')throw Error('injected probe fault');return TetraStudioEncoder.probe(...args);},
+   async createSink(...args){const sink=await TetraStudioEncoder.createSink(...args),add=sink.addFrame,finish=sink.finish;
+    sink.addFrame=time=>__saveFault==='render'&&sink.submittedFrames>=30?Promise.reject(Error('injected render fault')):add(time);
+    sink.finish=()=>__saveFault==='finalize'?Promise.reject(Error('injected finalize fault')):finish();return sink;}});exported=value;}});
+"""
+SAVE_FILES = """async()=>{const root=await navigator.storage.getDirectory(),names=[];for await(const [name] of root.entries())names.push(name);
+ const picked=await root.getDirectoryHandle('picked'),read=async name=>{const file=await (await picked.getFileHandle(name)).getFile();return file.size>64?{size:file.size}:{size:file.size,text:await file.text()};};
+ return {temps:names.filter(name=>name.startsWith(TetraStudioExport.TEMP_PREFIX)),empty:await read('empty.mp4'),content:await read('content.mp4'),picks:__picks};}"""
+UNTOUCHED = {'empty': {'size': 0, 'text': ''}, 'content': {'size': 8, 'text': 'SENTINEL'}}
+
+
+def saved_files(page, temps):
+    page.wait_for_function('async n=>(await ('+SAVE_FILES+')()).temps.length===n', arg=temps, timeout=30000)
+    return page.evaluate(SAVE_FILES)
+
+
+def decode_picked(page, name):
+    data = page.evaluate('''async name=>{const file=await (await (await (await navigator.storage.getDirectory()).getDirectoryHandle('picked')).getFileHandle(name)).getFile(),bytes=new Uint8Array(await file.arrayBuffer());let text='';for(let i=0;i<bytes.length;i+=32768)text+=String.fromCharCode(...bytes.subarray(i,i+32768));return btoa(text);}''', name)
+    path = OUT / ('studio-safe-save-' + name)
+    path.write_bytes(base64.b64decode(data))
+    stream = json.loads(subprocess.check_output(['ffprobe', '-v', 'error', '-count_frames', '-show_streams', '-of', 'json', str(path)], text=True))['streams'][0]
+    assert int(stream['nb_read_frames']) == 60 and (stream['width'], stream['height']) == (1280, 720), stream
+    return {'bytes': path.stat().st_size, 'decodedFrames': int(stream['nb_read_frames'])}
+
+
+def safe_save(browser, suite):
+    # Large output is forced with a 1-byte in-memory limit, so the real OPFS, Web Locks and encoder paths run on a short clip.
+    context = browser.new_context(viewport={'width': 1200, 'height': 800})
+    context.add_init_script(SAVE_INIT)
+    page = suite.watch(context.new_page())
+    page.goto(BASE)
+    page.evaluate('''async()=>{const root=await navigator.storage.getDirectory(),picked=await root.getDirectoryHandle('picked',{create:true});
+      for(const [name,text] of [['empty.mp4',''],['content.mp4','SENTINEL']]){const writable=await (await picked.getFileHandle(name,{create:true})).createWritable();await writable.write(text);await writable.close();}
+      await root.getFileHandle('tetra-export-stale.mp4',{create:true});}''')
+    setup(page)
+    swept = saved_files(page, 0)
+    assert {key: swept[key] for key in UNTOUCHED} == UNTOUCHED and swept['picks'] == 0, swept
+    suite.record('Studio start sweeps a stale temporary export file and leaves other files alone', swept)
+    stages = {}
+    for fault, needle in [('quota', 'browser storage'), ('probe', 'injected probe'), ('prepare', 'injected prepare'), ('render', 'injected render'), ('finalize', 'injected finalize'), ('cancel', None)]:
+        page.evaluate('f=>{window.__saveFault=f;}', fault)
+        export(page)
+        if fault == 'cancel':
+            page.wait_for_function('() => tetraStudioDiagnostics.export.state==="rendering" && tetraStudioDiagnostics.export.submitted>=10', timeout=120000)
+            page.click('#studioExportCancel')
+        state = terminal(page, 'canceled' if fault == 'cancel' else 'failed')
+        assert state['url'] is None and state['result'] is None and (needle is None or needle in state['error']), state
+        files = saved_files(page, 0)
+        assert {key: files[key] for key in UNTOUCHED} == UNTOUCHED and files['picks'] == 0, (fault, files)
+        stages[fault] = {'submitted': state['submitted'], 'error': state['error']}
+        page.click('#studioReturnEdit')
+    suite.record('A quota, probe, prepare, render or finalize failure and a render cancel leave picked files untouched and no temporary file', stages)
+    page.evaluate('() => {window.__saveFault=null;}')
+    export(page)
+    ready = terminal(page, 'ready')
+    assert ready['result']['temp'] and ready['submitted'] == 60 and ready['url'], ready
+    page.wait_for_function('() => document.querySelector("#studioResultVideo").readyState>=1', timeout=30000)
+    files = saved_files(page, 1)
+    assert {key: files[key] for key in UNTOUCHED} == UNTOUCHED and files['picks'] == 0, files
+    assert page.locator('#studioDownload').inner_text().startswith('Save MP4'), page.locator('#studioDownload').inner_text()
+    saves = {}
+    for fault, needle in [('abort', 'no location was chosen'), ('copy', 'injected write fault'), ('close', 'injected close fault')]:
+        page.evaluate('f=>{window.__pickFault=f;}', fault)
+        page.click('#studioDownload')
+        page.wait_for_function('() => !tetraStudioDiagnostics.export.saving && tetraStudioDiagnostics.export.saveError', timeout=30000)
+        state = page.evaluate('() => tetraStudioDiagnostics.export')
+        assert needle in state['saveError'] and 'The video is kept' in state['saveError'] and state['url'] and state['result']['temp'], state
+        files = saved_files(page, 1)
+        assert {key: files[key] for key in UNTOUCHED} == UNTOUCHED, (fault, files)
+        saves[fault] = state['saveError']
+    page.evaluate('() => {window.__pickFault=null;}')
+    page.click('#studioDownload')
+    page.wait_for_function('() => tetraStudioDiagnostics.export.result?.savedAs==="content.mp4" && !tetraStudioDiagnostics.export.saving', timeout=30000)
+    files = saved_files(page, 0)
+    assert files['empty'] == UNTOUCHED['empty'] and files['content']['size'] > 1000 and files['picks'] == 4, files
+    assert page.evaluate('() => __pickOptions.suggestedName') == ready['result']['filename']
+    assert page.locator('#studioDownload').is_hidden() and 'Saved to content.mp4' in page.locator('#studioExportState').inner_text()
+    saves['overwrite'] = decode_picked(page, 'content.mp4')
+    page.click('#studioReturnEdit')
+    suite.record('A canceled picker, a failed write and a failed close keep the video; a successful Save replaces the chosen file and deletes the temporary file', saves)
+    page.evaluate("() => {window.__pickTarget='empty.mp4';}")
+    export(page)
+    terminal(page, 'ready')
+    saved_files(page, 1)
+    page.click('#studioReturnEdit')
+    discarded = saved_files(page, 0)
+    export(page)
+    terminal(page, 'ready')
+    saved_files(page, 1)
+    page.click('#studioDownload')
+    page.wait_for_function('() => tetraStudioDiagnostics.export.result?.savedAs==="empty.mp4"', timeout=30000)
+    files = saved_files(page, 0)
+    assert discarded['empty'] == UNTOUCHED['empty'] and files['empty']['size'] > 1000, (discarded, files)
+    decoded = decode_picked(page, 'empty.mp4')
+    page.click('#studioExportClose')
+    export(page)
+    terminal(page, 'ready')
+    saved_files(page, 1)
+    page.click('#studioExportClose')
+    page.click('#leaveStudio')
+    page.wait_for_function('() => !tetraStudioDiagnostics.entered', timeout=30000)
+    left = saved_files(page, 0)
+    suite.record('Closing a result deletes its temporary file; a Save into a pre-existing empty file decodes; leaving Studio leaves no temporary file', {'empty': decoded, 'afterLeave': left['temps']})
+    context.close()
+
+
 def run():
     suite = Suite('studio-failures', ['Visibility is driven through the real app handler with a controlled document.hidden getter.'])
     try:
         with sync_playwright() as p:
             browser = launch(p)
             withheld_completion(browser, suite)
+            safe_save(browser, suite)
             page = suite.watch(browser.new_page(viewport={'width': 1200, 'height': 800}, accept_downloads=True))
             setup(page)
             before = page.evaluate('() => tetraStudioDiagnostics.project')

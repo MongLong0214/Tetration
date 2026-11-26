@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Large exports no longer touch a file you chose before the video exists (#44). A video estimated above 64 MiB renders into a private temporary file in browser storage (checked with `navigator.storage.estimate()` first). When it is ready, **Save** opens the save dialog and copies the video into the chosen file; only a completed write and close is reported as saved, and choosing an existing file replaces it, as the dialog warns. A canceled dialog or a failed write keeps the video for another Save. The temporary file is deleted after saving, on failure or cancel, when the result is closed or redone, and when you leave Studio; Studio removes files left by a closed tab when it starts. A deletion that fails is reported.
+- Number fields accept every value they show. Speed at 120 s shows 0.08333 (1/12, rounded to five decimals); typing it back was rejected as out of range and is now clamped to the exact limit. Retyping a value a field already shows no longer leaves it pending, where a later output change re-applied it over newer edits (a 2 s shot returned to 120 s). A Hold at end that leaves fewer than two moving frames now names the control and its limit instead of an internal field.
+- A held end no longer keeps sharpening after decode (#43). MP4 export sets the H.264 quantizer of each frame when the browser's encoder supports it (confirmed by the capability probe): an exact hold is encoded once, finer, and its repeats keep it (decoded SSIM from the first to the last hold frame was 0.92–0.97 at 720p and 0.75–0.82 on a deep 1080p shot; now 0.997–0.999 and 0.991–0.996). The output also stays under the size estimate, which the encoder's own bitrate mode exceeded by up to 1.48× on short deep shots. The first frame is no longer front-loaded (1–5 dB lower than before). Other encoders keep their bitrate mode.
+
 ## 1.3.0 — 2026-11-24
 
 - Opening without a URL hash shows the view between the basins (x −1.9, y 0, span 3, 2.33×) instead of the Overview, so the large petals fill the screen with their surrounding structure in view. Home and the Overview starting point are unchanged (x −0.5, span 8); the quality default is unchanged.

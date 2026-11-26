@@ -1,5 +1,50 @@
 # Validation — 1.1.0
 
+## Encoder hold drift and per-frame QP rate control (2026-11-26, #43)
+
+Owner report: decoded SSIM between frames 48 and 71 of an exact 1 s hold was 0.9101 at 6 Mbps and
+0.9652 at 20 Mbps (720×1280, 24 fps). Cause, measured on retail Chrome 158 and Chrome for Testing
+151 (Apple M2 Pro, VideoToolbox H.264): in variable-bitrate mode the hardware encoder spends a still
+segment's spare bits refining it, so a hold that is bit-identical before encoding keeps sharpening
+for about a second after decoding. Variants tried on the same frames: `bitrateMode: 'constant'`,
+`contentHint`, hardware preference and other keyframe intervals produced identical bytes or no
+improvement. `latencyMode: 'realtime'` fixed the hold, but pumped keyframes in motion (deep frame
+SSIM 0.31–0.98), overshot the 12 Mbps tier by 1.41× and may drop frames per the WebCodecs spec. WebM/VP9
+(libvpx) already converges. Software OpenH264 ignores quantizer mode.
+
+Fix: when the probe confirms that the encoder runs in quantizer mode, MP4/H.264 export sets a QP per
+frame (`createRateControl` in `src/studio-encoder.js`). Feedback from each packet's size keeps the
+bitrate target, at most 1 QP change per frame after a first calibration. Key frames get x264's
+1.4× quantizer ratio. The first frame of a still run is 6 QP finer and its exact repeats keep
+that QP, so the hold converges at once. The first key frame's QP is capped so it costs at most
+about 6 frame budgets on the densest content measured. Encoders without quantizer mode keep the
+earlier bitrate mode, reported by the probe. Pre-encode readback in the harness goes through a copy
+canvas: in Chrome 158, reading the export canvas directly darkens later VideoFrames.
+
+| Shot (retail Chrome 158, VideoToolbox H.264) | Tier | Hold SSIM first→last (VBR → per-frame QP) | Hold PSNR vs pre-encode, first / last (VBR → QP) | Moving SSIM mean (VBR → QP) | Size / estimate (VBR → QP) |
+| --- | --- | --- | --- | --- | --- |
+| Shallow 720×1280/24, 3 s, last 1 s held | 6 Mbps | 0.921 → 0.9974 | 30.7 / 41.6 → 34.8 / 35.1 dB | 0.921 → 0.940 | 0.83 → 0.71 |
+| | 12 Mbps | 0.942 → 0.9983 | 33.0 / 44.9 → 37.2 / 37.4 dB | 0.953 → 0.965 | 0.79 → 0.69 |
+| | 20 Mbps | 0.966 → 0.9992 | 36.2 / 46.8 → 40.5 / 40.8 dB | 0.974 → 0.982 | 0.78 → 0.69 |
+| Horizon 1080p/30, 5 s, last 1 s held | 12 Mbps | 0.754 → 0.9913 | 24.2 / 36.4 → 27.4 / 27.7 dB | 0.634 → 0.702 | 1.04 → 0.83 |
+| | 24 Mbps | 0.798 → 0.9925 | 25.8 / 40.8 → 28.2 / 28.5 dB | 0.716 → 0.769 | 0.93 → 0.80 |
+| | 40 Mbps | 0.820 → 0.9957 | 26.6 / 42.0 → 30.8 / 31.1 dB | 0.773 → 0.811 | 0.88 → 0.80 |
+| Horizon 1080p/30, 2 s, last 0.5 s held | 12 Mbps | 0.557 → 0.9887 | 21.8 / 31.7 → 26.1 / 26.3 dB | 0.565 → 0.643 | **1.48** → 0.81 |
+| | 24 Mbps | 0.633 → 0.9910 | 22.6 / 33.4 → 27.5 / 27.7 dB | 0.632 → 0.713 | **1.09** → 0.80 |
+| | 40 Mbps | 0.715 → 0.9936 | 23.8 / 35.2 → 29.3 / 29.5 dB | 0.694 → 0.779 | 1.00 → 0.78 |
+| Horizon 1080p/30, 2 s, no hold | 12 Mbps | — | — | 0.574 → 0.590 | **1.33** → 0.93 |
+| | 24 Mbps | — | — | 0.646 → 0.670 | **1.09** → 0.96 |
+| | 40 Mbps | — | — | 0.721 → 0.745 | **1.07** → 0.96 |
+
+Size / estimate divides by the export estimate (bitrate × duration × 1.05 + 64 KiB). Estimates
+above 1.0 (bold) are encoder VBR overshoots that per-frame QP removes; its largest measured
+value is 0.96. Trade-off: the first frame now matches the bitrate level instead of VBR's
+front-loaded key frame, 1.3–5.1 dB lower in PSNR than VBR (for example Horizon 12 Mbps 36.6 →
+31.5 dB). An animated look (hue 0.1 turn/s) gets no repeat flags; its decoded last frame matches its
+own pre-encode frame (42.0 / 46.1 dB at 6 / 20 Mbps), so nothing freezes. Stable output holds converge
+too (SSIM 0.9991 / 0.9998). Chrome for Testing 151 produced byte-identical files for the shallow and
+2 s deep shots. These results come from one device and one encoder.
+
 ## Studio preview responsiveness follow-up (2026-10-11)
 
 After the owner reported shimmering playback, slow framing and confusing controls,

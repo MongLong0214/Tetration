@@ -95,3 +95,19 @@ test('bitrate maps the quality tier to the target bit rate for each output size'
  for(const [bitrate,[full,hd]] of Object.entries(table)){assert.equal(M.bitrate({resolution:1080,bitrate}),full);assert.equal(M.bitrate({resolution:720,bitrate}),hd);}
  assert.equal(M.bitrate(project().output),12e6);assert.equal(M.bitrate({...project().output,resolution:720}),6e6);
 });
+test('every shown numeric value reads back inside its rule, including Speed 1/12 at 120 s',()=>{
+ for(const [key,rule]of Object.entries(M.RULES))for(const scale of rule.values?[1]:[1,100]){
+  const range=M.inputRange(key,scale);
+  for(const value of rule.values||[rule.min,rule.max,rule.default]){const shown=M.display(value*scale),read=M.readInput(key,shown,scale);assert.ok(Number(shown)>=range.min&&Number(shown)<=range.max,key);assert.notEqual(read,null,key+' '+shown);assert.ok(rule.values?rule.values.includes(read):read>=rule.min&&read<=rule.max,key);}
+  for(const text of ['',' ','abc','NaN','Infinity',null,String(range.min-0.00001),String(range.max+0.00001)])assert.equal(M.readInput(key,text,scale),null,key+' '+text);
+ }
+ assert.deepEqual(M.inputRange('speed'),{min:0.08333,max:5});assert.equal(M.readInput('speed','0.08333'),1/12);assert.equal(M.readInput('speed','0.08332'),null);assert.equal(M.readInput('fixedIterations','64.5'),null);
+ // Speed is derived from whole frames; every shown Speed re-enters as the same frame count.
+ for(const fps of [24,30]){const p=M.setFps(project(),fps);for(let N=2*fps;N<=120*fps;N++){const shown=M.display(10/(N/fps)),read=M.readInput('speed',shown);assert.notEqual(read,null,shown);assert.equal(M.setSpeed(p,read).shot.frameCount,N,fps+'/'+N);}}
+});
+test('Hold beyond the moving frames names the control and its limit, not a JSON field',()=>{
+ const p=M.setDuration(project(),2);
+ assert.throws(()=>M.setHold(p,2),error=>error.code==='INVALID_HOLD'&&/^Hold at end can be at most 1\.93333 s/.test(error.message)&&!/holdFrames/.test(error.message));
+ assert.equal(M.setHold(p,M.readInput('hold',M.display((p.shot.frameCount-2)/p.shot.fps))).shot.holdFrames,58);
+ const raw=copy(p);raw.shot.holdFrames=59;assert.throws(()=>M.validate(raw),error=>/^Hold at end/.test(error.message)&&!/holdFrames/.test(error.message));
+});
