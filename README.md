@@ -91,7 +91,7 @@ Open **Studio** from the toolbar. Frame a view and capture it as **Start**, then
 | Frame rate / length | 24 or 30 fps; 2–120 seconds, with an optional hold on the End camera |
 | Quality | AA4 or AA16 samples; 12 / 24 / 40 Mbps tiers at 1080; Raw or Stable motion |
 | Guidance | Total zoom, peak per-frame zoom and a recommended length in the Motion tab |
-| Large files | Exports estimated above 64 MiB stream to a file you choose, where the browser supports it |
+| Large files | Exports estimated above 64 MiB render into temporary browser storage; **Save** then copies the finished video to a file you choose, where the browser supports it |
 
 Export computes every sample offline and encodes in the browser through WebCodecs. It needs WebGL2 and a supported encoder; non-neutral effects also need half-float render targets. A hidden export pauses at the next frame boundary and resumes when the tab is visible again. Files never leave the device. See [Motion Studio](docs/MOTION_STUDIO.md) for editing, output and practical limits.
 
@@ -103,7 +103,7 @@ Export computes every sample offline and encodes in the browser through WebCodec
 | Faster final stages and live frames | WebGPU compute | WebGL2 programs |
 | Video export | WebGL2 + WebCodecs encoder (AVC or VP9) | Export is unavailable; exploration still works |
 | Install and offline | Service worker over HTTPS or localhost | Online use |
-| Large-file export | File System Access (`showSaveFilePicker`) | In-memory output up to 64 MiB |
+| Large-file export | Origin private file system, Web Locks and File System Access (`showSaveFilePicker`) | In-memory output up to 64 MiB |
 
 **Qualified:** Chromium on Apple Silicon with ANGLE Metal (hardware GPU), plus Chromium and WebKit in GitHub Actions on Ubuntu and macOS runners. **Not yet qualified:** physical iPhone or Safari devices, Firefox, Windows and Android GPUs, and long thermal soaks. Software graphics, emulated touch and Linux WebKit do not stand in for those devices. Details are in the [production review](docs/PRODUCTION_REVIEW.md).
 

@@ -62,6 +62,38 @@ test('probe pins the actual codec, caches exact configurations and invalidates a
  }finally{if(original===undefined)delete globalThis.VideoEncoder;else globalThis.VideoEncoder=original;}
 });
 
+test('per-frame QP keeps a repeated frame, encodes a still start finer and steers toward the bitrate',async()=>{
+ const rc=E.createRateControl({width:320,height:180,fps:30,bitrate:1200000}),frameBits=40000,qs=[];
+ // Frames at twice the target raise QP, then frames at half of it lower it: one step per frame after calibration.
+ for(let k=0;k<20;k++){qs.push(rc.next({key:!k}));rc.encoded({byteLength:frameBits/4,type:k?'delta':'key'});}
+ for(let k=20;k<40;k++){qs.push(rc.next());rc.encoded({byteLength:frameBits/16,type:'delta'});}
+ assert.equal(qs[0],21);assert.equal(E.createRateControl({width:1920,height:1080,fps:30,bitrate:12e6}).initial,32);assert.equal(qs[1],rc.initial+3,'QP holds until an inter frame calibrates it');assert.ok(qs[2]>qs[1],qs.join());
+ const dense=E.createRateControl({width:320,height:180,fps:30,bitrate:1200000});dense.next({key:true});dense.encoded({byteLength:frameBits*4,type:'key'});dense.next();dense.encoded({byteLength:frameBits*4,type:'delta'});assert.equal(dense.next(),51,'a coarser calibration is not capped');
+ const sparse=E.createRateControl({width:320,height:180,fps:30,bitrate:1200000});sparse.next({key:true});sparse.encoded({byteLength:100,type:'key'});sparse.next();sparse.encoded({byteLength:100,type:'delta'});assert.equal(sparse.next(),18,'a finer calibration moves at most 6 QP');for(let k=3;k<40;k++)assert.ok(Math.abs(qs[k]-qs[k-1])<=1,qs.join());
+ for(let k=3;k<20;k++)assert.ok(qs[k]>=qs[k-1],qs.join());const peak=Math.max(...qs);assert.ok(peak>qs[3]&&qs[39]<peak,qs.join());
+ const still=rc.next({still:true});assert.ok(still>=qs[39]-7&&still<=qs[39]-5,still);rc.encoded({byteLength:frameBits/8,type:'delta'});
+ for(let k=0;k<5;k++){assert.equal(rc.next({repeat:true}),still,'a repeated frame keeps the QP of the frame it repeats');rc.encoded({byteLength:k===2?frameBits:4,type:k===2?'key':'delta'});}
+ const moving=rc.next(),key=rc.next({key:true});assert.ok(key>=moving-4&&key<=moving-2,key+' '+moving);
+ // 0.69 bit/pixel starts key frames at QP 21 and inter frames at 24; without encoder feedback QP stays there: a still start is
+ // 6 finer, its repeats keep it, and each 2 s key frame is 3 finer. The densest measured content (Horizon) caps the start.
+ const {media,calls}=fake(),sink=await E.createSink(canvas(),{...config,frameCount:61,bitrate:1200000,rateControl:'frame'},{media});media.Quality=class{};
+ await sink.addFrame(grid(0),{still:true});await sink.addFrame(grid(1),{repeat:true});for(let k=2;k<61;k++)await sink.addFrame(grid(k));
+ assert.equal(E.createRateControl({...config,bitrate:1200000}).initial,21);assert.deepEqual([0,1,2,59,60].map(k=>calls.adds[k][2].avc.quantizer),[18,18,24,24,21]);assert.equal(typeof calls.options.onEncodedPacket,'function');
+ const plain=fake(),vbr=await E.createSink(canvas(),{...config,frameCount:1},{media:plain.media});await vbr.addFrame(grid(0),{repeat:true});assert.deepEqual(plain.calls.adds,[[0,0.033333]]);assert.equal(plain.calls.options.onEncodedPacket,undefined);
+ assert.throws(()=>E.normalizeConfig({...config,container:'webm',rateControl:'frame'}),{code:'INVALID_CONFIG'});
+});
+test('probe confirms per-frame QP only when the encoder actually runs in quantizer mode',async()=>{
+ const original=globalThis.VideoEncoder;globalThis.VideoEncoder=class{};
+ try{
+  const createCanvas=()=>({...canvas(),getContext:()=>({fillRect(){}})});
+  for(const [mode,expected] of [['quantizer','frame'],['variable','encoder']]){
+   const {media,calls}=fake();media.canEncodeVideo=async()=>true;media.Output=class extends media.Output{start(){calls.options.onEncoderConfig({codec:'avc1.640028',bitrateMode:mode});return Promise.resolve();}};
+   const result=await E.probe({...config,width:330+(mode==='quantizer'?0:2)},undefined,{media,createCanvas});assert.equal(result.config.rateControl,expected);assert.equal(calls.adds[0][2].avc.quantizer>0,true,'the probe exercises the per-frame path');
+  }
+  const {media}=fake();media.canEncodeVideo=async()=>true;const vp9=await E.probe({...config,container:'webm',width:336},undefined,{media,createCanvas});assert.equal(vp9.config.rateControl,'encoder');
+ }finally{if(original===undefined)delete globalThis.VideoEncoder;else globalThis.VideoEncoder=original;}
+});
+
 test('frame count reaches 120 s at 30 fps and the bitrate option is passed through every stage',async()=>{
  assert.equal(E.normalizeConfig({...config,frameCount:3600}).frameCount,3600);assert.throws(()=>E.normalizeConfig({...config,frameCount:3601}),{code:'INVALID_CONFIG'});assert.equal(E.normalizeConfig({...config,bitrate:40000000}).bitrate,40000000);
  const original=globalThis.VideoEncoder;globalThis.VideoEncoder=class{};

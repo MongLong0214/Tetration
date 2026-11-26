@@ -20,6 +20,15 @@
  const ENUMS=freeze({palette:['aurora','ember','tidal','mono'],motion:['hold','travel'],fps:[24,30],easing:['linear','ease-in','ease-out','ease-in-out'],aspect:['16:9','9:16','1:1'],resolution:[720,1080],samples:[4,16],container:['auto','mp4','webm'],bitrate:['standard','high','master'],temporal:['raw','stable'],iterations:['auto-shot','fixed']});
  // Target video bitrates (bit/s) by resolution; Standard is the pre-v2 encoder default.
  const BITRATES=freeze({standard:{720:6e6,1080:12e6},high:{720:12e6,1080:24e6},master:{720:20e6,1080:40e6}});
+ // Numeric inputs show 5 decimals. Every shown value must read back, so input accepts the
+ // rounded rule range and clamps into the exact rule: 1/12 shows and reads as 0.08333.
+ const DIGITS=5,display=value=>String(Number(value.toFixed(DIGITS)));
+ function inputRange(key,scale=1){const r=RULES[key];return r.values?{min:Math.min(...r.values)*scale,max:Math.max(...r.values)*scale}:{min:Number(display(r.min*scale)),max:Number(display(r.max*scale))};}
+ function readInput(key,text,scale=1){
+  const r=RULES[key],range=inputRange(key,scale),typed=String(text??'').trim(),shown=Number(typed),v=shown/scale;
+  if(!typed||!Number.isFinite(shown)||(r.values?!r.values.includes(v):shown<range.min||shown>range.max)||(r.integer&&!Number.isInteger(v)))return null;
+  return r.values||r.integer?v:Math.min(r.max,Math.max(r.min,v));
+ }
  function fail(code,message){const error=new Error(message);error.code=code;throw error;}
  function shape(value,keys,path){
   if(!value||typeof value!=='object'||Array.isArray(value)||![Object.prototype,null].includes(Object.getPrototypeOf(value)))fail('INVALID_PROJECT',path+' must be an object');
@@ -56,7 +65,7 @@
   shape(value.shot,v1?['start','end','motion','frameCount','fps','easing']:['start','end','motion','frameCount','holdFrames','fps','easing'],'shot');
   const fps=choice(value.shot.fps,'fps'),N=value.shot.frameCount,hold=v1?0:value.shot.holdFrames;
   if(!Number.isInteger(N)||N<RULES.duration.min*fps||N>RULES.duration.max*fps)fail('INVALID_PROJECT','frameCount must describe 2–120 seconds');
-  if(!Number.isInteger(hold)||hold<0||hold>RULES.hold.max*fps||hold>N-2)fail('INVALID_PROJECT','holdFrames must be 0–10 seconds and leave at least 2 moving frames');
+  if(!Number.isInteger(hold)||hold<0||hold>RULES.hold.max*fps||hold>N-2)fail('INVALID_PROJECT','Hold at end must be 0–10 seconds and leave at least 2 moving frames');
   const shot={start:camera(value.shot.start),end:camera(value.shot.end),motion:choice(value.shot.motion,'motion'),frameCount:N,holdFrames:hold,fps,easing:choice(value.shot.easing,'easing')};
   shape(value.look,lookKeys,'look');
   const look={palette:choice(value.look.palette,'palette')};
@@ -86,7 +95,11 @@
   let value;try{value=JSON.parse(raw);}catch{fail('INVALID_JSON','Invalid project JSON');}return validate(value);
  }
  function setDuration(project,seconds){numeric(seconds,'duration');const result=clone(project);result.shot.frameCount=Math.round(seconds*result.shot.fps);result.shot.holdFrames=Math.min(result.shot.holdFrames,result.shot.frameCount-2);return validate(result);}
- function setHold(project,seconds){numeric(seconds,'hold');const result=clone(project);result.shot.holdFrames=Math.round(seconds*result.shot.fps);return validate(result);}
+ function setHold(project,seconds){
+  numeric(seconds,'hold');const result=clone(project),{fps,frameCount}=result.shot,frames=Math.round(seconds*fps);
+  if(frames>frameCount-2)fail('INVALID_HOLD',`Hold at end can be at most ${display((frameCount-2)/fps)} s for this Duration; at least 2 frames must move.`);
+  result.shot.holdFrames=frames;return validate(result);
+ }
  function setSpeed(project,speed){numeric(speed,'speed');return setDuration(project,RULES.duration.default/speed);}
  function setFps(project,fps){choice(fps,'fps');const result=clone(project),scale=fps/result.shot.fps;result.shot.frameCount=Math.round(result.shot.frameCount/result.shot.fps*fps);result.shot.holdFrames=Math.min(Math.round(result.shot.holdFrames*scale),result.shot.frameCount-2);result.shot.fps=fps;return validate(result);}
  function timing(project,k){const {frameCount:N,fps}=project.shot;if(!Number.isInteger(k)||k<0||k>=N)fail('INVALID_FRAME','Frame is outside the shot');const timestampUs=Math.round(1e6*k/fps);return {k,u:k/(N-1),seconds:k/fps,timestampUs,durationUs:Math.round(1e6*(k+1)/fps)-timestampUs};}
@@ -135,6 +148,6 @@
    delete(id){const projects=read(),remaining=projects.filter(p=>p.id!==id);if(remaining.length!==projects.length)write(remaining);}
   };
  }
- root.TetraStudioModel={KEY,LIMIT,MAX_JSON_BYTES,UNDO_LIMIT,RULES,ENUMS,neutralLook,createProject,validate,serialize,deserialize,setDuration,setHold,setSpeed,setFps,timing,bitrate,dimensions,motionLabel,changeKind,createSession,createStore};
+ root.TetraStudioModel={KEY,LIMIT,MAX_JSON_BYTES,UNDO_LIMIT,RULES,ENUMS,display,inputRange,readInput,neutralLook,createProject,validate,serialize,deserialize,setDuration,setHold,setSpeed,setFps,timing,bitrate,dimensions,motionLabel,changeKind,createSession,createStore};
  if(typeof module!=='undefined')module.exports=root.TetraStudioModel;
 })(globalThis);

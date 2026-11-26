@@ -88,21 +88,103 @@ test('the selected bitrate reaches both probes and the cache-keyed sink configur
  const probes=[],f=fixture({probe:async config=>{probes.push([config.container,config.bitrate,config.resolution]);return config.container==='mp4'?{supported:false,reason:'No AVC'}:{supported:true,config:{...config,codec:'vp9'}};}});
  f.p.output.container='mp4';f.p.output.resolution=720;f.p.output.bitrate='master';await f.exporter.start(f.p,f.resources);assert.deepEqual(probes,[['mp4',20e6,720],['webm',20e6,720]]);
 });
-test('an estimate above the in-memory limit fails before any GPU work unless a file stream is supplied',async()=>{
+// Real-shaped OPFS: a writable replaces a file's bytes only when it closes (abort discards them),
+// removeEntry fails while a writable is open, and Web Locks mark files that a page still uses.
+function opfs({quota=1e12,usage=0}={}){
+ const files=new Map(),open=new Set(),log=[],faults={},picks=[],held=new Set();
+ const missing=()=>Object.assign(Error('missing'),{name:'NotFoundError'});
+ const handle=name=>({name:name.split('/').pop(),
+  async getFile(){if(!files.has(name))throw missing();return new Blob([files.get(name)]);},
+  async createWritable(){if(!files.has(name))throw missing();open.add(name);const parts=[];let done=false;const finish=()=>{done=true;open.delete(name);};
+   return new WritableStream({write(chunk){if(faults.write&&name.startsWith('picked/')){finish();throw Error('disk full');}parts.push(new Uint8Array(chunk.data??chunk));},
+    close(){if(faults.close&&name.startsWith('picked/')){finish();throw Error('close failed');}files.set(name,new Uint8Array(Buffer.concat(parts)));finish();log.push('close '+name);},abort(){if(!done){finish();log.push('abort '+name);}}});}});
+ const directory={async getFileHandle(name,{create=false}={}){if(!files.has(name)){if(!create)throw missing();files.set(name,new Uint8Array());}return handle(name);},
+  async removeEntry(name){if(faults.remove)throw Object.assign(Error('entry is locked'),{name:'NoModificationAllowedError'});if(open.has(name))throw Object.assign(Error('open writable'),{name:'NoModificationAllowedError'});if(!files.has(name))throw missing();files.delete(name);log.push('remove '+name);},
+  async *entries(){for(const name of [...files.keys()].filter(name=>!name.includes('/')))yield [name,handle(name)];}};
+ const locks={async request(name,options,callback){if(typeof options==='function'){callback=options;options={};}if(held.has(name)){if(options.ifAvailable)return callback(null);throw Error('lock contention in test');}held.add(name);try{return await callback({name});}finally{held.delete(name);}}};
+ files.set('picked/empty.mp4',new Uint8Array());files.set('picked/content.mp4',new Uint8Array(Buffer.from('SENTINEL')));
+ return {files,open,log,faults,picks,held,locks,storage:{getDirectory:async()=>directory,estimate:async()=>({quota,usage})},
+  pickFile:async options=>{picks.push(options);if(faults.pick)throw Object.assign(Error('The user aborted a request.'),{name:'AbortError'});return handle('picked/'+(faults.target||'content.mp4'));},
+  temps:()=>[...files.keys()].filter(name=>name.startsWith(Export.TEMP_PREFIX)),
+  sentinels:()=>({empty:files.get('picked/empty.mp4')?.length,content:files.has('picked/content.mp4')?Buffer.from(files.get('picked/content.mp4')).toString():null})};
+}
+const VIDEO=new Uint8Array([0,0,0,24,102,116,121,112,1,2,3,4]);
+const streamingSink=(fs,overrides={})=>async(canvas,config,options)=>{assert.ok(options.fileStream instanceof WritableStream);const writer=options.fileStream.getWriter();
+ return {addFrame:async()=>{await overrides.add?.();},finish:async()=>{await overrides.finish?.();await writer.write({type:'write',position:0,data:VIDEO});await writer.close();return {file:true,bytes:VIDEO.length,extension:'mp4',mimeType:'video/mp4',submittedFrames:60};},
+  cancel:async()=>{await writer.abort().catch(()=>{});}};};
+const large=(fs,overrides={})=>fixture({maxBytes:1000,storage:fs.storage,locks:fs.locks,pickFile:fs.pickFile,createSink:streamingSink(fs),...overrides});
+test('without OPFS, Web Locks or a picker, an estimate above the in-memory limit fails before any GPU work',async()=>{
  const p=M.setDuration(M.createProject({x:'0',y:'0',span:'8'}),60);p.output.bitrate='high';
  assert.ok(Export.estimateBytes(p)>1.8e8&&Export.estimateBytes(p)<1.9e8);assert.equal(Export.estimateBytes(M.setDuration(M.createProject({x:'0',y:'0',span:'8'}),40))<64*1024*1024,true);
- const f=fixture({maxBytes:64*1024*1024}),rejected=await f.exporter.start(p,f.resources);
- assert.equal(rejected.state,'failed');assert.equal(rejected.errorCode,'OUTPUT_TOO_LARGE_ESTIMATE');assert.match(rejected.error,/Shorten the duration.*lower bitrate.*720p/);assert.match(rejected.error,/\b17\d MiB|\b18\d MiB/);
- assert.equal(f.counters.renders,0);assert.ok(!f.events.includes('drain')&&!f.events.includes('export')&&!f.events.includes('prepare'));assert.equal(f.events.at(-1),'studio');assert.equal(rejected.active,false);
- const small=fixture({maxBytes:1000}),stream={aborts:0,abort(){this.aborts++;return Promise.resolve();}};let sinkOptions=null;
- const streamed=fixture({maxBytes:1000,createSink:async(canvas,config,options)=>{sinkOptions=options;return {addFrame:async()=>{},finish:async()=>({file:true,bytes:123456,extension:'mp4',mimeType:'video/mp4',submittedFrames:60}),cancel:async()=>{}};}});
- const done=await streamed.exporter.start(streamed.p,{...streamed.resources,fileStream:stream,fileName:'Picked.mp4'});
- assert.equal(done.state,'ready');assert.equal(sinkOptions.fileStream,stream);assert.equal(done.result.file,true);assert.equal(done.result.filename,'Picked.mp4');assert.equal(done.result.bytes,123456);assert.equal(done.url,null);assert.equal(stream.aborts,0);
- const refused=await small.exporter.start(small.p,small.resources);assert.equal(refused.errorCode,'OUTPUT_TOO_LARGE_ESTIMATE');
+ const fs=opfs();
+ for(const missing of [{storage:null},{locks:null},{pickFile:null}]){
+  const f=fixture({maxBytes:64*1024*1024,storage:fs.storage,locks:fs.locks,pickFile:fs.pickFile,...missing}),rejected=await f.exporter.start(p,f.resources);
+  assert.equal(rejected.state,'failed');assert.equal(rejected.errorCode,'OUTPUT_TOO_LARGE_ESTIMATE');assert.match(rejected.error,/Shorten the duration.*lower bitrate.*720p/);assert.match(rejected.error,/\b17\d MiB|\b18\d MiB/);
+  assert.equal(f.counters.renders,0);assert.ok(!f.events.includes('drain')&&!f.events.includes('export')&&!f.events.includes('prepare'));assert.equal(f.events.at(-1),'studio');assert.equal(rejected.active,false);assert.equal(f.exporter.largeOutput(),false);
+ }
+ assert.deepEqual(fs.temps(),[]);assert.equal(fs.picks.length,0);
 });
-test('a file stream that was never handed to a sink is aborted when export fails first',async()=>{
- const stream={aborts:0,abort(){this.aborts++;return Promise.resolve();}},f=fixture({maxBytes:1000,probe:async()=>({supported:false,reason:'unsupported'})});
- const state=await f.exporter.start(f.p,{...f.resources,fileStream:stream});assert.equal(state.state,'failed');assert.equal(stream.aborts,1);
+test('a large export renders into a private temporary file and writes a picked file only when Save succeeds',async()=>{
+ const fs=opfs(),f=large(fs),done=await f.exporter.start(f.p,f.resources);
+ assert.equal(done.state,'ready');assert.equal(done.result.file,true);assert.ok(done.result.temp);assert.equal(done.result.filename,'Untitled shot.mp4');assert.ok(done.url.startsWith('blob:'));
+ assert.equal(fs.picks.length,0,'no picker before Save');assert.deepEqual(fs.sentinels(),{empty:0,content:'SENTINEL'});
+ const [temp]=fs.temps();assert.match(temp,/^tetra-export-.+\.mp4$/);assert.deepEqual([...fs.files.get(temp)],[...VIDEO]);assert.ok(fs.held.has(temp),'the temporary file is locked while in use');
+ const saved=await f.exporter.save();
+ assert.equal(fs.picks.length,1);assert.equal(fs.picks[0].suggestedName,'Untitled shot.mp4');assert.deepEqual([...fs.files.get('picked/content.mp4')],[...VIDEO]);
+ assert.equal(saved.result.savedAs,'content.mp4');assert.equal(saved.url,null);assert.equal(saved.saving,false);assert.deepEqual(fs.temps(),[]);assert.equal(fs.held.size,0);
+ await assert.rejects(f.exporter.save(),/no finished video/);await f.exporter.clearResult();assert.equal(fs.picks.length,1);
+});
+test('a failure or cancel at any stage before Save never touches picked files and leaves no temporary file',async()=>{
+ const stages={
+  quota:fs=>({storage:{...fs.storage,estimate:async()=>({quota:5000,usage:4500})}}),
+  probe:()=>({probe:async()=>{throw Error('probe fault');}}),
+  prepare:()=>({prepare:async()=>{throw Error('prepare fault');}}),
+  sink:()=>({createSink:async()=>{throw Error('sink fault');}}),
+  render:fs=>({createSink:streamingSink(fs,{add:async()=>{throw Error('render fault');}})}),
+  finalize:fs=>({createSink:streamingSink(fs,{finish:async()=>{throw Error('finalize fault');}})}),
+ };
+ for(const [stage,overrides] of Object.entries(stages)){
+  const fs=opfs(),f=large(fs,overrides(fs)),state=await f.exporter.start(f.p,f.resources);
+  assert.equal(state.state,'failed',stage);assert.equal(state.result,null);assert.equal(state.url,null);assert.equal(fs.picks.length,0,stage);
+  assert.deepEqual(fs.sentinels(),{empty:0,content:'SENTINEL'},stage);assert.deepEqual(fs.temps(),[],stage);assert.equal(fs.open.size,0,stage);assert.equal(fs.held.size,0,stage);
+  if(stage==='quota'){assert.equal(state.errorCode,'STORAGE_QUOTA');assert.match(state.error,/only 0 MiB of browser storage/);assert.equal(f.counters.renders,0);assert.ok(!f.events.includes('drain'));}
+  else assert.match(state.error,new RegExp(stage+' fault'));
+ }
+ for(const stage of ['render','finalize']){
+  const fs=opfs(),gate=deferred(),reached=deferred(),hook=async()=>{reached.resolve();await gate.promise;};
+  const f=large(fs,{createSink:streamingSink(fs,stage==='render'?{add:hook}:{finish:hook})}),work=f.exporter.start(f.p,f.resources);
+  await reached.promise;const canceled=f.exporter.cancel();gate.resolve();await canceled;const state=await work;
+  assert.equal(state.state,'canceled',stage);assert.equal(fs.picks.length,0);assert.deepEqual(fs.sentinels(),{empty:0,content:'SENTINEL'});assert.deepEqual(fs.temps(),[],stage);assert.equal(fs.held.size,0);
+ }
+ const fs=opfs();fs.faults.remove=true;const f=large(fs,{createSink:streamingSink(fs,{add:async()=>{throw Error('render fault');}})}),state=await f.exporter.start(f.p,f.resources);
+ assert.equal(state.state,'failed');assert.match(state.error,/render fault.*Could not delete the temporary video file tetra-export-/,'a failed deletion is reported, not ignored');assert.equal(fs.held.size,0);
+});
+test('a canceled picker, a failed write or a failed close keeps the temporary video for another Save',async()=>{
+ const fs=opfs(),f=large(fs);await f.exporter.start(f.p,f.resources);const [temp]=fs.temps();
+ for(const [fault,code,pattern] of [['pick','SAVE_ABORTED',/no location was chosen/],['write','SAVE_FAILED',/disk full/],['close','SAVE_FAILED',/close failed/]]){
+  fs.faults[fault]=true;fs.faults.target=fault==='write'?'empty.mp4':'content.mp4';
+  await assert.rejects(f.exporter.save(),error=>error.code===code&&pattern.test(error.message)&&/The video is kept/.test(error.message),fault);fs.faults[fault]=false;
+  const state=f.exporter.snapshot();assert.equal(state.saving,false);assert.match(state.saveError,pattern);assert.ok(state.result.temp);assert.ok(state.url);
+  assert.deepEqual(fs.temps(),[temp]);assert.deepEqual(fs.sentinels(),{empty:0,content:'SENTINEL'},fault);assert.equal(fs.open.size,0);
+ }
+ fs.faults.target='empty.mp4';const saved=await f.exporter.save();assert.equal(saved.result.savedAs,'empty.mp4');assert.equal(saved.saveError,null);assert.deepEqual([...fs.files.get('picked/empty.mp4')],[...VIDEO]);
+ assert.equal(fs.sentinels().content,'SENTINEL');assert.deepEqual(fs.temps(),[]);
+});
+test('closing or redoing a result deletes its temporary file, reports a failed deletion and refuses to discard during Save',async()=>{
+ const fs=opfs(),f=large(fs);await f.exporter.start(f.p,f.resources);assert.equal(fs.temps().length,1);
+ await f.exporter.clearResult();assert.deepEqual(fs.temps(),[]);assert.equal(f.exporter.snapshot().state,'idle');assert.equal(fs.held.size,0);
+ await f.exporter.start(f.p,f.resources);assert.equal(fs.temps().length,1);const redo=await f.exporter.start(f.p,f.resources);assert.equal(redo.state,'ready');assert.equal(fs.temps().length,1,'redo replaced the previous temporary file');
+ fs.faults.remove=true;await assert.rejects(f.exporter.clearResult(),error=>error.code==='TEMP_DELETE_FAILED'&&/Could not delete the temporary video file/.test(error.message));assert.equal(fs.held.size,0,'a file that could not be deleted is left for the next sweep');
+ fs.faults.remove=false;assert.equal(await f.exporter.sweep(),1);assert.deepEqual(fs.temps(),[]);
+ const slow=opfs(),pick=deferred(),g=large(slow,{pickFile:async()=>{await pick.promise;return {name:'x.mp4',createWritable:async()=>new WritableStream()};}});await g.exporter.start(g.p,g.resources);
+ const saving=g.exporter.save();assert.equal(g.exporter.snapshot().saving,true);await assert.rejects(g.exporter.clearResult(),/finish saving/);assert.throws(()=>g.exporter.start(g.p,g.resources),/finish saving/);pick.resolve();await saving;assert.deepEqual(slow.temps(),[]);
+});
+test('sweep removes only temporary video files that no page holds',async()=>{
+ const fs=opfs(),f=large(fs);for(const name of ['tetra-export-stale.mp4','tetra-export-busy.webm','notes.txt'])fs.files.set(name,new Uint8Array([1]));
+ const release=deferred(),busy=fs.locks.request('tetra-export-busy.webm',()=>release.promise);
+ assert.equal(await f.exporter.sweep(),1);assert.deepEqual([...fs.files.keys()].filter(name=>!name.includes('/')).sort(),['notes.txt','tetra-export-busy.webm']);
+ release.resolve();await busy;assert.equal(await f.exporter.sweep(),1);assert.deepEqual(fs.temps(),[]);assert.ok(fs.files.has('picked/content.mp4'));
+ assert.equal(await fixture({pickFile:null}).exporter.sweep(),0);
 });
 test('Stable passes the motion filter with one constant sequence; Raw and Hold do not',async()=>{
  const run=async(temporal,motion)=>{

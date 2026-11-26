@@ -13,9 +13,9 @@
 4. Open **Export video**. Choose Aspect, Resolution, FPS, Sampling, Format,
    Bitrate and Motion stability in that window, then **Create video**. Once ready,
    **Download MP4 / WebM** saves the file. These are silent videos, computed
-   locally in your browser. A video estimated above 64 MiB asks where to save it
-   first and is written straight to that file (Chromium browsers); other browsers
-   explain the limit before any rendering starts.
+   locally in your browser. A video estimated above 64 MiB renders into private
+   temporary browser storage; once it is ready, **Save** asks where to keep it
+   (Chromium browsers). Other browsers explain the limit before any rendering starts.
 
 **Save project** saves editable settings on this device, not a video. **Projects**
 loads saved shots, imports/exports project JSON and offers **New from Explore**.
@@ -87,7 +87,9 @@ Hold uses A and retains B. Tunnel In/Out derives from the actual span ratio;
 Drift uses equal spans. Reversing the path exchanges both complete endpoints.
 Motion follows the zoom-aware path in `studio-camera.js`, with exact endpoints
 and frame-index easing. Roll follows the direct angle difference. Duration is
-quantized to N frames; Speed is 10 seconds divided by duration. Changing FPS
+quantized to N frames; Speed is 10 seconds divided by duration. Number fields show
+at most five decimals, and any shown value can be typed back: an entry inside the
+shown range is clamped to the exact limit (Speed 0.08333 at 120 s is 1/12). Changing FPS
 preserves duration and Hold at end. With H hold frames the camera uses
 `k/(N−H−1)` for the first N−H frames, then stays exactly on B; effects use `k/fps`.
 Hold at end changes the camera path, so projects with a hold are not frame-identical
@@ -112,6 +114,10 @@ Outputs are silent SDR, 720/1080 short-side pixels, 16:9/9:16/1:1, 24/30 fps and
 and 6 / 12 / 20 Mbps at 720; Standard is the earlier default. A new bitrate goes
 through the same real-encode capability probe as any other output. MP4/AVC is preferred; select the confirmed WebM/VP9 alternative if
 MP4 is unavailable. Unsupported configurations never reduce quality silently.
+When the probe confirms quantizer mode, H.264 export chooses the quantizer of each frame from the
+size of the packets so far. This keeps the bitrate target without the encoder's variable-bitrate
+mode, which kept refining a held end for about a second. A hold is encoded once, finer, and its
+exact repeats keep that quantizer. Measurements are in [VALIDATION.md](VALIDATION.md).
 WebGL2 is required for movie rendering; supported WebGPU accelerates orbit work.
 Non-neutral FX need half-float render targets. Deep/high-cap work can be slow.
 The source is limited to 8.3 million pixels, the GPU texture limit and 64 MiB;
@@ -125,16 +131,27 @@ from active time. Finalization can finish
 while hidden. Cancel/device/encoder errors never publish a partial file; retry
 starts at frame 0. File ready appears only after finalization and resource cleanup. Download does not
 claim that a browser save dialog completed. Closing the result, exporting again
-or leaving Studio releases its Blob URL.
+or leaving Studio releases its Blob URL and deletes any temporary file.
 
 The position-aware output collector caps the in-memory file at 64 MiB. Before
 rendering, the export compares an estimate (bitrate × duration plus 5 % and
-64 KiB) with that cap. Above it, a browser with `showSaveFilePicker` streams the
-finished encoder output into the chosen file, which is closed only after
-finalization; cancel or failure aborts the write so the original file is kept, and
-a new empty file created by the picker is removed. Without that API the export
+64 KiB) with that cap. Above it, a browser with the origin private file system
+(OPFS), Web Locks and `showSaveFilePicker` checks `navigator.storage.estimate()`
+for room, then streams the encoder output into a private temporary file
+(`tetra-export-<id>.mp4` or `.webm`). No file you choose is opened, truncated or
+removed while the video renders: the save dialog opens only when you press
+**Save** on a finished video, and the video is then copied into the chosen file
+by stream. Only a completed write and close is reported as "Saved to …". Choosing
+an existing file replaces it, as the browser's save dialog warns. A canceled
+dialog or a failed write or close keeps the temporary video, says so and lets you
+press **Save** again. The temporary file is deleted after a successful save, when
+the export fails or is canceled, and when you close the result, export again or
+leave Studio; a failed deletion is reported, never ignored. When Studio starts it
+removes temporary files left by a closed or crashed tab; a Web Lock keeps it from
+removing a file that another open tab still uses. Without these APIs the export
 fails up front (`OUTPUT_TOO_LARGE_ESTIMATE`) and lists shorter duration, lower
-bitrate or 720p. A saved file is reported as "Saved to …", not as a download. The cap
+bitrate or 720p; without enough browser storage it fails up front with
+`STORAGE_QUOTA`. The cap
 does not limit total browser RAM, driver allocations or encoder surfaces. The app retains
 one source frame, fixed FX scratch, two tiny endpoint thumbnail images and one
 video result; it does not keep a raw-video frame array. The media operations have

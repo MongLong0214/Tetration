@@ -448,6 +448,22 @@ def run():
             page.wait_for_function('() => !tetraStudioDiagnostics.transitioning', timeout=120000)
             assert page.evaluate('() => TetraStudioModel.serialize(tetraStudioDiagnostics.project)') == baseline
             suite.record('Reverse clean draft, invalid Save/Play/Export, scoped preset errors, Original, drag/pointercancel and native keyrepeat Undo')
+            # At 120 s Speed is 1/12, shown rounded as 0.08333; typing the shown value back must be accepted.
+            tab(page, 'Motion')
+            number(page, 'duration', 120)
+            assert page.locator('#studio-speed-number').input_value() == '0.08333'
+            number(page, 'speed', '0.08333')
+            assert page.locator('#studio-speed-number').get_attribute('aria-invalid') is None
+            assert page.evaluate('() => tetraStudioDiagnostics.project.shot.frameCount===120*tetraStudioDiagnostics.project.shot.fps')
+            number(page, 'duration', 2)
+            assert page.locator('#studio-speed-number').input_value() == '5', 'retyping the shown Speed must not leave a stale value that a later edit re-applies'
+            number(page, 'hold', 2)
+            notice = page.evaluate('() => tetraStudioDiagnostics.notice')
+            assert notice.startswith('Hold at end can be at most 1.9') and 'holdFrames' not in notice, notice
+            suite.record('The shown minimum Speed reads back exactly; an over-long Hold names the control and its limit', {'notice': notice})
+            number(page, 'hold', 0)
+            number(page, 'duration', 2)
+            assert page.evaluate('() => tetraStudioDiagnostics.project.shot.holdFrames===0&&tetraStudioDiagnostics.project.shot.frameCount===2*tetraStudioDiagnostics.project.shot.fps')
             assert page.evaluate('() => tetraStudioDiagnostics.export.url===null')
             tab(page, 'Look')
             page.get_by_label('Preset', exact=True).select_option('Prism Wave')
