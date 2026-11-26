@@ -1,5 +1,114 @@
 # Validation — 1.1.0
 
+## Output tiers, long exports, quality matrix and export performance (2026-11-26, #43)
+
+Machine: Apple M2 Pro, 32 GB, macOS 26.2. Browser: retail Chrome 158.0.8127.37 unless noted
+(Chrome for Testing 151 for the hardware suites). Measurements and hypotheses are kept apart: every
+number below was measured; lines marked *Hypothesis* were not.
+
+**Tolerances defined before measuring.** Reuse or "no change" claims require SHA-256 equality of the
+pre-encode RGBA frames. Container checks require the exact frame count, PTS step 1/fps (±1 µs from
+microsecond rounding), the exact duration and resolution. Timing differences under 5 % between A and
+B are treated as no difference. Quality claims use the two metrics defined below and nothing else.
+
+### Coverage matrix
+
+| Area | WebGPU | WebGL2 | Retail Chrome | CfT | Evidence |
+|---|---|---|---|---|---|
+| 720/1080 × 3 aspects × 24/30 probes | – | – | ✓ | ✓ | browser_studio (asserted supported) |
+| 1440/2160 × 3 aspects × 30/60 × Standard/Master probes | – | – | ✓ 24/24 supported, per-frame QP | ✓ | probe matrix |
+| 4K30 synthetic encode, frame IDs decoded | – | – | – | ✓ | browser_studio |
+| 4K60 product export (Overview→Horizon, 2 s) | ✓ | – | ✓ | – | 120 frames, PTS step 1/60 |
+| 60 s / 120 s product exports, interrupt, cancel | ✓ | – | ✓ | – | below |
+| Quality matrix AA4/AA16 × Raw/Stable × 12/24/40 | ✓ full | AA4 full, AA16 three frames | ✓ | – | below |
+| A/B/B/A performance, 4 scenarios × 3 launches | ✓ | – | ✓ | – | below |
+| Excluded: OS save dialog, physical Safari/iPhone, Firefox | | | | | not run |
+
+### 60 fps and 1440/2160
+
+- Probe matrix 1440/2160 × 16:9/9:16/1:1 × 30/60 fps × Standard/Master (24–150 Mbps): 24/24
+  supported with per-frame QP rate control.
+- Mediabunny requests `avc1.640033` (level 5.1) for 4K60 because its level table ignores frame rate.
+  The bitstream VideoToolbox writes is correct: ffprobe reports level 52 for 3840 × 2160 at 60 fps and
+  51 for 2560 × 1440 at 60 fps, so no codec-string override was added.
+- 2 s Overview→Horizon at 2160p60, product UI: 120 frames, 3840 × 2160, PTS 0→1.983333 in steps of
+  0.016666–0.016667, duration 2.000000, 17.36 MB (0.976 of the estimate), render 3.19 s/frame, peak
+  summed RSS 0.89 GB.
+- A rolled 2160 shot is refused before rendering (SOURCE_LIMIT, unit-tested); an unrolled 2160 shot uses
+  exactly 8,294,400 source pixels.
+
+### Long exports (Overview → Horizon, 1080p30, AA4, Standard)
+
+| Run | Frames | Wall | Result | ffprobe | Size / estimate |
+|---|---|---|---|---|---|
+| 60 s full | 1800 | 1505 s | ready, OPFS temp, saved through the picker into OPFS | 1800 frames, 1920 × 1080, duration 60.000000, PTS monotonic, step 0.033333–0.033334 | 0.951 |
+| 120 s, hidden at frame 1801 | 3600 | 3047 s | suspended within one frame (1802 after 15 s and 20 s hidden), resumed when visible, ready | 3600 frames, duration 120.000000, PTS 0→119.966667 monotonic | 0.952 |
+| 60 s, cancel at frame 1740 | 1740 | 1391 s | canceled in 396 ms, no OPFS entry left | – | – |
+
+- Memory, 120 s run: summed RSS of the browser processes stayed at 0.44–0.85 GB between spikes and
+  ended at 0.64 GB (start 0.81 GB), so it does not grow with length. JS heap peaked at 15.9 MB. Short
+  spikes reached 7.7 GB summed RSS (GPU process 0.96 GB, renderer 4.2 GB) and fell back within one
+  30 s sample. *Hypothesis:* the spikes are shared GPU/IOSurface pages counted in several processes; this
+  was not separated with `footprint`.
+- Main thread during the 60 s cancel run (23 min): 0 long tasks; requestAnimationFrame interval p50
+  16.7 ms, p99 16.8 ms, one interval above 50 ms out of 83,455.
+- Interrupted exports resume at the next frame; ffprobe of the resumed 120 s file shows no gap or
+  duplicate PTS.
+
+### Worker/OffscreenCanvas rendering and cross-frame reuse
+
+- Worker export rendering was not implemented. Measured: the main thread had no long task during a
+  23-minute export and the frame interval stayed at 16.7 ms p99. The earlier profile put 98.9 % of frame
+  time in GPU waits. A worker would move no measurable main-thread work, and would need a second GPU
+  context with its own context-loss, cancel and 10 s deadline paths. It stays a follow-up.
+- Cross-frame reuse already exists and is tested with hashes: sequential deep frames build fewer BLA
+  tables than frames, and random seek produces identical bytes (browser_studio_deep); a static hold
+  renders once and reuses the frame (47 of 48 cache hits in each hold scenario below).
+
+### Quality matrix: Horizon crop, 1.12e-98 → 7e-100, 5 s, 1080p30
+
+Metrics on BT.709 limited-range luma; pre-encode frames are read from a copy canvas, decoded frames come
+from ffmpeg. **Coarse flicker**: mean absolute difference between frame k and frame k−1 resampled at the
+same plane points (zoom about the centre), on 4 × 4 block means, over the central 80 %; lower is steadier.
+**Edge contrast**: mean Sobel magnitude over the top 5 % gradient pixels of the pre-encode frame, at 15
+frames; decoded contrast is that mean on the decoded frame at the same pixels.
+
+| Render | Pre coarse flicker | Pre edge | 12 Mbps flicker / edge | 24 Mbps | 40 Mbps | Render time |
+|---|---|---|---|---|---|---|
+| AA4 Raw (default) | 6.02 | 384 | 4.68 / 321 | 5.47 / 353 | 5.99 / 375 | 104 s |
+| AA4 Stable | 3.39 | 285 | 3.40 / 301 | 3.56 / 310 | 3.66 / 315 | 104 s |
+| AA16 Raw | 4.17 | 352 | 3.74 / 362 | 4.04 / 376 | 4.25 / 385 | 419 s |
+| AA16 Stable | 2.93 | 277 | 3.10 / 305 | 3.19 / 309 | 3.25 / 311 | 362 s |
+
+- WebGL2 AA4 Raw and Stable give the same metrics within 0.3 % (coarse flicker 4.680 vs 4.680 at
+  12 Mbps; edge retention 0.833 vs 0.836) and sizes within 0.1 %. The pixels are not identical (PSNR
+  18–19 dB between backends on frames 0/75/149), so equivalence here is statistical, not exact.
+- WebGL2 AA16 took 164–179 s per 1080p frame (WebGPU 2.0–2.4 s), so a 150-frame run would take about
+  7 h; it was compared on frames 0/75/149 only. AA16 versus AA4 is the same on both backends (mean
+  absolute RGB difference 13.97/17.33/17.73 vs 13.97/17.34/17.73).
+- More bitrate keeps more edge contrast but also keeps more frame-to-frame change; no bitrate wins both.
+  Stable lowers flicker and lowers edge contrast. AA16 Raw is better than the default on both (−20 %
+  flicker, +13 % edge at 12 Mbps) but renders 4.0× slower on WebGPU and about 45× slower on WebGL2.
+  **Defaults are unchanged**: the gain is real, but the cost makes AA16 a per-shot choice, not a default.
+- The full-resolution aligned difference falls from 18.1 (pre) to 9.0 after a 12 Mbps encode, which
+  measures detail the encoder removes rather than flicker, so the coarse metric is the one reported.
+
+### A/B/B/A performance (main f6ee4a0 = A, this branch = B)
+
+`tests/browser_studio_performance.py --origins A B B A`, three browser launches, 720p AA4 WebGPU, 48
+frames. Median (max) ms of 3; cold = first visit of that origin and scenario in a launch.
+
+| Scenario | A cold | A warm | B cold | B warm | Pre-encode hashes |
+|---|---|---|---|---|---|
+| Shallow travel | 6959 (7739)* | 2215 (2328) | 2191 (2260) | 2229 (2235) | 1 unique set of 12 |
+| Deep travel | 13629 (13647) | 13459 (13509) | 13452 (13504) | 13420 (13754) | 1 of 12 |
+| Shallow hold | 560 (567) | 542 (550) | 558 (566) | 545 (577) | 1 of 12 |
+| Deep hold | 874 (877) | 866 (867) | 853 (880) | 885 (906) | 1 of 12 |
+
+\* The first run of each launch includes 4.8 s of shader preparation (prepare 4825 ms vs 98 ms warm);
+it is a launch effect, not an origin effect. Stage medians (deep travel, B warm): prepare 131, render
+12882, FX 69, encode 7, finalize 34 ms. Render is 96 % of the time; A and B differ by less than 2 %.
+
 ## Encoder hold drift and per-frame QP rate control (2026-11-26, #43)
 
 Owner report: decoded SSIM between frames 48 and 71 of an exact 1 s hold was 0.9101 at 6 Mbps and

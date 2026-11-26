@@ -109,9 +109,10 @@ linear exposure/Pulse/Wave, Bloom and the linear Amount mix. Neutral/Original/ze
 Amount preserve framed RGB8 pixels exactly. Sampling extends images by reflection;
 spatial FX do not request extra fractal area. Only roll determines overscan.
 
-Outputs are silent SDR, 720/1080 short-side pixels, 16:9/9:16/1:1, 24/30 fps and
-2–120 seconds. Bitrate targets 12 / 24 / 40 Mbps (Standard / High / Master) at 1080
-and 6 / 12 / 20 Mbps at 720; Standard is the earlier default. A new bitrate goes
+Outputs are silent SDR, 720/1080/1440/2160 short-side pixels, 16:9/9:16/1:1, 24/30/60 fps and
+2–120 seconds (at most 7,200 frames). Bitrate targets 12 / 24 / 40 Mbps (Standard / High / Master) at 1080,
+6 / 12 / 20 Mbps at 720, 24 / 40 / 60 Mbps at 1440 and 45 / 68 / 100 Mbps at 2160, following the
+published SDR upload recommendations; 60 fps uses 1.5× the tier. Standard is the earlier default. A new bitrate goes
 through the same real-encode capability probe as any other output. MP4/AVC is preferred; select the confirmed WebM/VP9 alternative if
 MP4 is unavailable. Unsupported configurations never reduce quality silently.
 When the probe confirms quantizer mode, H.264 export chooses the quantizer of each frame from the
@@ -121,7 +122,9 @@ exact repeats keep that quantizer. Measurements are in [VALIDATION.md](VALIDATIO
 WebGL2 is required for movie rendering; supported WebGPU accelerates orbit work.
 Non-neutral FX need half-float render targets. Deep/high-cap work can be slow.
 The source is limited to 8.3 million pixels, the GPU texture limit and 64 MiB;
-some rolled 1080 shots therefore exceed the source limit and need an explicit edit.
+some rolled 1080 shots therefore exceed the source limit and need an explicit edit. A 2160 frame
+already uses the whole 3840 × 2160 source, so any roll at 2160 is refused before rendering with a
+message that names the limit and the two fixes (0° roll or a lower resolution).
 
 One awaited CanvasSource add consumes each stable composed canvas at integer
 microsecond timestamps. Hidden export completes current work, then suspends before

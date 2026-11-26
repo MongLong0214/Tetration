@@ -4,7 +4,7 @@
  const M=root.TetraStudioModel;
  function filename(name,extension){return (name.replace(/[<>:"/\\|?*\x00-\x1f]/g,'-').replace(/[. ]+$/g,'').trim().slice(0,80)||'tetra-motion')+'.'+extension;}
  // Encoder rate control may overshoot its target slightly; the estimate gates the 64 MiB in-memory path before any frame renders.
- function estimateBytes(project){return Math.ceil(M.bitrate(project.output)*project.shot.frameCount/project.shot.fps/8*1.05)+65536;}
+ function estimateBytes(project){return Math.ceil(M.bitrate(project.output,project.shot.fps)*project.shot.frameCount/project.shot.fps/8*1.05)+65536;}
  // A few consecutive GPU sample passes share one fence in export; pixels are unchanged because pass order is.
  const FENCE_BATCH=4;
  // Large exports render into a private OPFS file. A file the user picks is opened only by save(),
@@ -69,9 +69,9 @@
        if(free<estimate)throw fault('STORAGE_QUOTA',`This video is estimated at ${Math.ceil(estimate/1048576)} MiB, but only ${Math.floor(free/1048576)} MiB of browser storage is available for its temporary file. Free disk space, shorten the duration or choose a lower bitrate.`);
       }
       pendingStage={name:'prepareMs',at:now()};await drainPreview();check(signal);
-      const size=M.dimensions(project.output),support=await probe({...size,resolution:project.output.resolution,fps:project.shot.fps,container:project.output.container,frameCount:total,bitrate:M.bitrate(project.output)},signal);check(signal);
+      const size=M.dimensions(project.output),support=await probe({...size,resolution:project.output.resolution,fps:project.shot.fps,container:project.output.container,frameCount:total,bitrate:M.bitrate(project.output,project.shot.fps)},signal);check(signal);
       if(!support.supported){
-       if(project.output.container==='mp4'){const other=await probe({...size,resolution:project.output.resolution,fps:project.shot.fps,container:'webm',frameCount:total,bitrate:M.bitrate(project.output)},signal);check(signal);if(other.supported)alternative=other.config;}
+       if(project.output.container==='mp4'){const other=await probe({...size,resolution:project.output.resolution,fps:project.shot.fps,container:'webm',frameCount:total,bitrate:M.bitrate(project.output,project.shot.fps)},signal);check(signal);if(other.supported)alternative=other.config;}
        const failure=Error(support.reason||'The selected video format is unavailable.');failure.code=support.code||'UNSUPPORTED_CONFIG';throw failure;
       }
       if(project.output.container==='auto'&&support.config.container==='webm'){alternative=support.config;const failure=Error('MP4 is unavailable. Use the confirmed WebM alternative or return to editing.');failure.code='MP4_UNAVAILABLE';throw failure;}
