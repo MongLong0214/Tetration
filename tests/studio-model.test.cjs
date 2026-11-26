@@ -10,7 +10,7 @@ test('new project and quantized duration/speed/fps use one time axis',()=>{
  assert.equal(p.shot.frameCount,300);assert.equal(M.setSpeed(p,2).shot.frameCount,150);assert.equal(M.setSpeed(p,0.5).shot.frameCount,600);assert.equal(M.setSpeed(p,1/12).shot.frameCount,3600);
  assert.equal(M.setFps(p,24).shot.frameCount,240);assert.equal(M.setDuration(p,2.01).shot.frameCount,60);
  for(const fps of [24,30]){const q=M.setFps(p,fps),frames=Array.from({length:q.shot.frameCount},(_,k)=>M.timing(q,k));assert.equal(frames.reduce((sum,s)=>sum+s.durationUs,0),10000000);assert.equal(frames.at(-1).timestampUs,Math.round(1e6*(q.shot.frameCount-1)/fps));assert.throws(()=>M.timing(q,q.shot.frameCount));}
- for(const value of [NaN,Infinity,1.9,120.01,'10'])assert.throws(()=>M.setDuration(p,value));assert.throws(()=>M.setFps(p,60));
+ for(const value of [NaN,Infinity,1.9,120.01,'10'])assert.throws(()=>M.setDuration(p,value));assert.throws(()=>M.setFps(p,25));
 });
 test('precise camera strings and every hidden FX value survive JSON, storage and Undo',()=>{
  const p=project();p.shot.start.x='-0.5'+'0'.repeat(208)+'1';p.shot.start.span='1e-200';p.shot.end.y='1e-210';
@@ -94,6 +94,12 @@ test('bitrate maps the quality tier to the target bit rate for each output size'
  const table={standard:[12e6,6e6],high:[24e6,12e6],master:[40e6,20e6]};
  for(const [bitrate,[full,hd]] of Object.entries(table)){assert.equal(M.bitrate({resolution:1080,bitrate}),full);assert.equal(M.bitrate({resolution:720,bitrate}),hd);}
  assert.equal(M.bitrate(project().output),12e6);assert.equal(M.bitrate({...project().output,resolution:720}),6e6);
+ // 1440p/2160p tiers and the 1.5× 60 fps ratio; 24/30 fps targets are unchanged.
+ assert.deepEqual(['standard','high','master'].map(bitrate=>[1440,2160].map(resolution=>M.bitrate({resolution,bitrate}))),[[24e6,45e6],[40e6,68e6],[60e6,100e6]]);
+ for(const fps of [24,30])assert.equal(M.bitrate({resolution:1080,bitrate:'high'},fps),24e6);assert.equal(M.bitrate({resolution:1080,bitrate:'high'},60),36e6);assert.equal(M.bitrate({resolution:2160,bitrate:'master'},60),150e6);
+ assert.deepEqual(['16:9','9:16','1:1'].map(aspect=>M.dimensions({aspect,resolution:2160})),[{width:3840,height:2160},{width:2160,height:3840},{width:2160,height:2160}]);
+ assert.deepEqual(M.dimensions({aspect:'16:9',resolution:1440}),{width:2560,height:1440});
+ const sixty=M.setDuration(M.setFps(project(),60),120);assert.equal(sixty.shot.frameCount,7200);assert.equal(M.validate(JSON.parse(M.serialize(sixty))).shot.fps,60);
 });
 test('every shown numeric value reads back inside its rule, including Speed 1/12 at 120 s',()=>{
  for(const [key,rule]of Object.entries(M.RULES))for(const scale of rule.values?[1]:[1,100]){

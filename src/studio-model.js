@@ -17,9 +17,10 @@
   'wave.strengthEV':{min:0,max:1,default:0.35,unit:'EV'},'wave.fieldCycles':{min:0.25,max:4,default:1,unit:'cycles'},'wave.speed':{min:-1,max:1,default:0.25,unit:'cycles/s'},amount:{min:0,max:1,default:1,unit:'×'},
   fixedIterations:{min:64,max:16384,default:1024,integer:true,unit:'iterations'}
  });
- const ENUMS=freeze({palette:['aurora','ember','tidal','mono'],motion:['hold','travel'],fps:[24,30],easing:['linear','ease-in','ease-out','ease-in-out'],aspect:['16:9','9:16','1:1'],resolution:[720,1080],samples:[4,16],container:['auto','mp4','webm'],bitrate:['standard','high','master'],temporal:['raw','stable'],iterations:['auto-shot','fixed']});
- // Target video bitrates (bit/s) by resolution; Standard is the pre-v2 encoder default.
- const BITRATES=freeze({standard:{720:6e6,1080:12e6},high:{720:12e6,1080:24e6},master:{720:20e6,1080:40e6}});
+ const ENUMS=freeze({palette:['aurora','ember','tidal','mono'],motion:['hold','travel'],fps:[24,30,60],easing:['linear','ease-in','ease-out','ease-in-out'],aspect:['16:9','9:16','1:1'],resolution:[720,1080,1440,2160],samples:[4,16],container:['auto','mp4','webm'],bitrate:['standard','high','master'],temporal:['raw','stable'],iterations:['auto-shot','fixed']});
+ // Target video bitrates (bit/s) at 24/30 fps by resolution; Standard is the pre-v2 encoder default. 1440p and 2160p
+ // Standard meet YouTube's SDR upload recommendation (16 and 35–45 Mbps), and 60 fps adds its 1.5× high-frame-rate ratio.
+ const BITRATES=freeze({standard:{720:6e6,1080:12e6,1440:24e6,2160:45e6},high:{720:12e6,1080:24e6,1440:40e6,2160:68e6},master:{720:20e6,1080:40e6,1440:60e6,2160:100e6}}),LONG_SIDE=freeze({720:1280,1080:1920,1440:2560,2160:3840});
  // Numeric inputs show 5 decimals. Every shown value must read back, so input accepts the
  // rounded rule range and clamps into the exact rule: 1/12 shows and reads as 0.08333.
  const DIGITS=5,display=value=>String(Number(value.toFixed(DIGITS)));
@@ -103,8 +104,8 @@
  function setSpeed(project,speed){numeric(speed,'speed');return setDuration(project,RULES.duration.default/speed);}
  function setFps(project,fps){choice(fps,'fps');const result=clone(project),scale=fps/result.shot.fps;result.shot.frameCount=Math.round(result.shot.frameCount/result.shot.fps*fps);result.shot.holdFrames=Math.min(Math.round(result.shot.holdFrames*scale),result.shot.frameCount-2);result.shot.fps=fps;return validate(result);}
  function timing(project,k){const {frameCount:N,fps}=project.shot;if(!Number.isInteger(k)||k<0||k>=N)fail('INVALID_FRAME','Frame is outside the shot');const timestampUs=Math.round(1e6*k/fps);return {k,u:k/(N-1),seconds:k/fps,timestampUs,durationUs:Math.round(1e6*(k+1)/fps)-timestampUs};}
- function bitrate(output){return BITRATES[output.bitrate][output.resolution];}
- function dimensions(output){const short=output.resolution,long=short===720?1280:1920;return output.aspect==='16:9'?{width:long,height:short}:output.aspect==='9:16'?{width:short,height:long}:{width:short,height:short};}
+ function bitrate(output,fps=30){return BITRATES[output.bitrate][output.resolution]*(fps===60?1.5:1);}
+ function dimensions(output){const short=output.resolution,long=LONG_SIDE[short];return output.aspect==='16:9'?{width:long,height:short}:output.aspect==='9:16'?{width:short,height:long}:{width:short,height:short};}
  function motionLabel(project){const {start,end,motion}=project.shot;if(motion==='hold')return 'Hold';const a=f.parse(start.span),b=f.parse(end.span);return b<a?'Tunnel In':b>a?'Tunnel Out':'Drift';}
  function changeKind(before,after){
   const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);

@@ -45,7 +45,7 @@ test('late rejection, deadline, malformed timing, incomplete frames, resize and 
 });
 test('configuration retains dimensions and detects unsupported API',async()=>{
  assert.equal(E.normalizeConfig({width:720,height:1280,fps:24,resolution:720,container:'webm'}).bitrate,6000000);
- for(const bad of [{fps:60},{width:0},{container:'gif'},{codec:'vp9'}])assert.throws(()=>E.normalizeConfig({...config,...bad}));
+ for(const bad of [{fps:25},{width:0},{container:'gif'},{codec:'vp9'}])assert.throws(()=>E.normalizeConfig({...config,...bad}));
  const result=await E.probe(config,undefined,{media:{}});assert.equal(result.supported,false);assert.equal(result.code,'UNSUPPORTED_API');
 });
 test('probe pins the actual codec, caches exact configurations and invalidates all profile aliases',async()=>{
@@ -95,7 +95,7 @@ test('probe confirms per-frame QP only when the encoder actually runs in quantiz
 });
 
 test('frame count reaches 120 s at 30 fps and the bitrate option is passed through every stage',async()=>{
- assert.equal(E.normalizeConfig({...config,frameCount:3600}).frameCount,3600);assert.throws(()=>E.normalizeConfig({...config,frameCount:3601}),{code:'INVALID_CONFIG'});assert.equal(E.normalizeConfig({...config,bitrate:40000000}).bitrate,40000000);
+ assert.equal(E.normalizeConfig({...config,frameCount:7200}).frameCount,7200);assert.throws(()=>E.normalizeConfig({...config,frameCount:7201}),{code:'INVALID_CONFIG'});assert.equal(E.normalizeConfig({...config,bitrate:40000000}).bitrate,40000000);
  const original=globalThis.VideoEncoder;globalThis.VideoEncoder=class{};
  try{
   const {media,calls}=fake(),queried=[];media.Quality=class{constructor(options){this.bitrate=options.bitrate;}};media.canEncodeVideo=async(codec,options)=>{queried.push(options.quality.bitrate);return true;};

@@ -43,9 +43,9 @@
  }
  function normalizeConfig(input){
   const {width,height,fps,container='mp4',resolution=1080,fullCodecString,frameCount}=input;
-  if(!Number.isInteger(width)||!Number.isInteger(height)||width<=0||height<=0||width>8192||height>8192||![24,30].includes(fps)||!['auto','mp4','webm'].includes(container))throw error('INVALID_CONFIG','Invalid video dimensions, frame rate or container');
+  if(!Number.isInteger(width)||!Number.isInteger(height)||width<=0||height<=0||width>8192||height>8192||![24,30,60].includes(fps)||!['auto','mp4','webm'].includes(container))throw error('INVALID_CONFIG','Invalid video dimensions, frame rate or container');
   const bitrate=input.bitrate??(resolution===720?6000000:12000000);
-  if(!Number.isSafeInteger(bitrate)||bitrate<=0||(frameCount!==undefined&&(!Number.isInteger(frameCount)||frameCount<1||frameCount>3600)))throw error('INVALID_CONFIG','Invalid bitrate or frame count');
+  if(!Number.isSafeInteger(bitrate)||bitrate<=0||(frameCount!==undefined&&(!Number.isInteger(frameCount)||frameCount<1||frameCount>7200)))throw error('INVALID_CONFIG','Invalid bitrate or frame count');
   if(fullCodecString!==undefined&&(typeof fullCodecString!=='string'||!fullCodecString))throw error('INVALID_CONFIG','Invalid codec profile');
   const codec=container==='webm'?'vp9':'avc';
   if(input.codec!==undefined&&input.codec!==codec)throw error('INVALID_CONFIG','Codec does not match the container');

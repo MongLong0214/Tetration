@@ -126,17 +126,19 @@ def run():
             suite.record('Actual GPU complete AA4/16 and reference-consistent random seek', source_checks)
             support = page.evaluate('''async () => {
              const values=[];
-             for(const resolution of [720,1080])for(const aspect of ['16:9','9:16','1:1'])for(const fps of [24,30]){
+             for(const resolution of [720,1080,1440,2160])for(const aspect of ['16:9','9:16','1:1'])for(const fps of [24,30,60]){
               const size=TetraStudioModel.dimensions({resolution,aspect});
               const result=await TetraStudioEncoder.probe({...size,resolution,fps,container:'mp4'});
               values.push({resolution,aspect,fps,...result});
              }return values;
             }''')
-            suite.record('Exact 720/1080 × three aspects × 24/30 configuration probes', support)
+            assert all(v['supported'] for v in support if v['resolution'] <= 1080 and v['fps'] < 60), support
+            suite.record('Exact 720/1080/1440/2160 × three aspects × 24/30/60 configuration probes', [{k: v.get(k) for k in ('resolution', 'aspect', 'fps', 'supported', 'reason')} for v in support])
             success = 0
             for width, height, fps, container, slow in [
                     (320, 180, 30, 'mp4', True), (720, 720, 24, 'mp4', False),
-                    (1080, 1920, 30, 'mp4', False), (320, 180, 30, 'webm', False)]:
+                    (1080, 1920, 30, 'mp4', False), (320, 180, 30, 'webm', False),
+                    (1280, 720, 60, 'mp4', False), (3840, 2160, 30, 'mp4', False)]:
                 # Check support before expecting a download; unsupported is evidence of its own.
                 available = page.evaluate('async c => TetraStudioEncoder.probe(c)',
                                           {'width': width, 'height': height, 'fps': fps, 'container': container})

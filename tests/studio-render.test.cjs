@@ -40,7 +40,9 @@ test('reference descriptors are deterministic and independent of visiting or Loo
  for(const state of first.numerical.states)if(state.mode==='perturb')assert.ok(first.numerical.descriptors[state.descriptor]);await first.dispose();await second.dispose();
 });
 test('unsupported source size, float target or device loss fail without reducing output',async()=>{
- const p=project(),gpu=renderer();gpu.maxTexture=1024;await assert.rejects(R.prepare(p,{renderer:gpu,yieldTask:async()=>{}}),/image limit/);
+ const p=project(),gpu=renderer();gpu.maxTexture=1024;await assert.rejects(R.prepare(p,{renderer:gpu,yieldTask:async()=>{}}),/source limit/);
+ const uhd=project();uhd.output.resolution=2160;const flat=await R.prepare(uhd,{renderer:renderer(),yieldTask:async()=>{}});assert.equal(flat.plan.extent.width*flat.plan.extent.height,8294400);await flat.dispose();
+ uhd.shot.start.rollDeg=5;await assert.rejects(R.prepare(uhd,{renderer:renderer(),yieldTask:async()=>{}}),error=>error.code==='SOURCE_LIMIT'&&/8,294,400-pixel \(3840 × 2160\) source limit\. Set rotation to 0° or choose a lower resolution/.test(error.message));
  const unavailable=renderer();unavailable.floatColor=false;p.numerics.iterations='fixed';p.numerics.fixedIterations=8192;await assert.rejects(R.prepare(p,{renderer:unavailable,size:{width:64,height:64},yieldTask:async()=>{}}),/float render targets/);
  let lost=false;const failing=renderer({lost:()=>lost});p.numerics.fixedIterations=1024;const session=await R.prepare(p,{renderer:failing,size:{width:64,height:64},yieldTask:async()=>{}});lost=true;await assert.rejects(session.renderBase(0),/device was lost/);assert.equal(failing.calls.draws.length,0);await session.dispose();
 });

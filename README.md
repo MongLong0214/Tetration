@@ -39,7 +39,7 @@
 | **GPU first, always available** | WebGPU compute and WebGL2 on the GPU, with automatic fallback to a pool of FP64 Workers and recovery after GPU loss. |
 | **Responsive navigation** | Live frames sized to the measured GPU speed, inertia, glide and progressive refinement up to 16 samples per pixel. |
 | **Exact sharing** | The URL fragment carries the camera at 256 decimal places. The link reproduces the view, and saved views stay on the device. |
-| **Motion Studio** | Start/End camera paths, looks and rhythm effects, and MP4/AVC or WebM/VP9 export up to 1080p and 120 seconds, encoded in the browser. |
+| **Motion Studio** | Start/End camera paths, looks and rhythm effects, and MP4/AVC or WebM/VP9 export up to 2160p (4K), 60 fps and 120 seconds, encoded in the browser. |
 | **Private by construction** | No backend, analytics, login or runtime dependencies. A strict CSP with `connect-src 'none'`. It installs as an app and works offline. |
 
 ## Quick start
@@ -87,9 +87,9 @@ Open **Studio** from the toolbar. Frame a view and capture it as **Start**, then
 | Output | Options |
 | --- | --- |
 | Container / codec | MP4/AVC, or WebM/VP9 where the encoder is confirmed |
-| Resolution / aspect | 720 or 1080; 16:9, 9:16, 1:1 |
-| Frame rate / length | 24 or 30 fps; 2–120 seconds, with an optional hold on the End camera |
-| Quality | AA4 or AA16 samples; 12 / 24 / 40 Mbps tiers at 1080; Raw or Stable motion |
+| Resolution / aspect | 720, 1080, 1440 or 2160; 16:9, 9:16, 1:1 |
+| Frame rate / length | 24, 30 or 60 fps (60 only where the encoder probe confirms it); 2–120 seconds, with an optional hold on the End camera |
+| Quality | AA4 or AA16 samples; 12 / 24 / 40 Mbps tiers at 1080 (24 / 40 / 60 at 1440, 45 / 68 / 100 at 2160, ×1.5 at 60 fps); Raw or Stable motion |
 | Guidance | Total zoom, peak per-frame zoom and a recommended length in the Motion tab |
 | Large files | Exports estimated above 64 MiB render into temporary browser storage; **Save** then copies the finished video to a file you choose, where the browser supports it |
 
