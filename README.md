@@ -5,7 +5,7 @@
 [![Validate](https://github.com/MongLong0214/Tetration/actions/workflows/ci.yml/badge.svg)](https://github.com/MongLong0214/Tetration/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/MongLong0214/Tetration)](https://github.com/MongLong0214/Tetration/releases/latest)
 
-**Live:** [tetration.vercel.app](https://tetration.vercel.app) · **Version:** 1.3.0 · [Changelog](CHANGELOG.md) · [Releases](https://github.com/MongLong0214/Tetration/releases)
+**Live:** [tetration.vercel.app](https://tetration.vercel.app) · **Version:** 1.4.0 · [Changelog](CHANGELOG.md) · [Releases](https://github.com/MongLong0214/Tetration/releases)
 
 ![TETRA explorer](docs/review/v1.0.0/desktop.png)
 

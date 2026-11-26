@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.4.0 — 2026-11-26
 
 - Large exports no longer touch a file you chose before the video exists (#44). A video estimated above 64 MiB renders into a private temporary file in browser storage (checked with `navigator.storage.estimate()` first). When it is ready, **Save** opens the save dialog and copies the video into the chosen file; only a completed write and close is reported as saved, and choosing an existing file replaces it, as the dialog warns. A canceled dialog or a failed write keeps the video for another Save. The temporary file is deleted after saving, on failure or cancel, when the result is closed or redone, and when you leave Studio; Studio removes files left by a closed tab when it starts. A deletion that fails is reported.
 - Number fields accept every value they show. Speed at 120 s shows 0.08333 (1/12, rounded to five decimals); typing it back was rejected as out of range and is now clamped to the exact limit. Retyping a value a field already shows no longer leaves it pending, where a later output change re-applied it over newer edits (a 2 s shot returned to 120 s). A Hold at end that leaves fewer than two moving frames now names the control and its limit instead of an internal field.
